@@ -199,6 +199,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
   <div class="auth-logo">&#x1FAC0;</div>
   <h1 class="auth-title">HealthVault</h1>
   <p class="auth-sub">Personal Health &amp; Insurance Manager</p>
+  <div id="app-version" style="font-size:11px;color:rgba(255,255,255,0.25);margin-top:-20px;margin-bottom:28px;letter-spacing:0.05em">v<span id="v-num"></span> &middot; <span id="v-date"></span></div>
   <div class="auth-card">
     <div class="tab-row">
       <button class="tab-btn on" id="tab-signin" onclick="showAuthTab('signin')">Sign In</button>
@@ -314,6 +315,9 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
+var APP_VERSION = '1.4.0';
+var APP_DATE = '21 Mar 2026';
+
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'en' };
 
 // ── DEMO DATA ────────────────────────────────────────
@@ -1683,6 +1687,11 @@ function toast(msg){
 
 // ── INIT ─────────────────────────────────────────────
 window.onload = function(){
+  // Show version
+  var vn = document.getElementById('v-num');
+  var vd = document.getElementById('v-date');
+  if(vn) vn.textContent = APP_VERSION;
+  if(vd) vd.textContent = APP_DATE;
   // Init Supabase on page load
   initSupabase();
   // Always show auth screen first
