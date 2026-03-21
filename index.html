@@ -316,8 +316,8 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '1.4.2';
-var APP_DATE = '21 Mar 2026 - Lang+SB';
+var APP_VERSION = '1.5.0';
+var APP_DATE = '21 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'en' };
 
@@ -418,6 +418,7 @@ var UI = {
   'Health Insurance': { th: 'ประกันสุขภาพ' },
   'Life Insurance': { th: 'ประกันชีวิต' },
   'Add Policy': { th: 'เพิ่มกรมธรรม์' },
+  'Month': { th: 'เดือนที่' },
   'Family Total': { th: 'รวมทั้งครอบครัว' },
   // Settings
   'Settings & Admin': { th: 'ตั้งค่าและจัดการ' },
@@ -604,8 +605,8 @@ function advisorText(key){
 }
 
 var PROFILES = [
-  { id:'rutchapon', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', dob:'1970-01-01', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
-  { id:'kanokpai',  name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
+  { id:'rutchapon', dbId:'aaaaaaaa-0000-0000-0000-000000000001', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', dob:'1970-01-01', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
+  { id:'kanokpai',  dbId:'bbbbbbbb-0000-0000-0000-000000000002', name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
 ];
 
 function calcAge(dob, atYear) {
@@ -825,6 +826,176 @@ function enterApp(user){
   updateHeader();
   updateLangBtn();
   renderTab('dashboard');
+  // Load real data from DB if not demo
+  if(!S.demo && sbAuth){
+    loadAllDataFromDB();
+  }
+}
+
+
+// ── DB HELPERS ────────────────────────────────────────
+function getDbClient(){
+  // Use healthvault schema
+  try {
+    return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' } });
+  } catch(e) { return null; }
+}
+
+async function loadProfilesFromDB() {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('health_profiles').select('*').order('full_name');
+    if(error || !data || !data.length) return;
+    // Map DB profiles to app profiles
+    data.forEach(function(dbP){
+      var local = PROFILES.find(function(p){ return p.dbId === dbP.id; });
+      if(local){
+        local.hospital = dbP.primary_hospital || local.hospital;
+        local.blood = dbP.blood_group || local.blood;
+      }
+    });
+    console.log('Profiles loaded from DB:', data.length);
+  } catch(e){ console.warn('loadProfilesFromDB error:', e); }
+}
+
+async function loadHealthRecordsFromDB(profileId) {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var p = PROFILES.find(function(x){ return x.id === profileId; });
+    if(!p || !p.dbId) return;
+    var { data, error } = await db.from('health_records')
+      .select('*')
+      .eq('profile_id', p.dbId)
+      .order('record_year');
+    if(error || !data) return;
+    // Map DB records to HR format
+    data.forEach(function(r){
+      HR[profileId] = HR[profileId] || {};
+      HR[profileId][r.record_year] = {
+        date: r.check_date, age: r.age_at_check, hospital: r.hospital,
+        weight: r.weight_kg, height: r.height_cm, bmi: r.bmi,
+        bp: r.blood_pressure, pulse: r.pulse_rate,
+        hb: r.hemoglobin, hct: r.hematocrit, mcv: r.mcv, rdw: r.rdw,
+        wbc: r.wbc, neut: r.neutrophil, lymph: r.lymphocyte,
+        eos: r.eosinophil, basophil: r.basophil, monocyte: r.monocyte,
+        plat: r.platelet, chol: r.cholesterol, trig: r.triglyceride,
+        hdl: r.hdl, ldl: r.ldl, sugar: r.blood_sugar, hba1c: r.hba1c,
+        uric: r.uric_acid, bun: r.bun, creat: r.creatinine, egfr: r.egfr,
+        sgot: r.sgot, sgpt: r.sgpt, alp: r.alp, afp: r.afp, cea: r.cea, psa: r.psa,
+        ekg: r.ekg_normal, notes: r.doctor_notes
+      };
+    });
+    console.log('Health records loaded for', profileId, ':', data.length, 'years');
+  } catch(e){ console.warn('loadHealthRecordsFromDB error:', e); }
+}
+
+async function loadInsuranceFromDB() {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('insurance_policies')
+      .select('*, premium_payments(*)')
+      .eq('is_active', true);
+    if(error || !data) return;
+    INSURANCE = data.map(function(ins){
+      var paid2025 = (ins.premium_payments || []).find(function(p){ 
+        return p.payment_year === 2025 && p.status === 'paid'; 
+      });
+      var profile = PROFILES.find(function(p){ return p.dbId === ins.profile_id; });
+      var cov = {};
+      if(ins.ipd_coverage) cov['IPD'] = (ins.ipd_coverage/1000000).toFixed(0)+'M THB';
+      if(ins.opd_coverage) cov['OPD'] = (ins.opd_coverage/1000).toFixed(0)+'K THB';
+      if(ins.surgery_covered) cov['Surgery'] = 'Covered';
+      if(ins.dental_coverage) cov['Dental'] = (ins.dental_coverage/1000).toFixed(0)+'K THB';
+      if(ins.death_benefit) cov['Death'] = (ins.death_benefit/1000000).toFixed(0)+'M THB';
+      if(ins.accident_death) cov['Accident'] = (ins.accident_death/1000000).toFixed(0)+'M THB';
+      if(ins.critical_illness) cov['Critical'] = (ins.critical_illness/1000000).toFixed(0)+'M THB';
+      if(ins.disability_covered) cov['Disability'] = 'Covered';
+      return {
+        id: ins.id,
+        holder: profile ? profile.name : 'Unknown',
+        holderId: ins.profile_id,
+        type: ins.policy_type === 'health' ? 'Health' : 'Life',
+        name: ins.policy_name,
+        policy: ins.policy_number,
+        insurer: ins.insurer_name,
+        cov: cov,
+        prem: ins.annual_premium,
+        dueM: ins.premium_due_month,
+        paid: !!paid2025,
+        notes: ins.notes
+      };
+    });
+    console.log('Insurance loaded:', INSURANCE.length, 'policies');
+  } catch(e){ console.warn('loadInsuranceFromDB error:', e); }
+}
+
+async function loadDoctorVisitsFromDB() {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('doctor_visits')
+      .select('*').order('visit_date', {ascending: false});
+    if(error || !data) return;
+    VISITS = data.map(function(v){
+      var profile = PROFILES.find(function(p){ return p.dbId === v.profile_id; });
+      return {
+        id: v.id, pid: profile ? profile.id : 'rutchapon',
+        date: v.visit_date, type: v.visit_type ? 
+          (v.visit_type.charAt(0).toUpperCase() + v.visit_type.slice(1)) : 'Visit',
+        hospital: v.hospital, doctor: v.doctor_name,
+        proc: v.procedure_name, notes: v.notes, fu: v.follow_up_notes
+      };
+    });
+    console.log('Visits loaded:', VISITS.length);
+  } catch(e){ console.warn('loadDoctorVisitsFromDB error:', e); }
+}
+
+async function saveHealthRecordToDB(profileId, year, data) {
+  if(!sbAuth) return false;
+  try {
+    var db = getDbClient();
+    if(!db) return false;
+    var p = PROFILES.find(function(x){ return x.id === profileId; });
+    if(!p || !p.dbId) return false;
+    var payload = {
+      profile_id: p.dbId, record_year: year,
+      check_date: data.date, hospital: data.hospital, age_at_check: data.age,
+      weight_kg: data.weight || null, height_cm: data.height || null,
+      bmi: data.bmi || null, blood_pressure: data.bp || null,
+      pulse_rate: data.pulse || null, blood_sugar: data.sugar || null,
+      hba1c: data.hba1c || null, cholesterol: data.chol || null,
+      triglyceride: data.trig || null, hdl: data.hdl || null, ldl: data.ldl || null,
+      hemoglobin: data.hb || null, hematocrit: data.hct || null,
+      wbc: data.wbc || null, neutrophil: data.neut || null,
+      eosinophil: data.eos || null, platelet: data.plat || null,
+      creatinine: data.creat || null, egfr: data.egfr || null,
+      uric_acid: data.uric || null, bun: data.bun || null,
+      sgot: data.sgot || null, sgpt: data.sgpt || null, alp: data.alp || null,
+      ekg_normal: data.ekg || null, doctor_notes: data.notes || null
+    };
+    var { error } = await db.from('health_records').upsert(payload, { onConflict: 'profile_id,record_year' });
+    if(error){ console.error('Save error:', error); return false; }
+    return true;
+  } catch(e){ console.warn('saveHealthRecordToDB error:', e); return false; }
+}
+
+async function loadAllDataFromDB() {
+  if(!sbAuth || S.demo) return;
+  toast(S.lang==='th' ? 'กำลังโหลดข้อมูล...' : 'Loading from database...');
+  await loadProfilesFromDB();
+  await loadHealthRecordsFromDB('rutchapon');
+  await loadHealthRecordsFromDB('kanokpai');
+  await loadInsuranceFromDB();
+  await loadDoctorVisitsFromDB();
+  renderTab(S.tab);
+  toast(S.lang==='th' ? 'โหลดข้อมูลสำเร็จ ✓' : 'Data loaded ✓');
 }
 
 function updateHeader(){
@@ -1484,6 +1655,55 @@ function drawCharts(pid){
 
 // ── INSURANCE ─────────────────────────────────────────
 
+
+function saveManualEntry(){
+  var pid = S.pid;
+  var dateEl = document.getElementById('me-date');
+  var date = dateEl ? dateEl.value : new Date().toISOString().split('T')[0];
+  var year = parseInt(date.split('-')[0]);
+  
+  function getVal(id){ var el=document.getElementById(id); return el&&el.value?parseFloat(el.value)||el.value:null; }
+  
+  if(!HR[pid]) HR[pid]={};
+  if(!HR[pid][year]) HR[pid][year] = { age: calcAge(prof(pid).dob, year) };
+  
+  var d = HR[pid][year];
+  d.date = date;
+  d.hospital = (document.getElementById('me-hospital')||{}).value || d.hospital;
+  d.weight = getVal('me-weight') || d.weight;
+  d.height = getVal('me-height') || d.height;
+  d.bp = (document.getElementById('me-bp')||{}).value || d.bp;
+  d.pulse = getVal('me-pulse') || d.pulse;
+  d.sugar = getVal('me-sugar') || d.sugar;
+  d.hba1c = getVal('me-hba1c') || d.hba1c;
+  d.chol = getVal('me-chol') || d.chol;
+  d.ldl = getVal('me-ldl') || d.ldl;
+  d.hdl = getVal('me-hdl') || d.hdl;
+  d.trig = getVal('me-trig') || d.trig;
+  d.hb = getVal('me-hb') || d.hb;
+  d.wbc = getVal('me-wbc') || d.wbc;
+  d.creat = getVal('me-creat') || d.creat;
+  d.egfr = getVal('me-egfr') || d.egfr;
+  d.uric = getVal('me-uric') || d.uric;
+  d.sgot = getVal('me-sgot') || d.sgot;
+  d.sgpt = getVal('me-sgpt') || d.sgpt;
+  d.notes = (document.getElementById('me-notes')||{}).value || d.notes;
+  if(d.weight && d.height) d.bmi = parseFloat(bmi(d.weight, d.height));
+  
+  S.year = year;
+  closeModal();
+  
+  if(!S.demo && sbAuth){
+    saveHealthRecordToDB(pid, year, d).then(function(ok){
+      toast(ok ? (S.lang==='th'?'บันทึกข้อมูลสำเร็จ ✓':'Record saved to DB ✓') : 'Saved locally');
+      renderTab(S.tab);
+    });
+  } else {
+    toast(S.lang==='th' ? 'บันทึกแล้ว (Demo)' : 'Record saved (demo)');
+    renderTab(S.tab);
+  }
+}
+
 function quickVitalsHTML(){
   var p = prof(S.pid);
   var r = latestRec(S.pid);
@@ -1564,40 +1784,103 @@ function saveQuickVitals(){
   S.year = year;
 
   closeModal();
-  toast('Vitals saved for '+year+' ✓');
+  // Save to DB if connected
+  if(!S.demo && sbAuth){
+    saveHealthRecordToDB(pid, year, HR[pid][year]).then(function(ok){
+      toast(ok ? (S.lang==='th'?'บันทึกข้อมูลสำเร็จ ✓':'Vitals saved to DB ✓') : (S.lang==='th'?'บันทึกแบบออฟไลน์':'Saved locally only'));
+    });
+  } else {
+    toast(S.lang==='th' ? 'บันทึกข้อมูลแล้ว (Demo)' : 'Vitals saved (demo mode)');
+  }
   renderTab(S.tab);
 }
 
 function renderInsurance(){
-  var html = '<div class="fade"><div class="sec" style="margin-top:12px">Insurance Coverage</div>';
+  var p = prof(S.pid);
 
-  INSURANCE.forEach(function(ins){
-    html += '<div class="ins-card">';
+  var html = '<div class="fade">';
+  html += pswHtml();
+
+  // Filter toggle
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">';
+  html += '<div style="font-size:13px;color:var(--t2)">'+tr('Showing:')+'</div>';
+  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+tr('All Family')+'</div>';
+  html += '<div class="pp'+(S.insFilter==='own'?' on-r':'')+'" onclick="S.insFilter=\'own\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+p.name+' '+tr('Only')+'</div>';
+  html += '</div>';
+
+  // Filter by selected profile
+  var filtered = S.insFilter==='own'
+    ? INSURANCE.filter(function(i){ return i.holder===p.name || i.holderId===p.dbId; })
+    : INSURANCE;
+
+  if(!filtered.length){
+    html += '<div class="notice">'+(S.lang==='th'?'ไม่พบข้อมูลประกันสำหรับ '+p.name:'No insurance policies found for '+p.name)+'</div>';
+  }
+
+  filtered.forEach(function(ins){
+    var cardBg = ins.paid
+      ? 'background:linear-gradient(135deg,rgba(156,127,224,.1),rgba(79,195,247,.06));border:1px solid rgba(156,127,224,.2)'
+      : 'background:linear-gradient(135deg,rgba(255,183,77,.1),rgba(255,82,82,.06));border:1px solid rgba(255,183,77,.3)';
+    var ownerColor = ins.holder==='Rutchapon'?'var(--blue)':'var(--rose)';
+    var typeLabel = ins.type==='Health' ? tr('Health Insurance') : tr('Life Insurance');
+
+    html += '<div class="ins-card" style="'+cardBg+';margin-bottom:10px">';
     html += '<div style="position:absolute;right:14px;top:14px;font-size:24px;opacity:.35">'+(ins.type==='Health'?'&#x1F3E5;':'&#x1F6E1;&#xFE0F;')+'</div>';
-    html += '<div class="ins-type">'+ins.type+' Insurance</div>';
+
+    // Owner stripe
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
+    html += '<div style="width:3px;height:16px;border-radius:2px;background:'+ownerColor+'"></div>';
+    html += '<span style="font-size:11px;font-weight:700;color:'+ownerColor+'">'+ins.holder+'</span>';
+    html += '<span style="font-size:10px;color:var(--t3);">&bull; '+typeLabel+'</span>';
+    html += '</div>';
+
     html += '<div class="ins-name">'+ins.name+'</div>';
     html += '<div class="ins-policy">'+ins.policy+'</div>';
-    html += '<div style="display:flex;gap:6px;margin-bottom:12px"><span class="badge b-v">&#x1F464; '+ins.holder+'</span><span class="badge b-info">'+ins.insurer+'</span>'+(ins.paid?'<span class="badge b-ok">&#x2713; Paid</span>':'<span class="badge b-alert">&#x26A0; Due</span>')+'</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+    html += '<span class="badge b-info">'+ins.insurer+'</span>';
+    html += ins.paid
+      ? '<span class="badge b-ok">&#x2713; '+tr('Paid')+'</span>'
+      : '<span class="badge b-alert">&#x26A0; '+tr('Due')+'</span>';
+    html += '</div>';
+
     html += '<div class="cov-grid">';
-    Object.entries(ins.cov).forEach(function(e){ html += '<div class="cov-item"><div class="cov-lbl">'+e[0]+'</div><div class="cov-val">'+e[1]+'</div></div>'; });
+    Object.entries(ins.cov).forEach(function(e2){
+      html += '<div class="cov-item"><div class="cov-lbl">'+e2[0]+'</div><div class="cov-val">'+e2[1]+'</div></div>';
+    });
     html += '</div>';
+
     html += '<hr class="div" style="margin:12px 0 10px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:11px;color:var(--t3)">Annual Premium</div><div style="font-size:17px;font-weight:700;color:var(--amber)">'+fmtTHB(ins.prem)+'</div></div><div style="text-align:right"><div style="font-size:11px;color:var(--t3)">Due</div><div style="font-size:13px;font-weight:600">Month '+ins.dueM+'</div></div></div>';
-    html += '</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+    html += '<div><div style="font-size:11px;color:var(--t3)">'+tr('Annual Premium')+'</div>';
+    html += '<div style="font-size:17px;font-weight:700;color:'+(ins.paid?'var(--amber)':'var(--red)')+'">'+fmtTHB(ins.prem)+'</div></div>';
+    html += '<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">'+tr('Due')+'</div>';
+    html += '<div style="font-size:14px;font-weight:600">'+tr('Month')+(ins.dueM||'-')+'</div></div>';
+    html += '</div></div>';
   });
 
-  var total = INSURANCE.reduce(function(s,i){return s+i.prem;},0);
-  html += '<div class="card" style="background:rgba(79,195,247,.06);border-color:rgba(79,195,247,.2)">';
-  html += '<div style="font-size:14px;font-weight:600;margin-bottom:10px">&#x1F4B0; Total Annual Premiums</div>';
-  ['Rutchapon','Kanokpai'].forEach(function(n){
-    var t=INSURANCE.filter(function(i){return i.holder===n;}).reduce(function(s,i){return s+i.prem;},0);
-    html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--t2)">'+n+'</span><span style="font-weight:600">'+fmtTHB(t)+'</span></div>';
+  // Summary
+  html += '<div class="card" style="background:rgba(79,195,247,.06);border-color:rgba(79,195,247,.2);margin-top:4px">';
+  html += '<div style="font-size:14px;font-weight:600;margin-bottom:10px">&#x1F4B0; '+tr('Annual Premium Summary')+'</div>';
+  PROFILES.forEach(function(p2){
+    var pIns = INSURANCE.filter(function(i){return i.holder===p2.name;});
+    var total2 = pIns.reduce(function(s2,i){return s2+i.prem;},0);
+    var due2 = pIns.filter(function(i){return !i.paid;}).reduce(function(s2,i){return s2+i.prem;},0);
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="display:flex;align-items:center;gap:8px"><div class="av '+p2.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px">'+p2.av+'</div><span style="font-size:13px">'+p2.name+'</span></div>';
+    html += '<div style="text-align:right"><div style="font-size:14px;font-weight:700">'+fmtTHB(total2)+'</div>';
+    if(due2>0) html += '<div style="font-size:11px;color:var(--red)">'+fmtTHB(due2)+' '+tr('Due')+'</div>';
+    html += '</div></div>';
   });
-  html += '<hr class="div" style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700"><span>Family Total</span><span style="color:var(--teal)">'+fmtTHB(total)+'</span></div></div>';
-  html += '<button class="btn btn-primary" onclick="openModal(\'Add Insurance Policy\',addInsuranceHTML())" style="margin-top:8px">+ Add Policy</button>';
+  var grandTotal = INSURANCE.reduce(function(s2,i){return s2+i.prem;},0);
+  html += '<hr class="div" style="margin:8px 0">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700"><span>'+tr('Family Total')+'</span><span style="color:var(--teal)">'+fmtTHB(grandTotal)+'/yr</span></div>';
+  html += '</div>';
+
+  html += '<button class="btn btn-primary" onclick="openModal(\"add-ins\",addInsuranceHTML())" style="margin-top:8px">+ '+tr('Add Policy')+'</button>';
   html += '<div style="height:10px"></div></div>';
   document.getElementById('pg-insurance').innerHTML = html;
 }
+
 
 // ── SETTINGS ──────────────────────────────────────────
 function renderSettings(){
@@ -1622,7 +1905,8 @@ function renderSettings(){
 
   html += '<div class="card"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:10px">Supabase</div>';
   html += '<div class="notice" style="margin-bottom:10px">Mode: '+(S.demo?'<b>Demo</b> (no live sync)':'<b>Live</b> - connected to Supabase')+'<br>Project: svuiphbzceatqodluvxl &middot; Schema: healthvault</div>';
-  html += '<div class="li"><div class="li-body"><div class="li-title">Connection</div></div>'+(sbAuth?'<span class="badge b-ok">Connected</span>':'<span class="badge b-warn">Demo mode</span>')+'</div>';
+  html += '<div class="li"><div class="li-body"><div class="li-title">Connection</div><div class="li-sub">'+(S.demo?'Demo mode':'Live - Supabase connected')+'</div></div>'+(sbAuth&&!S.demo?'<span class="badge b-ok">Live</span>':'<span class="badge b-warn">Demo</span>')+'</div>';
+  if(sbAuth&&!S.demo) html += '<button class="btn btn-secondary btn-sm btn-full" onclick="loadAllDataFromDB()" style="margin-top:8px">&#x1F504; '+(S.lang==='th'?'โหลดข้อมูลจาก DB':'Reload from Database')+'</button>';
   html += '</div>';
 
   html += '<div style="text-align:center;padding:20px 0;color:var(--t3);font-size:11px">HealthVault v1.0 &middot; Rutchapon &amp; Kanokpai<br>GitHub Pages + Supabase (healthvault schema)</div>';
@@ -1631,12 +1915,82 @@ function renderSettings(){
 }
 
 // ── MODAL BODIES ──────────────────────────────────────
+function previewUpload(e){
+  var files = e.target.files;
+  if(!files.length) return;
+  var preview = document.getElementById('upload-preview');
+  if(preview){ preview.style.display='block'; preview.innerHTML='&#x2705; '+files.length+' '+(S.lang==='th'?'ไฟล์พร้อม':'file(s) ready'); }
+}
+
+async function processWithAI(){
+  var fileInput = document.getElementById('fu');
+  if(!fileInput || !fileInput.files.length){ toast(S.lang==='th'?'กรุณาเลือกไฟล์ก่อน':'Please select a file first'); return; }
+  var resultBox = document.getElementById('ai-result-box');
+  if(resultBox){ resultBox.style.display='block'; resultBox.innerHTML='<div class="notice pulse">&#x1F916; '+(S.lang==='th'?'AI กำลังอ่านผลตรวจ...':'AI reading your report...')+'</div>'; }
+  var file = fileInput.files[0];
+  var reader = new FileReader();
+  reader.onload = async function(e){
+    var base64 = e.target.result.split(',')[1];
+    var mimeType = file.type||'image/jpeg';
+    var year = parseInt(document.getElementById('up-year').value)||new Date().getFullYear();
+    var pid = document.getElementById('up-profile').value;
+    try {
+      var resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
+        body:JSON.stringify({model:'claude-opus-4-6',max_tokens:2000,messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
+          {type:'text',text:'Extract health data from this Thai/English medical report. Return ONLY valid JSON: {"check_date":"YYYY-MM-DD","hospital":"","weight_kg":null,"height_cm":null,"blood_pressure":"","pulse_rate":null,"hemoglobin":null,"hematocrit":null,"wbc":null,"neutrophil":null,"eosinophil":null,"platelet":null,"cholesterol":null,"triglyceride":null,"hdl":null,"ldl":null,"blood_sugar":null,"hba1c":null,"creatinine":null,"egfr":null,"uric_acid":null,"bun":null,"sgot":null,"sgpt":null,"alp":null,"doctor_notes":""}'}
+        ]}]})
+      });
+      if(!resp.ok) throw new Error('API error '+resp.status);
+      var data = await resp.json();
+      var txt = data.content[0].text;
+      var m = txt.match(/\{[\s\S]*\}/);
+      showExtractedPreview(pid, year, m?JSON.parse(m[0]):null, resultBox);
+    } catch(err){ showExtractedPreview(pid, year, null, resultBox); }
+  };
+  reader.readAsDataURL(file);
+}
+
+function showExtractedPreview(pid, year, extracted, resultBox){
+  extracted = extracted||{};
+  var found = Object.entries(extracted).filter(function(e){return e[1]!==null&&e[1]!=='';}).length;
+  var html = found>0
+    ? '<div class="alert ok">&#x2705; <b>'+(S.lang==='th'?'AI อ่านสำเร็จ':'AI extracted')+'</b> '+found+' '+(S.lang==='th'?'รายการ':'fields')+'</div>'
+    : '<div class="notice">'+(S.lang==='th'?'อ่านไม่ได้อัตโนมัติ กรอกเองด้วย Manual Entry':'Could not auto-extract. Use Manual Entry.')+'</div>';
+  if(!HR[pid]) HR[pid]={};
+  if(!HR[pid][year]) HR[pid][year]={age:calcAge(prof(pid).dob,year)};
+  var d=HR[pid][year];
+  var map={check_date:'date',hospital:'hospital',weight_kg:'weight',height_cm:'height',blood_pressure:'bp',pulse_rate:'pulse',hemoglobin:'hb',hematocrit:'hct',wbc:'wbc',neutrophil:'neut',eosinophil:'eos',platelet:'plat',cholesterol:'chol',triglyceride:'trig',hdl:'hdl',ldl:'ldl',blood_sugar:'sugar',hba1c:'hba1c',creatinine:'creat',egfr:'egfr',uric_acid:'uric',bun:'bun',sgot:'sgot',sgpt:'sgpt',alp:'alp',doctor_notes:'notes'};
+  Object.entries(map).forEach(function(e){if(extracted[e[0]]!=null) d[e[1]]=extracted[e[0]];});
+  if(d.weight&&d.height) d.bmi=parseFloat(bmi(d.weight,d.height));
+  html+='<button class="btn btn-primary" style="margin-top:10px" onclick="confirmAISave(\''+pid+'\','+year+')">&#x1F4BE; '+(S.lang==='th'?'บันทึกข้อมูล':'Save & Confirm')+'</button>';
+  if(resultBox) resultBox.innerHTML=html;
+}
+
+function confirmAISave(pid,year){
+  S.year=year; closeModal();
+  if(!S.demo&&sbAuth){ saveHealthRecordToDB(pid,year,HR[pid][year]).then(function(ok){ toast(ok?'Saved to DB ✓':'Saved locally'); renderTab(S.tab); }); }
+  else { toast('Saved'); renderTab(S.tab); }
+}
+
 function uploadHTML(){
-  return '<p style="font-size:13px;color:var(--t2);margin-bottom:14px">Take a photo or upload your annual health report. AI will auto-extract all indicators.</p>'+
-    '<div class="upload-zone" onclick="document.getElementById(\'fu\').click()"><div style="font-size:36px;margin-bottom:10px">&#x1F4CB;</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">Tap to upload photo or PDF</div><div style="font-size:12px;color:var(--t2)">JPG, PNG, PDF supported &middot; Multiple pages</div><input type="file" id="fu" accept="image/*,application/pdf" multiple style="display:none"></div>'+
-    '<div class="fg" style="margin-top:14px"><label class="lbl">Profile</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div>'+
-    '<div class="fg"><label class="lbl">Year</label><input class="inp" type="number" value="2025" min="2010" max="2030"></div>'+
-    '<button class="btn btn-primary" onclick="toast(\'AI processing... (connect Anthropic API to enable)\');closeModal()">&#x1F916; Process with AI</button><div style="height:10px"></div>';
+  var p = prof(S.pid);
+  return '<p style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(S.lang==='th'?'ถ่ายรูปหรืออัพโหลดผลตรวจ AI จะอ่านข้อมูลให้อัตโนมัติ':'Take a photo or upload your health report. AI auto-extracts all data.')+'</p>'+
+    '<div class="upload-zone" onclick="document.getElementById(\'fu\').click()">'+
+    '<div style="font-size:36px;margin-bottom:10px">&#x1F4CB;</div>'+
+    '<div style="font-size:15px;font-weight:600;margin-bottom:4px">'+(S.lang==='th'?'แตะเพื่อเลือกไฟล์':'Tap to select photo or PDF')+'</div>'+
+    '<div style="font-size:12px;color:var(--t2)">JPG, PNG, PDF</div>'+
+    '<input type="file" id="fu" accept="image/*,application/pdf" style="display:none" onchange="previewUpload(event)">'+
+    '</div>'+
+    '<div id="upload-preview" style="display:none;margin-top:8px;font-size:13px;color:var(--teal);text-align:center"></div>'+
+    '<div class="fg" style="margin-top:14px"><label class="lbl">Profile</label>'+
+    '<select class="inp" id="up-profile">'+PROFILES.map(function(p2){return '<option value="'+p2.id+'"'+(p2.id===p.id?' selected':'')+'>'+p2.name+'</option>';}).join('')+'</select></div>'+
+    '<div class="fg"><label class="lbl">Year</label><input class="inp" type="number" id="up-year" value="'+new Date().getFullYear()+'" min="2010" max="2035"></div>'+
+    '<div id="ai-result-box" style="display:none;margin-top:8px"></div>'+
+    '<button class="btn btn-primary" onclick="processWithAI()" style="margin-top:8px">&#x1F916; '+(S.lang==='th'?'ประมวลผลด้วย AI':'Process with AI')+'</button>'+
+    '<div style="height:10px"></div>';
 }
 
 function manualEntryHTML(){
@@ -1647,7 +2001,7 @@ function manualEntryHTML(){
     '<div class="frow"><div class="fg"><label class="lbl">Blood Sugar</label><input class="inp" type="number" placeholder="90"></div><div class="fg"><label class="lbl">HbA1c %</label><input class="inp" type="number" step=".1" placeholder="5.2"></div></div>'+
     '<div class="fg"><label class="lbl">Hospital</label><input class="inp" placeholder="Praram 9"></div>'+
     '<div class="fg"><label class="lbl">Notes</label><textarea class="inp" rows="3" placeholder="Doctor notes..."></textarea></div>'+
-    '<button class="btn btn-primary" onclick="toast(\'Record saved!\');closeModal()">Save Record</button><div style="height:10px"></div>';
+    '<button class="btn btn-primary" onclick="saveManualEntry()">'+tr('Save Vitals')+'</button><div style="height:10px"></div>';
 }
 
 function addInsuranceHTML(){
