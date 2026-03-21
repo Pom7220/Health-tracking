@@ -985,7 +985,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let supabase = null;
 try {
   if (SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' } });
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' }, auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true } });
   }
 } catch(e) { console.log('Supabase not configured — demo mode'); }
 
@@ -1079,6 +1079,9 @@ function switchAuthTab(tab) {
 }
 
 async function doLogin() {
+  const btn = document.querySelector('#auth-login .btn-primary');
+  if (btn) { btn.textContent = 'Signing in…'; btn.disabled = true; }
+
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
   if (!email || !password) { showToast('Please enter email and password'); return; }
@@ -1091,7 +1094,8 @@ async function doLogin() {
       state.demoMode = false;
       enterApp();
     } catch(e) {
-      showToast('Login failed: ' + e.message);
+      if (btn) { btn.textContent = 'Sign In'; btn.disabled = false; }
+      showToast('❌ ' + e.message); console.error('Login error:', e);
     }
   } else {
     showToast('Supabase not configured. Using demo mode.');
