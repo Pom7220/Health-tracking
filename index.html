@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>HealthVault</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -315,8 +316,8 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '1.4.0';
-var APP_DATE = '21 Mar 2026';
+var APP_VERSION = '1.4.2';
+var APP_DATE = '21 Mar 2026 - Lang+SB';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'en' };
 
@@ -878,22 +879,30 @@ function renderDashboard(){
 
   var alerts=[];
   if(r){
-    if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',m:'LDL '+r.ldl+' mg/dL — High (target <130)',
-      rec:'&#x1F4CC; Action: See cardiologist, consider statins. Cut butter, cheese, fried food, red meat. Exercise 150+ min/week. Recheck in 3 months.'});
-    else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',m:'LDL '+r.ldl+' mg/dL — Borderline high',
-      rec:'&#x1F4CC; Action: Add oats, beans, nuts to diet. Cook with olive oil. Exercise 30 min daily. Recheck in 6 months.'});
-    if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',m:'HDL '+r.hdl+' mg/dL — Low (target >50)',
-      rec:'&#x1F4CC; Action: Increase aerobic exercise. Eat avocado, olive oil, nuts. Reduce refined carbs. Avoid smoking.'});
-    if(bmiVal&&parseFloat(bmiVal)>=25) alerts.push({t:'danger',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' — Obese by Thai standard (normal <23)',
-      rec:'&#x1F4CC; Action: Reduce rice portions, avoid sugary drinks, late-night eating. Target 0.5 kg loss/month. Exercise 150+ min/week.'});
-    else if(bmiVal&&parseFloat(bmiVal)>=23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' — Overweight by Thai/Asian standard (normal 18.5-22.9)',
-      rec:'&#x1F4CC; Action: Reduce white rice, noodles. Use smaller plates. Walk 30 min after meals. Thai adults face higher metabolic risk at BMI >23.'});
-    if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',m:'HbA1c '+r.hba1c+'% — Prediabetes range (normal <5.7)',
-      rec:'&#x1F4CC; Action: Reduce sugary drinks and white rice. Walk after meals. Recheck every 6 months. Lifestyle change can reverse prediabetes.'});
-    if(r.eos&&r.eos>5) alerts.push({t:'info',i:'&#x1F52C;',m:'Eosinophil '+r.eos+'% — Slightly elevated (normal 0-5%)',
-      rec:'&#x1F4CC; Note: Common in Thailand due to allergies, dust, or tropical conditions. Discuss allergy testing with doctor if persistent.'});
-    if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',m:'All key health indicators are within normal range.',
-      rec:'Keep up annual checkups, regular exercise 150 min/week, and a balanced diet.'});
+    if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',
+      m:alertText('ldlHigh',r.ldl),
+      rec:'&#x1F4CC; '+alertText('ldlHighRec','')});
+    else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',
+      m:alertText('ldlBorder',r.ldl),
+      rec:'&#x1F4CC; '+alertText('ldlBorderRec','')});
+    if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',
+      m:alertText('hdlLow',r.hdl),
+      rec:'&#x1F4CC; '+alertText('hdlLowRec','')});
+    if(bmiVal&&parseFloat(bmiVal)>=25) alerts.push({t:'danger',i:'&#x2696;&#xFE0F;',
+      m:alertText('bmiObese',bmiVal),
+      rec:'&#x1F4CC; '+alertText('bmiObeseRec','')});
+    else if(bmiVal&&parseFloat(bmiVal)>=23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',
+      m:alertText('bmiOver',bmiVal),
+      rec:'&#x1F4CC; '+alertText('bmiOverRec','')});
+    if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',
+      m:alertText('hba1c',r.hba1c),
+      rec:'&#x1F4CC; '+alertText('hba1cRec','')});
+    if(r.eos&&r.eos>5) alerts.push({t:'info',i:'&#x1F52C;',
+      m:alertText('eos',r.eos),
+      rec:'&#x1F4CC; '+alertText('eosRec','')});
+    if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',
+      m:alertText('allOk',''),
+      rec:alertText('allOkRec','')});
   }
 
   var due = INSURANCE.filter(function(ins){return ins.holder===p.name&&!ins.paid;});
