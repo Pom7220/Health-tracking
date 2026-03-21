@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>HealthVault</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -235,6 +235,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
       <div class="hdr-name" id="hdr-name">HealthVault</div>
     </div>
     <div class="hdr-right">
+      <div class="ico-btn" onclick="toggleLang()" id="lang-btn" title="Switch language">TH</div>
       <div class="ico-btn" onclick="openNotif()">&#x1F514;</div>
       <div class="ico-btn" onclick="doLogout()">&#x23CE;</div>
     </div>
@@ -288,9 +289,154 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai' };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'en' };
 
 // ── DEMO DATA ────────────────────────────────────────
+
+// ── LANGUAGE SYSTEM ─────────────────────────────────────────────────────
+function toggleLang(){
+  S.lang = S.lang==='en' ? 'th' : 'en';
+  var btn = document.getElementById('lang-btn');
+  if(btn) btn.textContent = S.lang==='en' ? 'TH' : 'EN';
+  renderTab(S.tab);
+}
+
+function t(en, th){
+  return S.lang==='th' ? th : en;
+}
+
+// Bilingual alert messages
+function alertText(key, val){
+  var msgs = {
+    ldlHigh: {
+      en: 'LDL '+val+' mg/dL — High (target <130)',
+      th: 'ไขมัน LDL '+val+' mg/dL — สูงเกินมาตรฐาน (ควรต่ำกว่า 130)'
+    },
+    ldlHighRec: {
+      en: 'Action: See cardiologist, consider statins. Cut butter, cheese, fried food, red meat. Exercise 150+ min/week. Recheck in 3 months.',
+      th: 'แนะนำ: พบแพทย์โรคหัวใจ พิจารณายาลดไขมัน ลดเนย ชีส อาหารทอด เนื้อแดง ออกกำลังกาย 150+ นาที/สัปดาห์ ตรวจซ้ำใน 3 เดือน'
+    },
+    ldlBorder: {
+      en: 'LDL '+val+' mg/dL — Borderline high',
+      th: 'ไขมัน LDL '+val+' mg/dL — ค่อนข้างสูง'
+    },
+    ldlBorderRec: {
+      en: 'Action: Add oats, beans, nuts to diet. Cook with olive oil. Exercise 30 min daily. Recheck in 6 months.',
+      th: 'แนะนำ: เพิ่มข้าวโอ๊ต ถั่ว ในอาหาร ใช้น้ำมันมะกอกปรุงอาหาร ออกกำลังกาย 30 นาที/วัน ตรวจซ้ำใน 6 เดือน'
+    },
+    hdlLow: {
+      en: 'HDL '+val+' mg/dL — Low (target >50)',
+      th: 'ไขมันดี HDL '+val+' mg/dL — ต่ำ (ควรสูงกว่า 50)'
+    },
+    hdlLowRec: {
+      en: 'Action: Increase aerobic exercise. Eat avocado, olive oil, nuts. Reduce refined carbs. Avoid smoking.',
+      th: 'แนะนำ: เพิ่มการออกกำลังกายแบบแอโรบิก รับประทานอาโวคาโด น้ำมันมะกอก ถั่ว ลดแป้งขัดขาว หลีกเลี่ยงบุหรี่'
+    },
+    bmiObese: {
+      en: 'BMI '+val+' — Obese by Thai standard (normal <23)',
+      th: 'ดัชนีมวลกาย '+val+' — อ้วนตามมาตรฐานคนไทย (ปกติ 18.5-22.9)'
+    },
+    bmiObeseRec: {
+      en: 'Action: Reduce rice portions, avoid sugary drinks, late-night eating. Target 0.5 kg loss/month. Exercise 150+ min/week.',
+      th: 'แนะนำ: ลดปริมาณข้าว หลีกเลี่ยงเครื่องดื่มหวาน ไม่ทานดึก ตั้งเป้าลดน้ำหนัก 0.5 กก./เดือน ออกกำลังกาย 150+ นาที/สัปดาห์'
+    },
+    bmiOver: {
+      en: 'BMI '+val+' — Overweight by Thai/Asian standard (normal 18.5-22.9)',
+      th: 'ดัชนีมวลกาย '+val+' — น้ำหนักเกินตามมาตรฐานคนไทย (ปกติ 18.5-22.9)'
+    },
+    bmiOverRec: {
+      en: 'Action: Reduce white rice, noodles. Use smaller plates. Walk 30 min after meals. Thai adults face higher metabolic risk at BMI >23.',
+      th: 'แนะนำ: ลดข้าวขาว บะหมี่ ใช้จานเล็กลง เดิน 30 นาทีหลังอาหาร คนไทยเสี่ยงโรคเมแทบอลิกที่ BMI >23'
+    },
+    hba1c: {
+      en: 'HbA1c '+val+'% — Prediabetes range (normal <5.7)',
+      th: 'น้ำตาลสะสม HbA1c '+val+'% — ใกล้ระดับเบาหวาน (ปกติต่ำกว่า 5.7%)'
+    },
+    hba1cRec: {
+      en: 'Action: Reduce sugary drinks and white rice. Walk after meals. Recheck every 6 months. Lifestyle change can reverse prediabetes.',
+      th: 'แนะนำ: ลดเครื่องดื่มหวาน ข้าวขาว เดินหลังอาหาร ตรวจซ้ำทุก 6 เดือน การปรับพฤติกรรมช่วยป้องกันเบาหวานได้'
+    },
+    eos: {
+      en: 'Eosinophil '+val+'% — Slightly elevated (normal 0-5%)',
+      th: 'อีโอซิโนฟิล '+val+'% — สูงเล็กน้อย (ปกติ 0-5%)'
+    },
+    eosRec: {
+      en: 'Note: Common in Thailand due to allergies, dust, or tropical conditions. Discuss allergy testing with doctor if persistent.',
+      th: 'หมายเหตุ: พบบ่อยในไทยเนื่องจากภูมิแพ้ ฝุ่น หรือสภาพอากาศเขตร้อน หากยังสูงต่อเนื่องควรปรึกษาแพทย์เรื่องการทดสอบภูมิแพ้'
+    },
+    allOk: {
+      en: 'All key health indicators are within normal range.',
+      th: 'ผลตรวจสุขภาพทุกรายการอยู่ในเกณฑ์ปกติ'
+    },
+    allOkRec: {
+      en: 'Keep up annual checkups, regular exercise 150 min/week, and a balanced diet.',
+      th: 'รักษาการตรวจสุขภาพประจำปี ออกกำลังกายสม่ำเสมอ 150 นาที/สัปดาห์ และรับประทานอาหารที่สมดุล'
+    }
+  };
+  var m = msgs[key];
+  return m ? (S.lang==='th' ? m.th : m.en) : '';
+}
+
+// Bilingual health advisor
+function advisorText(key){
+  var texts = {
+    // Actions
+    seeCardiologist: { en:'Consult a cardiologist about statin therapy', th:'ปรึกษาแพทย์โรคหัวใจเรื่องยาสแตติน' },
+    mediterraneanDiet: { en:'Adopt Mediterranean diet: olive oil, fish, legumes, nuts', th:'รับประทานอาหารแบบเมดิเตอร์เรเนียน: น้ำมันมะกอก ปลา ถั่ว' },
+    increaseFibre: { en:'Increase soluble fibre: oats, beans, apples, psyllium', th:'เพิ่มใยอาหาร: ข้าวโอ๊ต ถั่ว แอปเปิล' },
+    exercise150: { en:'Exercise 150+ min/week — brisk walk, swim, cycle', th:'ออกกำลังกาย 150+ นาที/สัปดาห์ เช่น เดินเร็ว ว่ายน้ำ ปั่นจักรยาน' },
+    aerobicHDL: { en:'Increase aerobic exercise — raises HDL naturally', th:'เพิ่มการออกกำลังกายแบบแอโรบิก ช่วยเพิ่ม HDL ตามธรรมชาติ' },
+    healthyFats: { en:'Add healthy fats: avocado, olive oil, nuts, fatty fish', th:'เพิ่มไขมันดี: อาโวคาโด น้ำมันมะกอก ถั่ว ปลาไขมันสูง' },
+    reduceCarbs: { en:'Reduce refined carbs: white rice, white bread, sugary drinks', th:'ลดคาร์โบไฮเดรตขัดขาว: ข้าวขาว ขนมปังขาว เครื่องดื่มหวาน' },
+    walkAfterMeal: { en:'Walk 30 min after meals to lower post-meal glucose', th:'เดิน 30 นาทีหลังอาหาร ช่วยลดน้ำตาลหลังมื้ออาหาร' },
+    bmiTarget: { en:'Target BMI 18.5-22.9 — lose 0.5-1 kg/month gradually', th:'ตั้งเป้า BMI 18.5-22.9 ลดน้ำหนักช้าๆ 0.5-1 กก./เดือน' },
+    portionControl: { en:'Portion control: use smaller plates, eat slowly', th:'ควบคุมปริมาณอาหาร: ใช้จานเล็ก รับประทานช้าๆ' },
+    drink2L: { en:'Drink 2+ litres of water daily', th:'ดื่มน้ำ 2+ ลิตร/วัน' },
+    allergyTest: { en:'Discuss allergy/asthma testing with doctor', th:'ปรึกษาแพทย์เรื่องการทดสอบภูมิแพ้/หอบหืด' },
+    bmiObeseAction: { en:'BMI indicates obese by Thai standard (>=25). Target BMI 18.5-22.9', th:'BMI บ่งชี้ภาวะอ้วนตามมาตรฐานไทย (>=25) ตั้งเป้า BMI 18.5-22.9' },
+    gradualLoss: { en:'Aim for 0.5-1 kg loss per month — gradual and sustainable', th:'ตั้งเป้าลดน้ำหนัก 0.5-1 กก./เดือน อย่างค่อยเป็นค่อยไป' },
+    bmiOverAction: { en:'BMI is overweight by Thai/Asian standard (>=23)', th:'BMI เกินมาตรฐานคนไทย (>=23) ถือว่าน้ำหนักเกิน' },
+    thaiMetabolicRisk: { en:'Thai adults face higher metabolic risk at lower BMI than Westerners', th:'คนไทยเสี่ยงโรคเมแทบอลิกสูงกว่าชาวตะวันตกที่ BMI เดียวกัน' },
+    // Avoid
+    avoidButter: { en:'Butter, cheese, full-fat dairy', th:'เนย ชีส ผลิตภัณฑ์นมไขมันสูง' },
+    avoidFried: { en:'Fried foods, processed snacks, red meat', th:'อาหารทอด ขนมขบเคี้ยวแปรรูป เนื้อแดง' },
+    avoidTransFat: { en:'Trans fats (margarine, packaged baked goods)', th:'ไขมันทรานส์ (มาการีน ขนมอบสำเร็จรูป)' },
+    avoidSmoking: { en:'Smoking and excessive alcohol', th:'บุหรี่และเครื่องดื่มแอลกอฮอล์' },
+    avoidSugar: { en:'Sugary drinks, fruit juices, desserts daily', th:'เครื่องดื่มหวาน น้ำผลไม้ ของหวานทุกวัน' },
+    avoidWhiteRice: { en:'White rice in excess — switch to brown rice or reduce portions', th:'ข้าวขาวมากเกินไป เปลี่ยนเป็นข้าวกล้องหรือลดปริมาณ' },
+    avoidSugaryDrinks: { en:'Sugary Thai drinks: bubble tea, sweetened coffee, fruit juices', th:'เครื่องดื่มหวานไทย: ชานมไข่มุก กาแฟหวาน น้ำผลไม้' },
+    avoidLateEat: { en:'Late-night eating after 8pm', th:'ทานอาหารดึกหลัง 4 ทุ่ม' },
+    avoidNSAID: { en:'Excessive NSAIDs (ibuprofen, naproxen)', th:'ยาแก้ปวดกลุ่ม NSAIDs มากเกินไป เช่น ไอบูโพรเฟน' },
+    avoidProtein: { en:'High-protein crash diets', th:'ไดเอตโปรตีนสูงแบบสุดโต่ง' },
+    avoidPurine: { en:'Red meat, organ meats, shellfish (purine-rich)', th:'เนื้อแดง เครื่องใน อาหารทะเล (สารพิวรีนสูง)' },
+    avoidBeer: { en:'Beer and spirits', th:'เบียร์และสุรา' },
+    // Monitor
+    recheckLipid3m: { en:'Recheck lipids in 3 months', th:'ตรวจไขมันในเลือดซ้ำใน 3 เดือน' },
+    recheckLipid6m: { en:'Recheck lipid panel in 6 months', th:'ตรวจไขมันในเลือดซ้ำใน 6 เดือน' },
+    monitorGlucose: { en:'Check fasting glucose every 6 months', th:'ตรวจน้ำตาลอดอาหารทุก 6 เดือน' },
+    monitorKidney: { en:'Annual kidney function test', th:'ตรวจการทำงานของไตทุกปี' },
+    monitorEos: { en:'Eosinophil count — may indicate allergy or asthma', th:'ติดตามค่าอีโอซิโนฟิล อาจบ่งชี้ภูมิแพ้หรือหอบหืด' },
+    // Recheck
+    recheck3m: { en:'3 months (lipid panel urgently)', th:'3 เดือน (ตรวจไขมันด่วน)' },
+    recheck6m: { en:'6 months (lipid panel)', th:'6 เดือน (ตรวจไขมัน)' },
+    recheck12m: { en:'12 months (annual checkup)', th:'12 เดือน (ตรวจสุขภาพประจำปี)' },
+    // Age-specific
+    malePSA: { en:'At age ', th:'อายุ ' },
+    malePSA2: { en:', annual PSA and colorectal screening are recommended.', th:' ควรตรวจ PSA และมะเร็งลำไส้ใหญ่ประจำปี' },
+    femaleMammo: { en:' annual mammogram and bone density screening are recommended.', th:' ควรตรวจแมมโมแกรมและความหนาแน่นกระดูกประจำปี' },
+    // Section headers
+    doThis: { en:'Do This', th:'สิ่งที่ควรทำ' },
+    avoid: { en:'Avoid', th:'สิ่งที่ควรหลีกเลี่ยง' },
+    monitor: { en:'Monitor', th:'สิ่งที่ควรติดตาม' },
+    nextRecheck: { en:'Next Recheck', th:'นัดตรวจครั้งถัดไป' },
+    allGood: { en:'All key indicators are within normal range. Maintain current healthy lifestyle and keep up annual checkups.', th:'ผลตรวจทุกค่าอยู่ในเกณฑ์ปกติ รักษาพฤติกรรมสุขภาพที่ดีและตรวจสุขภาพประจำปีต่อไป' },
+    healthAdvisor: { en:'Health Advisor', th:'คำแนะนำสุขภาพ' }
+  };
+  var tx = texts[key];
+  if(!tx) return key;
+  return S.lang==='th' ? tx.th : tx.en;
+}
+
 var PROFILES = [
   { id:'rutchapon', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', dob:'1970-01-01', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
   { id:'kanokpai',  name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
@@ -446,23 +592,35 @@ function doSignIn(){
   if(!email||!pass){ toast('Please enter email and password'); return; }
   var btn = document.getElementById('si-btn');
   btn.textContent = 'Signing in...'; btn.disabled = true;
-  // Try to init Supabase if not ready yet
+  // Try init, if still not ready wait 1 second then retry
   if(!sbAuth) initSupabase();
-  if(sbAuth){
-    sbAuth.auth.signInWithPassword({email:email, password:pass}).then(function(res){
-      btn.textContent='Sign In'; btn.disabled=false;
-      if(res.error){ toast('Login failed: '+res.error.message); return; }
-      S.demo = false;
-      enterApp(email);
-    }).catch(function(e){
-      btn.textContent='Sign In'; btn.disabled=false;
-      toast('Login failed: '+e.message);
-    });
-  } else {
-    btn.textContent='Sign In'; btn.disabled=false;
-    toast('Could not reach server. Using demo mode.');
-    enterDemo();
+  if(!sbAuth){
+    setTimeout(function(){
+      initSupabase();
+      if(!sbAuth){
+        btn.textContent='Sign In'; btn.disabled=false;
+        toast('Server unavailable. Using demo mode.');
+        enterDemo();
+        return;
+      }
+      performSignIn(email, pass, btn);
+    }, 1200);
+    return;
   }
+  performSignIn(email, pass, btn);
+}
+
+function performSignIn(email, pass, btn){
+  sbAuth.auth.signInWithPassword({email:email, password:pass}).then(function(res){
+    btn.textContent='Sign In'; btn.disabled=false;
+    if(res.error){ toast('Login failed: '+res.error.message); return; }
+    S.demo = false;
+    enterApp(email);
+    toast('Welcome back! Connected to Supabase.');
+  }).catch(function(e){
+    btn.textContent='Sign In'; btn.disabled=false;
+    toast('Login failed: '+e.message);
+  });
 }
 
 function doRegister(){
@@ -560,13 +718,22 @@ function renderDashboard(){
 
   var alerts=[];
   if(r){
-    if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',m:'LDL '+r.ldl+' mg/dL - High. Consult cardiologist.'});
-    else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',m:'LDL '+r.ldl+' mg/dL - Borderline. Reduce saturated fat.'});
-    if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',m:'HDL '+r.hdl+' mg/dL - Low. Risk of arterial stenosis.'});
-    if(bmiVal&&parseFloat(bmiVal)>=25) alerts.push({t:'danger',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Obese by Thai standard (>=25). Increased CV & diabetes risk.'});
-    else if(bmiVal&&parseFloat(bmiVal)>=23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Overweight by Thai/Asian standard (normal: 18.5-22.9).'});
-    if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',m:'HbA1c '+r.hba1c+'% - Prediabetes range. Monitor closely.'});
-    if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',m:'Overall health indicators look stable. Good work!'});
+    if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',m:'LDL '+r.ldl+' mg/dL — High (target <130)',
+      rec:'&#x1F4CC; Action: See cardiologist, consider statins. Cut butter, cheese, fried food, red meat. Exercise 150+ min/week. Recheck in 3 months.'});
+    else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',m:'LDL '+r.ldl+' mg/dL — Borderline high',
+      rec:'&#x1F4CC; Action: Add oats, beans, nuts to diet. Cook with olive oil. Exercise 30 min daily. Recheck in 6 months.'});
+    if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',m:'HDL '+r.hdl+' mg/dL — Low (target >50)',
+      rec:'&#x1F4CC; Action: Increase aerobic exercise. Eat avocado, olive oil, nuts. Reduce refined carbs. Avoid smoking.'});
+    if(bmiVal&&parseFloat(bmiVal)>=25) alerts.push({t:'danger',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' — Obese by Thai standard (normal <23)',
+      rec:'&#x1F4CC; Action: Reduce rice portions, avoid sugary drinks, late-night eating. Target 0.5 kg loss/month. Exercise 150+ min/week.'});
+    else if(bmiVal&&parseFloat(bmiVal)>=23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' — Overweight by Thai/Asian standard (normal 18.5-22.9)',
+      rec:'&#x1F4CC; Action: Reduce white rice, noodles. Use smaller plates. Walk 30 min after meals. Thai adults face higher metabolic risk at BMI >23.'});
+    if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',m:'HbA1c '+r.hba1c+'% — Prediabetes range (normal <5.7)',
+      rec:'&#x1F4CC; Action: Reduce sugary drinks and white rice. Walk after meals. Recheck every 6 months. Lifestyle change can reverse prediabetes.'});
+    if(r.eos&&r.eos>5) alerts.push({t:'info',i:'&#x1F52C;',m:'Eosinophil '+r.eos+'% — Slightly elevated (normal 0-5%)',
+      rec:'&#x1F4CC; Note: Common in Thailand due to allergies, dust, or tropical conditions. Discuss allergy testing with doctor if persistent.'});
+    if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',m:'All key health indicators are within normal range.',
+      rec:'Keep up annual checkups, regular exercise 150 min/week, and a balanced diet.'});
   }
 
   var due = INSURANCE.filter(function(ins){return ins.holder===p.name&&!ins.paid;});
@@ -589,11 +756,17 @@ function renderDashboard(){
     html += '<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">BMI</div><div style="font-size:20px;font-weight:700">'+(bmiVal||'-')+'</div>'+(bmiVal?'<span class="badge '+bmiI.c+'" style="font-size:9px">'+bmiI.t+'</span>':'')+'</div>';
     html += '<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Blood Pressure</div><div style="font-size:18px;font-weight:700">'+(r.bp||'-')+'</div></div>';
     html += '</div>';
+    html += '<button class="btn btn-secondary" onclick="openModal(&quot;Quick Vitals&quot;,quickVitalsHTML())" style="margin-top:12px;padding:8px 14px;font-size:12px;width:100%">&#x270F;&#xFE0F; Update Vitals</button>';
   }
   html += '</div>';
 
-  // Alerts
-  alerts.forEach(function(a){ html += '<div class="alert '+a.t+'"><span style="flex-shrink:0">'+a.i+'</span><span>'+a.m+'</span></div>'; });
+  // Alerts with inline recommendations
+  alerts.forEach(function(a){
+    html += '<div class="alert '+a.t+'" style="flex-direction:column;gap:6px">';
+    html += '<div style="display:flex;gap:10px;align-items:flex-start"><span style="flex-shrink:0">'+a.i+'</span><span style="font-weight:500">'+a.m+'</span></div>';
+    if(a.rec) html += '<div style="font-size:12px;opacity:.85;padding-left:26px;line-height:1.5">'+a.rec+'</div>';
+    html += '</div>';
+  });
 
   // Key Metrics
   if(r){
@@ -823,115 +996,112 @@ function healthAdvisor(pid, r, p, age, compact) {
 
   // LDL
   if(r.ldl>160){
-    actions.push('Consult a cardiologist about statin therapy');
-    actions.push('Adopt Mediterranean diet: olive oil, fish, legumes, nuts');
-    avoid.push('Butter, cheese, full-fat dairy');
-    avoid.push('Fried foods, processed snacks, red meat');
-    monitor.push('Recheck lipids in 3 months');
-    recheck = '3 months (lipid panel urgently)';
+    actions.push(advisorText('seeCardiologist'));
+    actions.push(advisorText('mediterraneanDiet'));
+    avoid.push(advisorText('avoidButter'));
+    avoid.push(advisorText('avoidFried'));
+    monitor.push(advisorText('recheckLipid3m'));
+    recheck = advisorText('recheck3m');
   } else if(r.ldl>130){
-    actions.push('Increase soluble fibre: oats, beans, apples, psyllium');
-    actions.push('Exercise 150+ min/week — brisk walk, swim, cycle');
-    avoid.push('Trans fats (margarine, packaged baked goods)');
-    avoid.push('Coconut oil, palm oil in excess');
-    recheck = '6 months (lipid panel)';
+    actions.push(advisorText('increaseFibre'));
+    actions.push(advisorText('exercise150'));
+    avoid.push(advisorText('avoidTransFat'));
+    recheck = advisorText('recheck6m');
   }
 
   // HDL
   if(r.hdl && r.hdl<50){
-    actions.push('Increase aerobic exercise — raises HDL naturally');
-    actions.push('Add healthy fats: avocado, olive oil, nuts, fatty fish');
-    avoid.push('Smoking and excessive alcohol');
+    actions.push(advisorText('aerobicHDL'));
+    actions.push(advisorText('healthyFats'));
+    avoid.push(advisorText('avoidSmoking'));
   }
 
   // Blood sugar / HbA1c
   if(r.hba1c && parseFloat(r.hba1c)>=5.7){
-    actions.push('Reduce refined carbs: white rice, white bread, sugary drinks');
-    actions.push('Walk 30 min after meals to lower post-meal glucose');
-    avoid.push('Sugary drinks, fruit juices, desserts daily');
-    monitor.push('Check fasting glucose every 6 months');
+    actions.push(advisorText('reduceCarbs'));
+    actions.push(advisorText('walkAfterMeal'));
+    avoid.push(advisorText('avoidSugar'));
+    monitor.push(advisorText('monitorGlucose'));
   } else if(r.sugar>99){
-    actions.push('Reduce refined sugar intake');
-    actions.push('Increase physical activity to improve insulin sensitivity');
+    actions.push(advisorText('reduceCarbs'));
+    actions.push(advisorText('walkAfterMeal'));
   }
 
   // BMI
   var bv = r.bmi || bmi(r.weight, r.height);
   if(bv && parseFloat(bv)>=25){
-    actions.push('BMI indicates obese by Thai standard (>=25). Target BMI 18.5-22.9');
-    actions.push('Aim for 0.5-1 kg loss per month — gradual and sustainable');
-    actions.push('Portion control: use smaller plates, eat slowly, no late-night eating');
-    avoid.push('White rice in excess — switch to brown rice or reduce portions');
-    avoid.push('Sugary Thai drinks: bubble tea, sweetened coffee, fruit juices');
+    actions.push(advisorText('bmiObeseAction'));
+    actions.push(advisorText('gradualLoss'));
+    actions.push(advisorText('portionControl'));
+    avoid.push(advisorText('avoidWhiteRice'));
+    avoid.push(advisorText('avoidSugaryDrinks'));
+    avoid.push(advisorText('avoidLateEat'));
   } else if(bv && parseFloat(bv)>=23){
-    actions.push('BMI '+parseFloat(bv).toFixed(1)+' is overweight by Thai/Asian standard (>=23)');
-    actions.push('Thai adults face higher metabolic risk at lower BMI than Westerners');
-    actions.push('Reduce portion sizes, especially refined carbs (white rice, noodles)');
-    avoid.push('Late-night eating after 8pm');
+    actions.push(advisorText('bmiOverAction'));
+    actions.push(advisorText('thaiMetabolicRisk'));
+    actions.push(advisorText('portionControl'));
+    avoid.push(advisorText('avoidLateEat'));
   }
 
   // Kidney
   if(r.egfr && r.egfr<90){
-    actions.push('Drink 2+ litres of water daily');
-    avoid.push('Excessive NSAIDs (ibuprofen, naproxen)');
-    avoid.push('High-protein crash diets');
-    monitor.push('Annual kidney function test');
+    actions.push(advisorText('drink2L'));
+    avoid.push(advisorText('avoidNSAID'));
+    avoid.push(advisorText('avoidProtein'));
+    monitor.push(advisorText('monitorKidney'));
   }
 
   // Uric acid
   if(r.uric && ((p.gender==='Male'&&r.uric>7)||(p.gender==='Female'&&r.uric>6.2))){
-    avoid.push('Red meat, organ meats, shellfish (purine-rich)');
-    avoid.push('Beer and spirits');
-    actions.push('Drink plenty of water, eat cherries and low-fat dairy');
+    avoid.push(advisorText('avoidPurine'));
+    avoid.push(advisorText('avoidBeer'));
+    actions.push(advisorText('drink2L'));
   }
 
   // Eosinophil
   if(r.eos && r.eos>5){
-    actions.push('Discuss allergy/asthma testing with doctor');
-    monitor.push('Eosinophil count — may indicate allergy or asthma');
+    actions.push(advisorText('allergyTest'));
+    monitor.push(advisorText('monitorEos'));
   }
 
-  // Default recheck based on age
-  if(!recheck){
-    if(age>=50) recheck = '12 months (annual checkup)';
-    else recheck = '12 months (annual checkup)';
-  }
+  // Default recheck
+  if(!recheck) recheck = advisorText('recheck12m');
 
   // Age-specific notes
   var ageNote = '';
-  if(p.gender==='Male' && age>=50) ageNote = 'At age '+age+', annual PSA and colorectal screening are recommended.';
-  if(p.gender==='Female' && age>=45) ageNote = 'At age '+age+', annual mammogram and bone density screening are recommended.';
+  if(p.gender==='Male' && age>=50) ageNote = advisorText('malePSA')+age+advisorText('malePSA2');
+  if(p.gender==='Female' && age>=45) ageNote = advisorText('malePSA')+age+advisorText('femaleMammo');
 
   if(!actions.length && !avoid.length){
-    return '<div class="ai-box" style="margin-top:10px"><div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">&#x2705; Health Advisor &mdash; '+p.name+'</div><div style="font-size:13px;color:var(--t2)">All key indicators are within normal range. Maintain current healthy lifestyle and keep up annual checkups.</div></div>';
+    return '<div class="ai-box" style="margin-top:10px"><div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">&#x2705; '+advisorText('healthAdvisor')+' &mdash; '+p.name+'</div><div style="font-size:13px;color:var(--t2)">'+advisorText('allGood')+'</div></div>';
   }
 
   var html = '<div class="ai-box" style="margin-top:10px">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--violet);margin-bottom:12px">&#x1FA7A; Health Advisor &mdash; '+p.name+' (Age '+age+')</div>';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--violet);margin-bottom:12px">&#x1FA7A; '+advisorText('healthAdvisor')+' &mdash; '+p.name+' ('+(S.lang==='th'?'อายุ ':'')+age+(S.lang==='en'?' yrs':' ปี')+')</div>';
 
   if(actions.length){
-    html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x2705; Do This</div>';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x2705; '+advisorText('doThis')+'</div>';
     html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
     actions.forEach(function(a){ html += '<li>'+a+'</li>'; });
     html += '</ul>';
   }
 
   if(avoid.length){
-    html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x274C; Avoid</div>';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x274C; '+advisorText('avoid')+'</div>';
     html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
     avoid.forEach(function(a){ html += '<li>'+a+'</li>'; });
     html += '</ul>';
   }
 
   if(monitor.length){
-    html += '<div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x1F4CB; Monitor</div>';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x1F4CB; '+advisorText('monitor')+'</div>';
     html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
     monitor.forEach(function(m){ html += '<li>'+m+'</li>'; });
     html += '</ul>';
   }
 
   html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:10px;padding:10px;margin-top:4px">';
-  html += '<div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">&#x1F4C5; Next Recheck</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">&#x1F4C5; '+advisorText('nextRecheck')+'</div>';
   html += '<div style="font-size:13px;font-weight:600;color:var(--t1)">'+recheck+'</div>';
   if(ageNote) html += '<div style="font-size:12px;color:var(--t2);margin-top:4px">'+ageNote+'</div>';
   html += '</div>';
@@ -1144,6 +1314,91 @@ function drawCharts(pid){
 }
 
 // ── INSURANCE ─────────────────────────────────────────
+
+function quickVitalsHTML(){
+  var p = prof(S.pid);
+  var r = latestRec(S.pid);
+  var yrs = years(S.pid);
+  var today = new Date().toISOString().split('T')[0];
+  return '<p style="font-size:13px;color:var(--t2);margin-bottom:16px">Update vitals from a regular OPD visit or home measurement. This creates a new entry or updates current year data.</p>'+
+    '<div class="fg"><label class="lbl">Profile</label>'+
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px">'+
+    '<div class="av '+p.avCls+'" style="width:28px;height:28px;border-radius:9px;font-size:12px">'+p.av+'</div>'+
+    '<span style="font-size:14px;font-weight:600">'+p.name+'</span>'+
+    '</div></div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">Date of Visit</label><input class="inp" type="date" id="qv-date" value="'+today+'"></div>'+
+    '<div class="fg"><label class="lbl">Hospital / Clinic</label><input class="inp" type="text" id="qv-hospital" placeholder="Praram 9, Clinic..." value="'+(r&&r.hospital||'')+'"></div>'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x2696;&#xFE0F; Physical</div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">Weight (kg)</label><input class="inp" type="number" step=".1" id="qv-weight" placeholder="61.0" value="'+(r&&r.weight||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Height (cm)</label><input class="inp" type="number" step=".1" id="qv-height" placeholder="162" value="'+(r&&r.height||'')+'"></div>'+
+    '</div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">Blood Pressure</label><input class="inp" type="text" id="qv-bp" placeholder="120/80" value="'+(r&&r.bp&&r.bp!=='N/A'?r.bp:'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Pulse (bpm)</label><input class="inp" type="number" id="qv-pulse" placeholder="70" value="'+(r&&r.pulse||'')+'"></div>'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x1FA78; Blood Sugar</div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">Blood Sugar (mg/dL)</label><input class="inp" type="number" id="qv-sugar" placeholder="90" value="'+(r&&r.sugar||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">HbA1c (%)</label><input class="inp" type="number" step=".1" id="qv-hba1c" placeholder="5.2" value="'+(r&&r.hba1c||'')+'"></div>'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x1F9EA; Lipids (if checked)</div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">Cholesterol</label><input class="inp" type="number" id="qv-chol" placeholder="200" value="'+(r&&r.chol||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">LDL</label><input class="inp" type="number" id="qv-ldl" placeholder="130" value="'+(r&&r.ldl||'')+'"></div>'+
+    '</div>'+
+    '<div class="frow">'+
+    '<div class="fg"><label class="lbl">HDL</label><input class="inp" type="number" id="qv-hdl" placeholder="50" value="'+(r&&r.hdl||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Triglycerides</label><input class="inp" type="number" id="qv-trig" placeholder="100" value="'+(r&&r.trig||'')+'"></div>'+
+    '</div>'+
+    '<div class="fg"><label class="lbl">Doctor Notes</label><textarea class="inp" rows="2" id="qv-notes" placeholder="OPD visit notes, doctor recommendations..."></textarea></div>'+
+    '<button class="btn btn-primary" onclick="saveQuickVitals()" style="margin-top:4px">&#x1F4BE; Save Vitals</button>'+
+    '<div style="height:10px"></div>';
+}
+
+function saveQuickVitals(){
+  var date = document.getElementById('qv-date').value;
+  var year = date ? parseInt(date.split('-')[0]) : new Date().getFullYear();
+  var pid = S.pid;
+
+  // Update or create record for this year
+  if(!HR[pid]) HR[pid] = {};
+  if(!HR[pid][year]) HR[pid][year] = { age: calcAge(prof(pid).dob, year) };
+
+  var fields = {
+    date: date,
+    hospital: document.getElementById('qv-hospital').value || HR[pid][year].hospital,
+    weight: parseFloat(document.getElementById('qv-weight').value) || HR[pid][year].weight,
+    height: parseFloat(document.getElementById('qv-height').value) || HR[pid][year].height,
+    bp: document.getElementById('qv-bp').value || HR[pid][year].bp,
+    pulse: parseInt(document.getElementById('qv-pulse').value) || HR[pid][year].pulse,
+    sugar: parseFloat(document.getElementById('qv-sugar').value) || HR[pid][year].sugar,
+    hba1c: parseFloat(document.getElementById('qv-hba1c').value) || HR[pid][year].hba1c,
+    chol: parseFloat(document.getElementById('qv-chol').value) || HR[pid][year].chol,
+    ldl: parseFloat(document.getElementById('qv-ldl').value) || HR[pid][year].ldl,
+    hdl: parseFloat(document.getElementById('qv-hdl').value) || HR[pid][year].hdl,
+    trig: parseFloat(document.getElementById('qv-trig').value) || HR[pid][year].trig,
+    notes: document.getElementById('qv-notes').value || HR[pid][year].notes
+  };
+
+  // Calc BMI if we have both weight and height
+  if(fields.weight && fields.height) {
+    fields.bmi = parseFloat(bmi(fields.weight, fields.height));
+  }
+
+  // Merge into record
+  Object.assign(HR[pid][year], fields);
+
+  // Update year selection to show updated year
+  S.year = year;
+
+  closeModal();
+  toast('Vitals saved for '+year+' ✓');
+  renderTab(S.tab);
+}
+
 function renderInsurance(){
   var html = '<div class="fade"><div class="sec" style="margin-top:12px">Insurance Coverage</div>';
 
