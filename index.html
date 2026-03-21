@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>HealthVault</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -274,20 +276,84 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
 var SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
 var sbAuth = null;
-try {
-  if (typeof window.supabase !== 'undefined') {
-    sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  }
-} catch(e) { console.warn('Supabase unavailable'); }
+
+function initSupabase() {
+  try {
+    if (typeof window.supabase !== 'undefined') {
+      sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      return true;
+    }
+  } catch(e) { console.warn('Supabase init error:', e); }
+  return false;
+}
 
 // ── STATE ────────────────────────────────────────────
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{} };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai' };
 
 // ── DEMO DATA ────────────────────────────────────────
 var PROFILES = [
-  { id:'rutchapon', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
-  { id:'kanokpai',  name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
+  { id:'rutchapon', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', dob:'1970-01-01', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
+  { id:'kanokpai',  name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
 ];
+
+function calcAge(dob, atYear) {
+  var d = new Date(dob); var y = atYear || new Date().getFullYear();
+  return y - d.getFullYear();
+}
+
+// Ideal weight range by age/gender (WHO/Asian standard)
+function idealWeightRange(gender, height, age) {
+  var hm = height/100;
+  var bmiMin = 18.5, bmiMax = 22.9;
+  var min = (bmiMin * hm * hm).toFixed(1);
+  var max = (bmiMax * hm * hm).toFixed(1);
+  return { min: parseFloat(min), max: parseFloat(max), label: min+'-'+max+' kg (BMI 18.5-22.9)' };
+}
+
+// Thai/Asian-specific reference ranges by gender & age
+// Sources: Siriraj Hospital CBC study, 2024 RCPT Dyslipidemia Guidelines,
+//          Mahidol BMI studies, WHO Asia-Pacific waist guidelines
+function getRefs(gender, age) {
+  var male = gender==='Male';
+  return {
+    // Lipids - 2024 RCPT Thailand guidelines
+    // LDL: <130 primary prevention low risk; <100 if risk factors; <70 very high risk
+    ldl:    { min:null, max:130,  label:'<130 (low risk)', unit:'mg/dL', note:'Target <100 if CV risk factors present' },
+    hdl:    { min:male?40:50, max:null, label:male?'>40':'>50', unit:'mg/dL', note:male?'Low HDL more common in Thai males':'Low HDL significant CV risk for females' },
+    chol:   { min:null, max:200,  label:'<200', unit:'mg/dL' },
+    trig:   { min:null, max:150,  label:'<150', unit:'mg/dL', note:'Thais tend to higher TG due to rice-based diet' },
+    // Blood sugar
+    sugar:  { min:70,   max:99,   label:'70-99', unit:'mg/dL' },
+    hba1c:  { min:null, max:5.7,  label:'<5.7', unit:'%', note:'Prediabetes 5.7-6.4%; Diabetes >=6.5%' },
+    // Kidney
+    egfr:   { min:60,   max:null, label:'>60',  unit:'ml/min', note:'Stage 3 CKD if <60' },
+    creat:  { min:male?0.7:0.5, max:male?1.2:1.0, label:male?'0.7-1.2':'0.5-1.0', unit:'mg/dL' },
+    uric:   { min:null, max:male?7.0:6.0, label:male?'<7.0':'<6.0', unit:'mg/dL', note:'Gout risk higher in Thai males' },
+    bun:    { min:7, max:20, label:'7-20', unit:'mg/dL' },
+    // CBC - Siriraj Hospital Thai adult reference values
+    hb:     { min:male?13.0:11.5, max:male?17.0:15.0, label:male?'13.0-17.0':'11.5-15.0', unit:'g/dL', note:'Thai reference (Siriraj Hospital); slightly lower than Western due to thalassemia trait prevalence' },
+    hct:    { min:male?38:35, max:male?50:45, label:male?'38-50':'35-45', unit:'%' },
+    wbc:    { min:4000, max:10000, label:'4,000-10,000', unit:'cells/mm3' },
+    neut:   { min:40, max:75, label:'40-75', unit:'%', note:'Slightly wider range in Thai population' },
+    lymph:  { min:20, max:45, label:'20-45', unit:'%' },
+    eos:    { min:0, max:5, label:'0-5', unit:'%', note:'>5% common in tropical countries due to parasites/allergies' },
+    plat:   { min:150000, max:450000, label:'150K-450K', unit:'cells/mm3' },
+    // Liver
+    sgot:   { min:0, max:male?40:32, label:male?'0-40':'0-32', unit:'U/L' },
+    sgpt:   { min:0, max:male?41:33, label:male?'0-41':'0-33', unit:'U/L' },
+    alp:    { min:40, max:130, label:'40-130', unit:'U/L' },
+    // Cancer markers
+    afp:    { min:0, max:7.0, label:'0-7.0', unit:'ng/mL', note:'Thai labs use lower cutoff 7.0 vs Western 13.6' },
+    cea:    { min:0, max:5.0, label:'0-5.0', unit:'ng/mL' },
+    psa:    { min:0, max:male?4.0:null, label:male?'<4.0':'N/A', unit:'ng/mL', note:male?'Age-adjusted: <2.5 if age<50, <3.5 if 50-60, <4.5 if 60-70':'N/A' },
+    // BP
+    sbp:    { min:null, max:130, label:'<130', unit:'mmHg' },
+    dbp:    { min:null, max:85,  label:'<85',  unit:'mmHg' },
+    // BMI - Asian/Thai specific cutoffs (Mahidol University research)
+    bmi:    { min:18.5, max:22.9, label:'18.5-22.9 Normal', overweight:23, obese:25,
+              note:'Thai/Asian cutoff: Overweight>=23, Obese>=25 (lower than Western 25/30)' }
+  };
+}
 
 var HR = {
   rutchapon: {
@@ -336,10 +402,10 @@ function bmi(w,h){ return (w&&h) ? (w/((h/100)*(h/100))).toFixed(1) : null; }
 function bmiLbl(b){
   if(!b) return {t:'N/A',c:'b-info'};
   var v=parseFloat(b);
-  if(v<18.5) return {t:'Underweight',c:'b-warn'};
-  if(v<=22.9) return {t:'Normal',c:'b-ok'};
-  if(v<=24.9) return {t:'Overweight',c:'b-warn'};
-  return {t:'Obese',c:'b-alert'};
+  if(v<18.5) return {t:'Underweight (Thai)',c:'b-warn'};
+  if(v<23.0) return {t:'Normal (Thai)',c:'b-ok'};
+  if(v<25.0) return {t:'Overweight (Thai)',c:'b-warn'};
+  return {t:'Obese (Thai)',c:'b-alert'};
 }
 function fmtDate(d){ try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }catch(e){return d;} }
 function fmtTHB(n){ return n ? n.toLocaleString()+' THB' : '-'; }
@@ -380,19 +446,21 @@ function doSignIn(){
   if(!email||!pass){ toast('Please enter email and password'); return; }
   var btn = document.getElementById('si-btn');
   btn.textContent = 'Signing in...'; btn.disabled = true;
+  // Try to init Supabase if not ready yet
+  if(!sbAuth) initSupabase();
   if(sbAuth){
     sbAuth.auth.signInWithPassword({email:email, password:pass}).then(function(res){
       btn.textContent='Sign In'; btn.disabled=false;
-      if(res.error){ toast('Error: '+res.error.message); return; }
+      if(res.error){ toast('Login failed: '+res.error.message); return; }
       S.demo = false;
       enterApp(email);
     }).catch(function(e){
       btn.textContent='Sign In'; btn.disabled=false;
-      toast('Error: '+e.message);
+      toast('Login failed: '+e.message);
     });
   } else {
-    toast('Supabase unavailable - entering demo mode');
     btn.textContent='Sign In'; btn.disabled=false;
+    toast('Could not reach server. Using demo mode.');
     enterDemo();
   }
 }
@@ -404,6 +472,7 @@ function doRegister(){
   if(!name||!email||!pass){ toast('Please fill all fields'); return; }
   var btn = document.getElementById('rg-btn');
   btn.textContent='Creating...'; btn.disabled=true;
+  if(!sbAuth) initSupabase();
   if(sbAuth){
     sbAuth.auth.signUp({email:email,password:pass,options:{data:{full_name:name}}}).then(function(res){
       btn.textContent='Create Account'; btn.disabled=false;
@@ -415,9 +484,8 @@ function doRegister(){
       toast('Error: '+e.message);
     });
   } else {
-    toast('Supabase unavailable - entering demo mode');
     btn.textContent='Create Account'; btn.disabled=false;
-    enterDemo();
+    toast('Could not reach server. Try again in a moment.');
   }
 }
 
@@ -495,7 +563,8 @@ function renderDashboard(){
     if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',m:'LDL '+r.ldl+' mg/dL - High. Consult cardiologist.'});
     else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',m:'LDL '+r.ldl+' mg/dL - Borderline. Reduce saturated fat.'});
     if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',m:'HDL '+r.hdl+' mg/dL - Low. Risk of arterial stenosis.'});
-    if(bmiVal&&parseFloat(bmiVal)>23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Above Asian healthy range (18.5-22.9).'});
+    if(bmiVal&&parseFloat(bmiVal)>=25) alerts.push({t:'danger',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Obese by Thai standard (>=25). Increased CV & diabetes risk.'});
+    else if(bmiVal&&parseFloat(bmiVal)>=23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Overweight by Thai/Asian standard (normal: 18.5-22.9).'});
     if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',m:'HbA1c '+r.hba1c+'% - Prediabetes range. Monitor closely.'});
     if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',m:'Overall health indicators look stable. Good work!'});
   }
@@ -608,9 +677,9 @@ function renderHealth(){
 
     // CBC
     html += catSection('&#x1F52C; Blood Count', [
-      dataRow('Hemoglobin',r.hb,'g/dL',male?13.4:12.5,male?16.2:14.9,null,prev&&prev.hb),
-      dataRow('Hematocrit',r.hct,'%',male?40:38,male?48:44,null,prev&&prev.hct),
-      dataRow('WBC',r.wbc,'cells/mm3',4500,10500,null,prev&&prev.wbc),
+      dataRow('Hemoglobin',r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb),
+      dataRow('Hematocrit',r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct),
+      dataRow('WBC',r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc),
       dataRow('Neutrophil',r.neut,'%',41,70,null,prev&&prev.neut),
       dataRow('Lymphocyte',r.lymph,'%',19,47,null,prev&&prev.lymph),
       dataRow('Eosinophil',r.eos,'%',0,5,null,prev&&prev.eos),
@@ -622,7 +691,7 @@ function renderHealth(){
       dataRow('Creatinine',r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat),
       dataRow('eGFR',r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true),
       dataRow('BUN',r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
-      dataRow('Uric Acid',r.uric,'mg/dL',male?3.7:2.5,male?7.7:6.2,null,prev&&prev.uric)
+      dataRow('Uric Acid',r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric)
     ]);
 
     // Liver
@@ -700,6 +769,8 @@ function renderTrends(){
   } else {
     var recs = years(S.pid).map(function(y){ return Object.assign({year:y},HR[S.pid][y]); });
     var latest = recs[recs.length-1];
+    var p = prof(S.pid);
+    var latestAge = latest ? calcAge(p.dob, latest.year) : 50;
     var ldls = recs.map(function(r){return r.ldl;}).filter(Boolean);
     var ldlTrend = ldls.length>1 ? (ldls[ldls.length-1]-ldls[0]>10?'rising':ldls[ldls.length-1]-ldls[0]<-10?'improving':'stable') : 'stable';
 
@@ -718,6 +789,7 @@ function renderTrends(){
 
     // AI Insight
     html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; AI Health Insight</div>'+aiInsight(S.pid, recs)+'</div>';
+    html += healthAdvisor(S.pid, recs[recs.length-1], p, latestAge, false);
   }
 
   html += '<div style="height:10px"></div></div>';
@@ -744,80 +816,331 @@ function aiInsight(pid, recs){
   return insights.join('<br><br>');
 }
 
-function renderCompare(){
-  var r2025R = rec('rutchapon',2025), r2025K = rec('kanokpai',2025);
-  if(!r2025R||!r2025K) return '<div class="notice">Need data for both profiles to compare.</div>';
 
-  var rows = [
-    {l:'Weight (kg)',r:r2025R.weight,k:r2025K.weight},
-    {l:'BMI',r:r2025R.bmi||bmi(r2025R.weight,r2025R.height),k:r2025K.bmi||bmi(r2025K.weight,r2025K.height),min:18.5,max:22.9},
-    {l:'Blood Pressure',r:r2025R.bp,k:r2025K.bp},
-    {l:'Cholesterol',r:r2025R.chol,k:r2025K.chol,max:200},
-    {l:'LDL',r:r2025R.ldl,k:r2025K.ldl,max:130},
-    {l:'HDL',r:r2025R.hdl,k:r2025K.hdl,min:50},
-    {l:'Triglycerides',r:r2025R.trig,k:r2025K.trig,max:150},
-    {l:'Blood Sugar',r:r2025R.sugar,k:r2025K.sugar,min:70,max:99},
-    {l:'HbA1c %',r:r2025R.hba1c,k:r2025K.hba1c,max:5.7},
-    {l:'eGFR',r:r2025R.egfr,k:r2025K.egfr,min:60},
-    {l:'Creatinine',r:r2025R.creat,k:r2025K.creat,max:1.02},
-    {l:'SGOT',r:r2025R.sgot,k:r2025K.sgot,max:40},
-    {l:'Uric Acid',r:r2025R.uric,k:r2025K.uric}
-  ];
+function healthAdvisor(pid, r, p, age, compact) {
+  if(!r) return '';
+  var actions=[], avoid=[], monitor=[], recheck='';
 
-  var html = '<div class="sec">Side-by-Side 2025</div><div class="card">';
-  html += '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;margin-bottom:14px">';
-  html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--blue)">Rutchapon</div><div style="font-size:11px;color:var(--t3)">Age 55 &middot; Blood O</div></div>';
-  html += '<div style="display:flex;align-items:center;font-size:18px">&#x2696;&#xFE0F;</div>';
-  html += '<div style="background:rgba(240,98,146,.08);border:1px solid rgba(240,98,146,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--rose)">Kanokpai</div><div style="font-size:11px;color:var(--t3)">Age 52 &middot; Blood B</div></div>';
+  // LDL
+  if(r.ldl>160){
+    actions.push('Consult a cardiologist about statin therapy');
+    actions.push('Adopt Mediterranean diet: olive oil, fish, legumes, nuts');
+    avoid.push('Butter, cheese, full-fat dairy');
+    avoid.push('Fried foods, processed snacks, red meat');
+    monitor.push('Recheck lipids in 3 months');
+    recheck = '3 months (lipid panel urgently)';
+  } else if(r.ldl>130){
+    actions.push('Increase soluble fibre: oats, beans, apples, psyllium');
+    actions.push('Exercise 150+ min/week — brisk walk, swim, cycle');
+    avoid.push('Trans fats (margarine, packaged baked goods)');
+    avoid.push('Coconut oil, palm oil in excess');
+    recheck = '6 months (lipid panel)';
+  }
+
+  // HDL
+  if(r.hdl && r.hdl<50){
+    actions.push('Increase aerobic exercise — raises HDL naturally');
+    actions.push('Add healthy fats: avocado, olive oil, nuts, fatty fish');
+    avoid.push('Smoking and excessive alcohol');
+  }
+
+  // Blood sugar / HbA1c
+  if(r.hba1c && parseFloat(r.hba1c)>=5.7){
+    actions.push('Reduce refined carbs: white rice, white bread, sugary drinks');
+    actions.push('Walk 30 min after meals to lower post-meal glucose');
+    avoid.push('Sugary drinks, fruit juices, desserts daily');
+    monitor.push('Check fasting glucose every 6 months');
+  } else if(r.sugar>99){
+    actions.push('Reduce refined sugar intake');
+    actions.push('Increase physical activity to improve insulin sensitivity');
+  }
+
+  // BMI
+  var bv = r.bmi || bmi(r.weight, r.height);
+  if(bv && parseFloat(bv)>=25){
+    actions.push('BMI indicates obese by Thai standard (>=25). Target BMI 18.5-22.9');
+    actions.push('Aim for 0.5-1 kg loss per month — gradual and sustainable');
+    actions.push('Portion control: use smaller plates, eat slowly, no late-night eating');
+    avoid.push('White rice in excess — switch to brown rice or reduce portions');
+    avoid.push('Sugary Thai drinks: bubble tea, sweetened coffee, fruit juices');
+  } else if(bv && parseFloat(bv)>=23){
+    actions.push('BMI '+parseFloat(bv).toFixed(1)+' is overweight by Thai/Asian standard (>=23)');
+    actions.push('Thai adults face higher metabolic risk at lower BMI than Westerners');
+    actions.push('Reduce portion sizes, especially refined carbs (white rice, noodles)');
+    avoid.push('Late-night eating after 8pm');
+  }
+
+  // Kidney
+  if(r.egfr && r.egfr<90){
+    actions.push('Drink 2+ litres of water daily');
+    avoid.push('Excessive NSAIDs (ibuprofen, naproxen)');
+    avoid.push('High-protein crash diets');
+    monitor.push('Annual kidney function test');
+  }
+
+  // Uric acid
+  if(r.uric && ((p.gender==='Male'&&r.uric>7)||(p.gender==='Female'&&r.uric>6.2))){
+    avoid.push('Red meat, organ meats, shellfish (purine-rich)');
+    avoid.push('Beer and spirits');
+    actions.push('Drink plenty of water, eat cherries and low-fat dairy');
+  }
+
+  // Eosinophil
+  if(r.eos && r.eos>5){
+    actions.push('Discuss allergy/asthma testing with doctor');
+    monitor.push('Eosinophil count — may indicate allergy or asthma');
+  }
+
+  // Default recheck based on age
+  if(!recheck){
+    if(age>=50) recheck = '12 months (annual checkup)';
+    else recheck = '12 months (annual checkup)';
+  }
+
+  // Age-specific notes
+  var ageNote = '';
+  if(p.gender==='Male' && age>=50) ageNote = 'At age '+age+', annual PSA and colorectal screening are recommended.';
+  if(p.gender==='Female' && age>=45) ageNote = 'At age '+age+', annual mammogram and bone density screening are recommended.';
+
+  if(!actions.length && !avoid.length){
+    return '<div class="ai-box" style="margin-top:10px"><div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">&#x2705; Health Advisor &mdash; '+p.name+'</div><div style="font-size:13px;color:var(--t2)">All key indicators are within normal range. Maintain current healthy lifestyle and keep up annual checkups.</div></div>';
+  }
+
+  var html = '<div class="ai-box" style="margin-top:10px">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--violet);margin-bottom:12px">&#x1FA7A; Health Advisor &mdash; '+p.name+' (Age '+age+')</div>';
+
+  if(actions.length){
+    html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x2705; Do This</div>';
+    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
+    actions.forEach(function(a){ html += '<li>'+a+'</li>'; });
+    html += '</ul>';
+  }
+
+  if(avoid.length){
+    html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x274C; Avoid</div>';
+    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
+    avoid.forEach(function(a){ html += '<li>'+a+'</li>'; });
+    html += '</ul>';
+  }
+
+  if(monitor.length){
+    html += '<div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x1F4CB; Monitor</div>';
+    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
+    monitor.forEach(function(m){ html += '<li>'+m+'</li>'; });
+    html += '</ul>';
+  }
+
+  html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:10px;padding:10px;margin-top:4px">';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">&#x1F4C5; Next Recheck</div>';
+  html += '<div style="font-size:13px;font-weight:600;color:var(--t1)">'+recheck+'</div>';
+  if(ageNote) html += '<div style="font-size:12px;color:var(--t2);margin-top:4px">'+ageNote+'</div>';
   html += '</div>';
-
-  rows.forEach(function(row){
-    html += '<div class="cmp-row">';
-    html += '<div class="cmp-v" style="color:'+getValColor(row.r,row.min,row.max)+'">'+(row.r||'-')+'</div>';
-    html += '<div class="cmp-lbl">'+row.l+'</div>';
-    html += '<div class="cmp-v" style="color:'+getValColor(row.k,row.min,row.max)+'">'+(row.k||'-')+'</div>';
-    html += '</div>';
-  });
-  html += '</div>';
-
-  html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; Family Health Insights</div>';
-  html += '&#x1F534; <b>Rutchapon LDL 171</b> significantly higher than Kanokpai (130). Immediate dietary action needed for Rutchapon.<br><br>';
-  html += '&#x1F7E1; <b>Kanokpai BP 89/59</b> is trending low - monitor for dizziness and fatigue.<br><br>';
-  html += '&#x1F7E2; <b>Both have excellent kidney function</b> (eGFR &gt;85). Keep hydrated.<br><br>';
-  html += '&#x1F7E2; <b>HbA1c normal for both</b> - no diabetes risk currently.';
   html += '</div>';
   return html;
 }
 
+function renderCompare(){
+  var pA = prof(S.cmpA), pB = prof(S.cmpB);
+  var rA = rec(S.cmpA, S.cmpYear), rB = rec(S.cmpB, S.cmpYear);
+
+  // Year selector - find years that exist in EITHER profile
+  var allYears = [];
+  PROFILES.forEach(function(p){
+    years(p.id).forEach(function(y){ if(allYears.indexOf(y)<0) allYears.push(y); });
+  });
+  allYears.sort(function(a,b){return a-b;});
+
+  var html = '';
+
+  // Year pills
+  html += '<div class="ypills" style="margin-bottom:12px">';
+  allYears.forEach(function(y){
+    html += '<div class="yp'+(y===S.cmpYear?' on':'')+'" onclick="S.cmpYear='+y+';renderTrends()">'+y+'</div>';
+  });
+  html += '</div>';
+
+  // Profile A selector
+  html += '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;margin-bottom:12px;align-items:center">';
+  html += '<select class="inp" style="padding:8px;font-size:13px;text-align:center" onchange="S.cmpA=this.value;renderTrends()">';
+  PROFILES.forEach(function(p){ html += '<option value="'+p.id+'"'+(p.id===S.cmpA?' selected':'')+'>'+p.name+'</option>'; });
+  html += '</select>';
+  html += '<div style="text-align:center;font-size:18px">&#x2696;&#xFE0F;</div>';
+  html += '<select class="inp" style="padding:8px;font-size:13px;text-align:center" onchange="S.cmpB=this.value;renderTrends()">';
+  PROFILES.forEach(function(p){ html += '<option value="'+p.id+'"'+(p.id===S.cmpB?' selected':'')+'>'+p.name+'</option>'; });
+  html += '</select></div>';
+
+  if(!rA||!rB){
+    html += '<div class="notice">No data for one or both profiles in '+S.cmpYear+'. Select a different year.</div>';
+    return html;
+  }
+
+  var ageA = calcAge(pA.dob, S.cmpYear);
+  var ageB = calcAge(pB.dob, S.cmpYear);
+
+  var rows = [
+    {l:'Weight (kg)',a:rA.weight,b:rB.weight},
+    {l:'BMI',a:rA.bmi||bmi(rA.weight,rA.height),b:rB.bmi||bmi(rB.weight,rB.height),min:18.5,max:22.9},
+    {l:'Blood Pressure',a:rA.bp,b:rB.bp},
+    {l:'Cholesterol',a:rA.chol,b:rB.chol,max:200},
+    {l:'LDL',a:rA.ldl,b:rB.ldl,max:130},
+    {l:'HDL',a:rA.hdl,b:rB.hdl,min:50},
+    {l:'Triglycerides',a:rA.trig,b:rB.trig,max:150},
+    {l:'Blood Sugar',a:rA.sugar,b:rB.sugar,min:70,max:99},
+    {l:'HbA1c %',a:rA.hba1c,b:rB.hba1c,max:5.7},
+    {l:'eGFR',a:rA.egfr,b:rB.egfr,min:60},
+    {l:'Creatinine',a:rA.creat,b:rB.creat,max:1.02},
+    {l:'SGOT',a:rA.sgot,b:rB.sgot,max:40},
+    {l:'Uric Acid',a:rA.uric,b:rB.uric}
+  ];
+
+  html += '<div class="sec" style="font-size:17px">'+S.cmpYear+' Comparison</div><div class="card">';
+  html += '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;margin-bottom:14px">';
+  html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--blue)">'+pA.name+'</div><div style="font-size:11px;color:var(--t3)">Age '+ageA+' &middot; Blood '+pA.blood+'</div></div>';
+  html += '<div style="display:flex;align-items:center;font-size:18px">&#x2696;&#xFE0F;</div>';
+  html += '<div style="background:rgba(240,98,146,.08);border:1px solid rgba(240,98,146,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--rose)">'+pB.name+'</div><div style="font-size:11px;color:var(--t3)">Age '+ageB+' &middot; Blood '+pB.blood+'</div></div>';
+  html += '</div>';
+
+  rows.forEach(function(row){
+    html += '<div class="cmp-row">';
+    html += '<div class="cmp-v" style="color:'+getValColor(row.a,row.min,row.max)+'">'+(row.a!=null?row.a:'-')+'</div>';
+    html += '<div class="cmp-lbl">'+row.l+'</div>';
+    html += '<div class="cmp-v" style="color:'+getValColor(row.b,row.min,row.max)+'">'+(row.b!=null?row.b:'-')+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Family insights
+  html += healthAdvisor(S.cmpA, rA, pA, ageA, true);
+  return html;
+}
+
+function refLine(val, color, lbl) {
+  return { type:'line', yMin:val, yMax:val, borderColor:color, borderWidth:1.5, borderDash:[6,4],
+    label:{ content:lbl, display:true, position:'end', color:color, font:{size:9}, backgroundColor:'rgba(0,0,0,.5)', padding:2 } };
+}
+
+function chartCfg(extra) {
+  var base = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{}
+    },
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},
+      y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}}
+    }
+  };
+  if(extra) Object.assign(base, extra);
+  return base;
+}
+
 function drawCharts(pid){
+  var p = prof(pid);
   var recs = years(pid).map(function(y){ return Object.assign({year:y},HR[pid][y]); });
   var labels = recs.map(function(r){return r.year.toString();});
-  var cfg = {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1}},
-    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}}}
-  };
+  var latestAge = recs[recs.length-1] ? calcAge(p.dob, recs[recs.length-1].year) : 50;
+  var refs = getRefs(p.gender, latestAge);
+
   Object.values(S.charts).forEach(function(c){try{c.destroy();}catch(e){}});
   S.charts={};
 
   var el;
+
+  // LIPIDS - with reference lines
   el=document.getElementById('c-lipids');
   if(el) S.charts.lipids=new Chart(el,{type:'line',data:{labels:labels,datasets:[
-    {label:'LDL',data:recs.map(function(r){return r.ldl;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:4,fill:false},
-    {label:'HDL',data:recs.map(function(r){return r.hdl;}),borderColor:'#69f0ae',backgroundColor:'rgba(105,240,174,.1)',tension:.4,pointRadius:4,fill:false},
+    {label:'LDL',data:recs.map(function(r){return r.ldl;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:4,pointHoverRadius:6,fill:false,datalabels:{display:false}},
+    {label:'HDL',data:recs.map(function(r){return r.hdl;}),borderColor:'#69f0ae',backgroundColor:'rgba(105,240,174,.1)',tension:.4,pointRadius:4,pointHoverRadius:6,fill:false},
     {label:'Total',data:recs.map(function(r){return r.chol;}),borderColor:'#4fc3f7',tension:.4,pointRadius:4,fill:false,borderDash:[4,4]}
-  ]},options:cfg});
+  ]},options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.raw+' mg/dL';}}},
+      annotation:{annotations:{
+        ldlRef:{type:'line',yMin:130,yMax:130,borderColor:'rgba(255,82,82,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'LDL target <130',display:true,position:'start',color:'rgba(255,82,82,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        hdlRef:{type:'line',yMin:refs.hdl.min,yMax:refs.hdl.min,borderColor:'rgba(105,240,174,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'HDL min '+refs.hdl.min,display:true,position:'end',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        cholRef:{type:'line',yMin:200,yMax:200,borderColor:'rgba(79,195,247,.4)',borderWidth:1,borderDash:[4,4],label:{content:'Chol <200',display:true,position:'end',color:'rgba(79,195,247,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0}}
+  }});
 
+  // WEIGHT - bar chart with value labels + ideal weight reference band
   el=document.getElementById('c-weight');
-  var wr=recs.filter(function(r){return r.weight;});
-  if(el&&wr.length) S.charts.weight=new Chart(el,{type:'bar',data:{labels:wr.map(function(r){return r.year.toString();}),datasets:[{data:wr.map(function(r){return r.weight;}),backgroundColor:'rgba(79,195,247,.4)',borderColor:'#4fc3f7',borderWidth:2,borderRadius:6}]},options:cfg});
+  var wr=recs.filter(function(r){return r.weight&&r.height;});
+  if(!wr.length) wr=recs.filter(function(r){return r.weight;});
+  if(el&&wr.length){
+    var latestH = wr[wr.length-1].height || 162;
+    var iw = idealWeightRange(p.gender, latestH, latestAge);
+    S.charts.weight=new Chart(el,{type:'bar',data:{
+      labels:wr.map(function(r){return r.year.toString();}),
+      datasets:[{
+        data:wr.map(function(r){return r.weight;}),
+        backgroundColor:wr.map(function(r){
+          var w=r.weight; return (w>=iw.min&&w<=iw.max)?'rgba(105,240,174,.5)':'rgba(255,183,77,.5)';
+        }),
+        borderColor:wr.map(function(r){
+          var w=r.weight; return (w>=iw.min&&w<=iw.max)?'#69f0ae':'#ffb74d';
+        }),
+        borderWidth:2,borderRadius:6
+      }]
+    },options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,callbacks:{label:function(ctx){return 'Weight: '+ctx.raw+' kg';}}},
+        annotation:{annotations:{
+          wMin:{type:'line',yMin:iw.min,yMax:iw.min,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai ideal min '+iw.min+'kg (BMI 18.5)',display:true,position:'start',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+          wMax:{type:'line',yMin:iw.max,yMax:iw.max,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai normal max '+iw.max+'kg (BMI 22.9)',display:true,position:'end',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+          wOver:{type:'line',yMin:parseFloat((0.229*latestH/100*latestH/100*100).toFixed(1))+0.1,yMax:parseFloat((0.229*latestH/100*latestH/100*100).toFixed(1))+0.1,borderColor:'rgba(255,183,77,.5)',borderWidth:1,borderDash:[3,4],label:{content:'Overweight>=23',display:false}}
+        }},
+        datalabels:{display:true,color:'rgba(255,255,255,.8)',anchor:'end',align:'top',font:{size:10,weight:'bold'},formatter:function(v){return v+'kg';}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:function(){return Math.max(0,iw.min-5);}()}
+      }
+    }});
+  }
 
+  // BLOOD SUGAR - with reference lines
   el=document.getElementById('c-sugar');
-  if(el) S.charts.sugar=new Chart(el,{type:'line',data:{labels:labels,datasets:[{label:'Sugar',data:recs.map(function(r){return r.sugar;}),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,.12)',tension:.4,pointRadius:4,fill:true}]},options:cfg});
+  if(el) S.charts.sugar=new Chart(el,{type:'line',data:{labels:labels,datasets:[{
+    label:'Sugar',data:recs.map(function(r){return r.sugar;}),
+    borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,.12)',tension:.4,pointRadius:4,pointHoverRadius:6,fill:true
+  }]},options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        sMax:{type:'line',yMin:99,yMax:99,borderColor:'rgba(255,183,77,.6)',borderWidth:1.5,borderDash:[6,4],label:{content:'Normal max 99',display:true,position:'end',color:'rgba(255,183,77,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        sMin:{type:'line',yMin:70,yMax:70,borderColor:'rgba(105,240,174,.4)',borderWidth:1,borderDash:[4,4],label:{content:'Min 70',display:true,position:'start',color:'rgba(105,240,174,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:60,max:120}}
+  }});
 
+  // eGFR - with reference line
   el=document.getElementById('c-egfr');
   var er=recs.filter(function(r){return r.egfr;});
-  if(el&&er.length) S.charts.egfr=new Chart(el,{type:'line',data:{labels:er.map(function(r){return r.year.toString();}),datasets:[{data:er.map(function(r){return r.egfr;}),borderColor:'#26d9b0',backgroundColor:'rgba(38,217,176,.12)',tension:.4,pointRadius:4,fill:true}]},options:Object.assign({},cfg,{scales:Object.assign({},cfg.scales,{y:Object.assign({},cfg.scales.y,{min:0,max:150})})})});
+  if(el&&er.length) S.charts.egfr=new Chart(el,{type:'line',data:{
+    labels:er.map(function(r){return r.year.toString();}),
+    datasets:[{data:er.map(function(r){return r.egfr;}),borderColor:'#26d9b0',backgroundColor:'rgba(38,217,176,.12)',tension:.4,pointRadius:4,fill:true}]
+  },options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        egfrRef:{type:'line',yMin:60,yMax:60,borderColor:'rgba(255,82,82,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'Min normal 60',display:true,position:'start',color:'rgba(255,82,82,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:150}}
+  }});
 }
 
 // ── INSURANCE ─────────────────────────────────────────
@@ -949,7 +1272,9 @@ function toast(msg){
 
 // ── INIT ─────────────────────────────────────────────
 window.onload = function(){
-  // Always show auth screen first - no async, no hanging
+  // Init Supabase on page load
+  initSupabase();
+  // Always show auth screen first
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('app').style.display='none';
 };
