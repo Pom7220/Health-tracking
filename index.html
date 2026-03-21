@@ -322,7 +322,21 @@ var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmp
 function toggleLang(){
   S.lang = S.lang==='en' ? 'th' : 'en';
   updateLangBtn();
+  updateTabLabels();
   renderTab(S.tab);
+}
+
+
+function updateTabLabels(){
+  var tabs = ['Dashboard','Health','Trends','Insurance','Settings'];
+  var ids = ['dashboard','health','trends','insurance','settings'];
+  ids.forEach(function(id, i){
+    var el = document.querySelector('.tb[data-pg="'+id+'"] .tb-lbl');
+    if(el) el.textContent = tr(tabs[i]);
+  });
+  // Update header if visible
+  var hdrName = document.getElementById('hdr-name');
+  if(hdrName) updateHeader();
 }
 
 function updateLangBtn(){
@@ -337,6 +351,120 @@ function updateLangBtn(){
 function t(en, th){
   return S.lang==='th' ? th : en;
 }
+
+// UI string translations
+var UI = {
+  // Dashboard
+  'Annual Checkup': { th: 'ตรวจสุขภาพประจำปี' },
+  'Weight': { th: 'น้ำหนัก' },
+  'Blood Pressure': { th: 'ความดันโลหิต' },
+  'Last check': { th: 'ตรวจล่าสุด' },
+  'Key Results': { th: 'ผลตรวจสำคัญ' },
+  'Recent Visits': { th: 'การเยี่ยมแพทย์ล่าสุด' },
+  'Premium Due': { th: 'ค่าเบี้ยประกันค้างชำระ' },
+  'Update Vitals': { th: 'อัพเดทข้อมูลสุขภาพ' },
+  'Age': { th: 'อายุ' },
+  'Follow-up': { th: 'นัดติดตาม' },
+  // Health tab
+  'Lipid Profile': { th: 'ไขมันในเลือด' },
+  'Blood Count': { th: 'ความสมบูรณ์ของเลือด' },
+  'Kidney Function': { th: 'การทำงานของไต' },
+  'Liver Function': { th: 'การทำงานของตับ' },
+  'Imaging & Other': { th: 'ผลการถ่ายภาพและอื่นๆ' },
+  'Doctor Notes': { th: 'บันทึกแพทย์' },
+  'Doctor Visits': { th: 'การพบแพทย์' },
+  'Total Cholesterol': { th: 'คอเลสเตอรอลรวม' },
+  'LDL Cholesterol': { th: 'ไขมัน LDL (ไม่ดี)' },
+  'HDL Cholesterol': { th: 'ไขมัน HDL (ดี)' },
+  'Triglycerides': { th: 'ไตรกลีเซอไรด์' },
+  'Blood Sugar': { th: 'น้ำตาลในเลือด' },
+  'Hemoglobin': { th: 'ฮีโมโกลบิน (ความเข้มเลือด)' },
+  'Hematocrit': { th: 'ฮีมาโตคริต' },
+  'WBC': { th: 'เม็ดเลือดขาวรวม' },
+  'Neutrophil': { th: 'นิวโทรฟิล' },
+  'Lymphocyte': { th: 'ลิมโฟไซต์' },
+  'Eosinophil': { th: 'อีโอซิโนฟิล (ภูมิแพ้)' },
+  'Platelet': { th: 'เกล็ดเลือด' },
+  'Creatinine': { th: 'ครีเอตินิน (ไต)' },
+  'eGFR': { th: 'อัตราการกรองของไต' },
+  'BUN': { th: 'ยูเรียไนโตรเจน' },
+  'Uric Acid': { th: 'กรดยูริก' },
+  'SGOT (AST)': { th: 'SGOT (การอักเสบของตับ)' },
+  'SGPT (ALT)': { th: 'SGPT (การทำงานตับ)' },
+  'ALP': { th: 'ALP (ตับและกระดูก)' },
+  'AFP (Liver marker)': { th: 'AFP (สารบ่งชี้มะเร็งตับ)' },
+  'CEA (Colon marker)': { th: 'CEA (สารบ่งชี้มะเร็งลำไส้)' },
+  'PSA (Prostate)': { th: 'PSA (ต่อมลูกหมาก)' },
+  'EKG': { th: 'คลื่นไฟฟ้าหัวใจ' },
+  'Pulse': { th: 'ชีพจร' },
+  // Trends
+  'Cholesterol & Lipids': { th: 'คอเลสเตอรอลและไขมัน' },
+  'AI Health Insight': { th: 'วิเคราะห์สุขภาพด้วย AI' },
+  'Side-by-Side': { th: 'เปรียบเทียบ' },
+  'Compare': { th: 'เปรียบเทียบ' },
+  // Insurance
+  'Insurance Coverage': { th: 'ความคุ้มครองประกัน' },
+  'Annual Premium': { th: 'เบี้ยประกันรายปี' },
+  'Annual Premium Summary': { th: 'สรุปเบี้ยประกันรายปี' },
+  'All Family': { th: 'ทั้งครอบครัว' },
+  'Only': { th: 'เฉพาะ' },
+  'Paid': { th: 'ชำระแล้ว' },
+  'Due': { th: 'ค้างชำระ' },
+  'Health Insurance': { th: 'ประกันสุขภาพ' },
+  'Life Insurance': { th: 'ประกันชีวิต' },
+  'Add Policy': { th: 'เพิ่มกรมธรรม์' },
+  'Family Total': { th: 'รวมทั้งครอบครัว' },
+  // Settings
+  'Settings & Admin': { th: 'ตั้งค่าและจัดการ' },
+  'Profiles': { th: 'โปรไฟล์' },
+  'Access Control': { th: 'การควบคุมการเข้าถึง' },
+  'Data': { th: 'ข้อมูล' },
+  'Upload Health Report': { th: 'อัพโหลดผลตรวจสุขภาพ' },
+  'Manual Entry': { th: 'บันทึกด้วยตนเอง' },
+  'Export All Data': { th: 'ส่งออกข้อมูลทั้งหมด' },
+  'Add Family Member': { th: 'เพิ่มสมาชิกในครอบครัว' },
+  'Invite User': { th: 'เชิญผู้ใช้' },
+  // Quick vitals
+  'Quick Vitals Update': { th: 'อัพเดทข้อมูลสุขภาพด่วน' },
+  'Date of Visit': { th: 'วันที่เข้าพบแพทย์' },
+  'Hospital / Clinic': { th: 'โรงพยาบาล / คลินิก' },
+  'Physical': { th: 'ร่างกาย' },
+  'Height': { th: 'ส่วนสูง' },
+  'Doctor Notes': { th: 'บันทึกแพทย์' },
+  'Save Vitals': { th: 'บันทึกข้อมูล' },
+  // Common
+  'Normal': { th: 'ปกติ' },
+  'High': { th: 'สูง' },
+  'Low': { th: 'ต่ำ' },
+  'No data for': { th: 'ไม่มีข้อมูลปี' },
+  'No visits recorded': { th: 'ไม่มีบันทึกการพบแพทย์' },
+  'No major visits in': { th: 'ไม่มีการพบแพทย์สำคัญในปี' },
+  'Upload': { th: 'อัพโหลด' },
+  'Trends': { th: 'แนวโน้ม' },
+  'Showing:': { th: 'แสดง:' },
+  'Connection': { th: 'การเชื่อมต่อ' },
+  'Surgery': { th: 'ผ่าตัด' },
+  'Endoscopy': { th: 'ส่องกล้อง' },
+  'Cardiac': { th: 'หัวใจ' },
+  'Screening': { th: 'ตรวจคัดกรอง' },
+  'Dashboard': { th: 'แดชบอร์ด' },
+  'Health': { th: 'สุขภาพ' },
+  'Settings': { th: 'ตั้งค่า' },
+  'Consultation': { th: 'ปรึกษาแพทย์' },
+  'LDL': { th: 'ไขมัน LDL' },
+  'HDL': { th: 'ไขมัน HDL' },
+  'Overweight': { th: 'น้ำหนักเกิน' },
+  'Obese': { th: 'อ้วน' },
+  'Underweight': { th: 'น้ำหนักน้อย' },
+};
+
+// Translate a UI string
+function tr(key) {
+  if (S.lang === 'en') return key;
+  var entry = UI[key];
+  return (entry && entry.th) ? entry.th : key;
+}
+
 
 // Bilingual alert messages
 function alertText(key, val){
@@ -867,46 +995,46 @@ function renderHealth(){
     html += '</div></div>';
 
     // Lipids
-    html += catSection('&#x1FA78; Lipid Profile', [
-      dataRow('Total Cholesterol',r.chol,'mg/dL',null,200,null,prev&&prev.chol),
-      dataRow('LDL Cholesterol',r.ldl,'mg/dL',null,130,null,prev&&prev.ldl),
-      dataRow('HDL Cholesterol',r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true),
-      dataRow('Triglycerides',r.trig,'mg/dL',null,150,null,prev&&prev.trig),
-      dataRow('Blood Sugar',r.sugar,'mg/dL',70,99,null,prev&&prev.sugar),
+    html += catSection('&#x1FA78; '+tr('Lipid Profile'), [
+      dataRow(tr('Total Cholesterol'),r.chol,'mg/dL',null,200,null,prev&&prev.chol),
+      dataRow(tr('LDL Cholesterol'),r.ldl,'mg/dL',null,130,null,prev&&prev.ldl),
+      dataRow(tr('HDL Cholesterol'),r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true),
+      dataRow(tr('Triglycerides'),r.trig,'mg/dL',null,150,null,prev&&prev.trig),
+      dataRow(tr('Blood Sugar'),r.sugar,'mg/dL',70,99,null,prev&&prev.sugar),
       r.hba1c?dataRow('HbA1c',r.hba1c,'%',null,5.7,null,prev&&prev.hba1c):''
     ]);
 
     // CBC
-    html += catSection('&#x1F52C; Blood Count', [
-      dataRow('Hemoglobin',r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb),
-      dataRow('Hematocrit',r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct),
-      dataRow('WBC',r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc),
-      dataRow('Neutrophil',r.neut,'%',41,70,null,prev&&prev.neut),
-      dataRow('Lymphocyte',r.lymph,'%',19,47,null,prev&&prev.lymph),
-      dataRow('Eosinophil',r.eos,'%',0,5,null,prev&&prev.eos),
-      r.plat?dataRow('Platelet',(r.plat/1000).toFixed(0)+'K','cells/mm3',null,null,'150K-450K',null):''
+    html += catSection('&#x1F52C; '+tr('Blood Count'), [
+      dataRow(tr('Hemoglobin'),r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb),
+      dataRow(tr('Hematocrit'),r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct),
+      dataRow(tr('WBC'),r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc),
+      dataRow(tr('Neutrophil'),r.neut,'%',41,70,null,prev&&prev.neut),
+      dataRow(tr('Lymphocyte'),r.lymph,'%',19,47,null,prev&&prev.lymph),
+      dataRow(tr('Eosinophil'),r.eos,'%',0,5,null,prev&&prev.eos),
+      r.plat?dataRow(tr('Platelet'),(r.plat/1000).toFixed(0)+'K','cells/mm3',null,null,'150K-450K',null):''
     ]);
 
     // Kidney
-    html += catSection('&#x1FAD8; Kidney Function', [
-      dataRow('Creatinine',r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat),
-      dataRow('eGFR',r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true),
-      dataRow('BUN',r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
-      dataRow('Uric Acid',r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric)
+    html += catSection('&#x1FAD8; '+tr('Kidney Function'), [
+      dataRow(tr('Creatinine'),r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat),
+      dataRow(tr('eGFR'),r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true),
+      dataRow(tr('BUN'),r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
+      dataRow(tr('Uric Acid'),r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric)
     ]);
 
     // Liver
-    html += catSection('&#x1FAC0; Liver Function', [
-      dataRow('SGOT (AST)',r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot),
-      dataRow('SGPT (ALT)',r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt),
-      dataRow('ALP',r.alp,'U/L',40,150,null,prev&&prev.alp),
-      r.afp?dataRow('AFP (Liver marker)',r.afp,'ng/mL',0,13.6,null,prev&&prev.afp):'',
-      r.cea?dataRow('CEA (Colon marker)',r.cea,'ng/mL',0,4.3,null,prev&&prev.cea):'',
-      (r.psa&&male)?dataRow('PSA (Prostate)',r.psa,'ng/mL',0,4,null,prev&&prev.psa):''
+    html += catSection('&#x1FAC0; '+tr('Liver Function'), [
+      dataRow(tr('SGOT (AST)'),r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot),
+      dataRow(tr('SGPT (ALT)'),r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt),
+      dataRow(tr('ALP'),r.alp,'U/L',40,150,null,prev&&prev.alp),
+      r.afp?dataRow(tr('AFP (Liver marker)'),r.afp,'ng/mL',0,13.6,null,prev&&prev.afp):'',
+      r.cea?dataRow(tr('CEA (Colon marker)'),r.cea,'ng/mL',0,4.3,null,prev&&prev.cea):'',
+      (r.psa&&male)?dataRow(tr('PSA (Prostate)'),r.psa,'ng/mL',0,4,null,prev&&prev.psa):''
     ]);
 
     // EKG
-    html += catSection('&#x1F9B4; Imaging & Other', [
+    html += catSection('&#x1F9B4; '+tr('Imaging & Other'), [
       '<div class="dr"><div class="dr-name">EKG</div><div>'+(r.ekg!==undefined?(r.ekg?'<span class="badge b-ok">Normal</span>':'<span class="badge b-alert">Abnormal</span>'):'')+'</div></div>',
       r.pulse?'<div class="dr"><div class="dr-name">Pulse</div><div class="dr-val">'+r.pulse+' <span style="font-size:10px;color:var(--t3)">bpm</span></div></div>':''
     ]);
@@ -1178,17 +1306,17 @@ function renderCompare(){
   var rows = [
     {l:'Weight (kg)',a:rA.weight,b:rB.weight},
     {l:'BMI',a:rA.bmi||bmi(rA.weight,rA.height),b:rB.bmi||bmi(rB.weight,rB.height),min:18.5,max:22.9},
-    {l:'Blood Pressure',a:rA.bp,b:rB.bp},
-    {l:'Cholesterol',a:rA.chol,b:rB.chol,max:200},
+    {l:tr('Blood Pressure'),a:rA.bp,b:rB.bp},
+    {l:tr('Cholesterol'),a:rA.chol,b:rB.chol,max:200},
     {l:'LDL',a:rA.ldl,b:rB.ldl,max:130},
     {l:'HDL',a:rA.hdl,b:rB.hdl,min:50},
-    {l:'Triglycerides',a:rA.trig,b:rB.trig,max:150},
-    {l:'Blood Sugar',a:rA.sugar,b:rB.sugar,min:70,max:99},
+    {l:tr('Triglycerides'),a:rA.trig,b:rB.trig,max:150},
+    {l:tr('Blood Sugar'),a:rA.sugar,b:rB.sugar,min:70,max:99},
     {l:'HbA1c %',a:rA.hba1c,b:rB.hba1c,max:5.7},
     {l:'eGFR',a:rA.egfr,b:rB.egfr,min:60},
     {l:'Creatinine',a:rA.creat,b:rB.creat,max:1.02},
     {l:'SGOT',a:rA.sgot,b:rB.sgot,max:40},
-    {l:'Uric Acid',a:rA.uric,b:rB.uric}
+    {l:tr('Uric Acid'),a:rA.uric,b:rB.uric}
   ];
 
   html += '<div class="sec" style="font-size:17px">'+S.cmpYear+' Comparison</div><div class="card">';
