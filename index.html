@@ -1,2499 +1,958 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>HealthVault — Personal Health & Insurance</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<title>HealthVault</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg-primary: #0a0a0f;
-    --bg-secondary: #12121a;
-    --glass-bg: rgba(255,255,255,0.06);
-    --glass-border: rgba(255,255,255,0.12);
-    --glass-hover: rgba(255,255,255,0.10);
-    --glass-active: rgba(255,255,255,0.14);
-    --accent-blue: #4fc3f7;
-    --accent-blue-glow: rgba(79,195,247,0.3);
-    --accent-teal: #26d9b0;
-    --accent-teal-glow: rgba(38,217,176,0.3);
-    --accent-amber: #ffb74d;
-    --accent-amber-glow: rgba(255,183,77,0.3);
-    --accent-rose: #f06292;
-    --accent-rose-glow: rgba(240,98,146,0.3);
-    --accent-violet: #9c7fe0;
-    --text-primary: rgba(255,255,255,0.92);
-    --text-secondary: rgba(255,255,255,0.55);
-    --text-muted: rgba(255,255,255,0.30);
-    --green: #69f0ae;
-    --red: #ff5252;
-    --yellow: #ffd740;
-    --safe-top: env(safe-area-inset-top, 44px);
-    --safe-bottom: env(safe-area-inset-bottom, 20px);
-    --tab-height: 82px;
-    --header-height: 60px;
-    --radius-lg: 22px;
-    --radius-md: 14px;
-    --radius-sm: 10px;
-    --blur: blur(24px);
-    --blur-heavy: blur(40px);
-  }
+:root {
+  --bg:#0a0a0f; --bg2:#12121a;
+  --glass:rgba(255,255,255,0.06); --border:rgba(255,255,255,0.12);
+  --blue:#4fc3f7; --teal:#26d9b0; --rose:#f06292;
+  --amber:#ffb74d; --violet:#9c7fe0;
+  --green:#69f0ae; --red:#ff5252; --yellow:#ffd740;
+  --t1:rgba(255,255,255,0.92); --t2:rgba(255,255,255,0.55); --t3:rgba(255,255,255,0.28);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--t1);font-family:'DM Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 20% 10%,rgba(79,195,247,.08),transparent 60%),radial-gradient(ellipse 60% 80% at 80% 80%,rgba(38,217,176,.06),transparent 60%);pointer-events:none;z-index:0}
 
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+/* ── AUTH ── */
+#auth-screen{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--bg);overflow-y:auto}
+.auth-logo{width:72px;height:72px;background:linear-gradient(135deg,var(--blue),var(--teal));border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 16px 48px rgba(79,195,247,.3);margin-bottom:20px}
+.auth-title{font-family:'DM Serif Display',serif;font-size:30px;margin-bottom:6px;text-align:center}
+.auth-sub{font-size:14px;color:var(--t2);margin-bottom:32px;text-align:center}
+.auth-card{width:100%;max-width:360px;background:var(--glass);backdrop-filter:blur(24px);border:1px solid var(--border);border-radius:22px;padding:28px 24px}
+.tab-row{display:flex;gap:4px;background:rgba(0,0,0,.3);border-radius:10px;padding:4px;margin-bottom:22px}
+.tab-btn{flex:1;padding:8px;text-align:center;font-size:14px;font-weight:500;border-radius:8px;cursor:pointer;color:var(--t2);transition:all .2s;border:none;background:none;font-family:inherit}
+.tab-btn.on{background:rgba(79,195,247,.15);color:var(--blue)}
+.lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:7px}
+.inp{width:100%;padding:11px 14px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;outline:none;transition:border .2s;margin-bottom:14px}
+.inp:focus{border-color:rgba(79,195,247,.5)}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;border-radius:14px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;width:100%;margin-top:4px}
+.btn-primary{background:linear-gradient(135deg,var(--blue),var(--teal));color:#000;box-shadow:0 4px 20px rgba(79,195,247,.3)}
+.btn-secondary{background:var(--glass);border:1px solid var(--border);color:var(--t1)}
+.demo-link{text-align:center;margin-top:16px;font-size:13px;color:var(--t3)}
+.demo-link span{color:var(--blue);cursor:pointer}
 
-  html, body {
-    width:100%; height:100%;
-    background:var(--bg-primary);
-    color:var(--text-primary);
-    font-family:'DM Sans', system-ui, -apple-system, sans-serif;
-    overflow:hidden;
-    -webkit-font-smoothing:antialiased;
-  }
+/* ── APP ── */
+#app{position:fixed;inset:0;display:none;flex-direction:column;padding-top:env(safe-area-inset-top,44px)}
+#hdr{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;position:relative;z-index:10}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.av{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.av-r{background:linear-gradient(135deg,#4fc3f7,#0288d1)}
+.av-k{background:linear-gradient(135deg,#f06292,#c2185b)}
+.hdr-name{font-size:16px;font-weight:600}
+.hdr-right{display:flex;gap:8px}
+.ico-btn{width:34px;height:34px;border-radius:10px;background:var(--glass);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--t2)}
 
-  /* Animated background */
-  body::before {
-    content:'';
-    position:fixed; inset:0;
-    background:
-      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(79,195,247,0.08) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 80% at 80% 80%, rgba(38,217,176,0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 40% at 60% 30%, rgba(156,127,224,0.05) 0%, transparent 50%);
-    pointer-events:none;
-    z-index:0;
-  }
+#content{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 14px 100px;position:relative;z-index:1}
+#content::-webkit-scrollbar{display:none}
 
-  /* ─── App Shell ─────────────────────────────── */
-  #app {
-    position:fixed; inset:0;
-    display:flex; flex-direction:column;
-    padding-top: var(--safe-top);
-  }
+#tabbar{position:fixed;bottom:0;left:0;right:0;height:calc(72px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:rgba(10,10,15,.88);backdrop-filter:blur(32px);border-top:1px solid var(--border);display:flex;align-items:flex-start;padding-top:8px;z-index:40}
+.tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.tb-ic{width:44px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:13px;font-size:18px;transition:all .2s}
+.tb-lbl{font-size:10px;font-weight:500;color:var(--t3);transition:all .2s}
+.tb.on .tb-ic{background:rgba(79,195,247,.15)}
+.tb.on .tb-lbl{color:var(--blue)}
 
-  /* ─── Auth Screen ─────────────────────────── */
-  #auth-screen {
-    position:fixed; inset:0; z-index:100;
-    display:flex; flex-direction:column;
-    align-items:center; justify-content:center;
-    padding: 40px 32px;
-    background:var(--bg-primary);
-  }
-  #auth-screen::before {
-    content:'';
-    position:absolute; inset:0;
-    background:
-      radial-gradient(ellipse 100% 60% at 50% 0%, rgba(79,195,247,0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 80% at 80% 100%, rgba(38,217,176,0.08) 0%, transparent 60%);
-    pointer-events:none;
-  }
+.page{display:none}.page.on{display:block}
 
-  .auth-logo {
-    width:72px; height:72px;
-    background:linear-gradient(135deg, var(--accent-blue), var(--accent-teal));
-    border-radius:24px;
-    display:flex; align-items:center; justify-content:center;
-    font-size:32px;
-    box-shadow:0 20px 60px rgba(79,195,247,0.3);
-    margin-bottom:24px;
-    position:relative; z-index:1;
-  }
-  .auth-title {
-    font-family:'DM Serif Display', serif;
-    font-size:32px; font-weight:400;
-    color:var(--text-primary);
-    margin-bottom:8px; text-align:center;
-    position:relative; z-index:1;
-  }
-  .auth-subtitle {
-    font-size:15px; color:var(--text-secondary);
-    margin-bottom:40px; text-align:center;
-    position:relative; z-index:1;
-  }
-  .auth-card {
-    width:100%; max-width:380px;
-    background:var(--glass-bg);
-    backdrop-filter:var(--blur);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-lg);
-    padding:32px 28px;
-    position:relative; z-index:1;
-  }
-  .auth-tabs {
-    display:flex; gap:4px;
-    background:rgba(0,0,0,0.3);
-    border-radius:var(--radius-sm);
-    padding:4px;
-    margin-bottom:24px;
-  }
-  .auth-tab {
-    flex:1; padding:8px;
-    text-align:center; font-size:14px; font-weight:500;
-    border-radius:8px; cursor:pointer;
-    color:var(--text-secondary);
-    transition:all 0.2s;
-  }
-  .auth-tab.active {
-    background:rgba(79,195,247,0.15);
-    color:var(--accent-blue);
-  }
+/* ── CARDS ── */
+.card{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:10px}
+.sec{font-family:'DM Serif Display',serif;font-size:20px;margin:20px 0 12px}
+.sec-sub{font-size:12px;color:var(--t2);margin-top:-8px;margin-bottom:14px}
 
-  /* ─── Header ─────────────────────────────────── */
-  #header {
-    height:var(--header-height);
-    display:flex; align-items:center; justify-content:space-between;
-    padding:0 20px;
-    position:relative; z-index:10;
-    flex-shrink:0;
-  }
-  .header-profile {
-    display:flex; align-items:center; gap:10px;
-  }
-  .header-avatar {
-    width:36px; height:36px; border-radius:12px;
-    display:flex; align-items:center; justify-content:center;
-    font-size:14px; font-weight:600;
-    flex-shrink:0;
-  }
-  .avatar-r { background:linear-gradient(135deg, #4fc3f7, #0288d1); }
-  .avatar-k { background:linear-gradient(135deg, #f06292, #c2185b); }
-  .header-name {
-    font-size:16px; font-weight:600;
-  }
-  .header-actions { display:flex; gap:8px; }
-  .icon-btn {
-    width:36px; height:36px; border-radius:10px;
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:16px;
-    transition:all 0.2s; color:var(--text-secondary);
-  }
-  .icon-btn:hover { background:var(--glass-hover); color:var(--text-primary); }
+/* ── METRICS ── */
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.mgrid3{grid-template-columns:1fr 1fr 1fr}
+.mc{background:var(--glass);border:1px solid var(--border);border-radius:14px;padding:12px}
+.mc-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);margin-bottom:4px}
+.mc-val{font-size:20px;font-weight:700;line-height:1}
+.mc-unit{font-size:10px;color:var(--t2)}
+.mc-delta{font-size:11px;font-weight:500;margin-top:3px}
+.up{color:var(--red)}.dn{color:var(--green)}.same{color:var(--t3)}
 
-  /* ─── Content Area ─────────────────────────── */
-  #content {
-    flex:1; overflow-y:auto; overflow-x:hidden;
-    padding:0 16px;
-    padding-bottom:calc(var(--tab-height) + var(--safe-bottom) + 16px);
-    position:relative; z-index:1;
-    scroll-behavior:smooth;
-  }
-  #content::-webkit-scrollbar { display:none; }
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-ok{background:rgba(105,240,174,.12);color:var(--green)}
+.b-warn{background:rgba(255,215,64,.12);color:var(--yellow)}
+.b-alert{background:rgba(255,82,82,.12);color:var(--red)}
+.b-info{background:rgba(79,195,247,.12);color:var(--blue)}
+.b-v{background:rgba(156,127,224,.12);color:var(--violet)}
 
-  /* ─── Tab Bar ────────────────────────────────── */
-  #tabbar {
-    position:fixed; bottom:0; left:0; right:0;
-    height:calc(var(--tab-height) + var(--safe-bottom));
-    padding-bottom:var(--safe-bottom);
-    background:rgba(10,10,15,0.85);
-    backdrop-filter:var(--blur-heavy);
-    border-top:1px solid var(--glass-border);
-    display:flex; align-items:flex-start;
-    padding-top:8px;
-    z-index:50;
-  }
-  .tab-item {
-    flex:1; display:flex; flex-direction:column;
-    align-items:center; gap:4px;
-    padding:4px 2px;
-    cursor:pointer; user-select:none;
-    transition:all 0.2s;
-  }
-  .tab-icon {
-    width:44px; height:28px;
-    display:flex; align-items:center; justify-content:center;
-    border-radius:14px; font-size:18px;
-    transition:all 0.2s;
-  }
-  .tab-item.active .tab-icon {
-    background:rgba(79,195,247,0.15);
-  }
-  .tab-label {
-    font-size:10px; font-weight:500;
-    color:var(--text-muted);
-    transition:all 0.2s;
-    letter-spacing:0.01em;
-  }
-  .tab-item.active .tab-label { color:var(--accent-blue); }
+/* ── ALERTS ── */
+.alert{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:13px;margin-bottom:8px;font-size:13px;line-height:1.5}
+.alert.ok{background:rgba(105,240,174,.08);border:1px solid rgba(105,240,174,.2);color:var(--green)}
+.alert.warn{background:rgba(255,215,64,.08);border:1px solid rgba(255,215,64,.2);color:var(--yellow)}
+.alert.danger{background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.2);color:var(--red)}
+.alert.info{background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);color:var(--blue)}
 
-  /* ─── Pages ─────────────────────────────────── */
-  .page { display:none; }
-  .page.active { display:block; }
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,rgba(79,195,247,.1),rgba(38,217,176,.07));border:1px solid rgba(79,195,247,.2);border-radius:20px;padding:20px;margin-bottom:10px;position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:radial-gradient(circle,rgba(79,195,247,.12),transparent 70%)}
+.hero-name{font-family:'DM Serif Display',serif;font-size:24px;margin-bottom:4px}
+.hero-meta{font-size:12px;color:var(--t2);display:flex;gap:12px;flex-wrap:wrap}
 
-  /* ─── Section titles ─────────────────────── */
-  .section-title {
-    font-family:'DM Serif Display', serif;
-    font-size:22px; font-weight:400;
-    margin-bottom:16px; margin-top:24px;
-    color:var(--text-primary);
-  }
-  .section-subtitle {
-    font-size:13px; color:var(--text-secondary);
-    margin-top:-12px; margin-bottom:16px;
-  }
+/* ── PROFILE SWITCHER ── */
+.psw{display:flex;gap:8px;margin:6px 0 16px}
+.pp{display:flex;align-items:center;gap:7px;padding:7px 13px;background:var(--glass);border:1px solid var(--border);border-radius:20px;cursor:pointer;font-size:13px;font-weight:500;color:var(--t2);transition:all .2s}
+.pp.on-r{background:rgba(79,195,247,.12);border-color:rgba(79,195,247,.3);color:var(--blue)}
+.pp.on-k{background:rgba(240,98,146,.12);border-color:rgba(240,98,146,.3);color:var(--rose)}
 
-  /* ─── Cards ──────────────────────────────────── */
-  .card {
-    background:var(--glass-bg);
-    backdrop-filter:var(--blur);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-lg);
-    padding:18px;
-    margin-bottom:12px;
-    transition:all 0.2s;
-  }
-  .card:hover { background:var(--glass-hover); }
-  .card-sm {
-    border-radius:var(--radius-md);
-    padding:14px;
-  }
+/* ── YEAR PILLS ── */
+.ypills{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none}
+.ypills::-webkit-scrollbar{display:none}
+.yp{padding:5px 13px;background:var(--glass);border:1px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--t2);white-space:nowrap;flex-shrink:0;transition:all .2s}
+.yp.on{background:rgba(79,195,247,.12);border-color:rgba(79,195,247,.4);color:var(--blue)}
 
-  /* ─── Metric row ─────────────────────────── */
-  .metric-grid {
-    display:grid; grid-template-columns:1fr 1fr;
-    gap:10px; margin-bottom:12px;
-  }
-  .metric-grid-3 { grid-template-columns:1fr 1fr 1fr; }
-  .metric-card {
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-md);
-    padding:14px 12px;
-    display:flex; flex-direction:column; gap:4px;
-  }
-  .metric-label {
-    font-size:11px; color:var(--text-secondary);
-    font-weight:500; letter-spacing:0.03em;
-    text-transform:uppercase;
-  }
-  .metric-value {
-    font-size:22px; font-weight:600;
-    line-height:1;
-  }
-  .metric-unit {
-    font-size:11px; color:var(--text-secondary);
-    font-weight:400;
-  }
-  .metric-delta {
-    font-size:11px; font-weight:500;
-    display:flex; align-items:center; gap:3px;
-    margin-top:2px;
-  }
-  .delta-up { color:var(--accent-rose); }
-  .delta-down { color:var(--green); }
-  .delta-neutral { color:var(--text-muted); }
+/* ── DATA ROWS ── */
+.dr{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);gap:8px}
+.dr:last-child{border-bottom:none}
+.dr-name{font-size:12px;color:var(--t2);flex:1;line-height:1.3}
+.dr-normal{font-size:10px;color:var(--t3)}
+.dr-val{font-size:14px;font-weight:600;text-align:right}
+.dr-right{text-align:right;flex-shrink:0}
 
-  /* Status indicators */
-  .status-dot {
-    width:8px; height:8px; border-radius:50%;
-    display:inline-block; flex-shrink:0;
-  }
-  .status-ok { background:var(--green); }
-  .status-warn { background:var(--yellow); }
-  .status-alert { background:var(--red); }
-  .status-info { background:var(--accent-blue); }
+/* ── CAT HEADER ── */
+.cat-hdr{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:8px;cursor:pointer}
+.cat-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);flex:1}
 
-  /* Badges */
-  .badge {
-    display:inline-flex; align-items:center; gap:4px;
-    padding:3px 8px; border-radius:20px;
-    font-size:11px; font-weight:600;
-    letter-spacing:0.02em;
-  }
-  .badge-ok { background:rgba(105,240,174,0.12); color:var(--green); }
-  .badge-warn { background:rgba(255,215,64,0.12); color:var(--yellow); }
-  .badge-alert { background:rgba(255,82,82,0.12); color:var(--red); }
-  .badge-info { background:rgba(79,195,247,0.12); color:var(--accent-blue); }
-  .badge-violet { background:rgba(156,127,224,0.12); color:var(--accent-violet); }
+/* ── TIMELINE ── */
+.tl{display:flex;gap:12px;padding-bottom:16px;position:relative}
+.tl::before{content:'';position:absolute;left:13px;top:26px;bottom:0;width:1px;background:var(--border)}
+.tl:last-child::before{display:none}
+.tl-dot{width:28px;height:28px;border-radius:9px;background:var(--glass);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:1px}
+.tl-body{flex:1}
+.tl-title{font-size:13px;font-weight:600;margin-bottom:2px}
+.tl-date{font-size:11px;color:var(--t3);margin-bottom:3px}
+.tl-desc{font-size:12px;color:var(--t2);line-height:1.5}
 
-  /* ─── Dashboard ──────────────────────────── */
-  .profile-switcher {
-    display:flex; gap:8px; margin-bottom:20px;
-  }
-  .profile-pill {
-    display:flex; align-items:center; gap:8px;
-    padding:8px 14px;
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    border-radius:20px;
-    cursor:pointer; font-size:14px; font-weight:500;
-    color:var(--text-secondary);
-    transition:all 0.2s;
-  }
-  .profile-pill.active {
-    background:rgba(79,195,247,0.12);
-    border-color:rgba(79,195,247,0.35);
-    color:var(--accent-blue);
-  }
-  .profile-pill.active-k {
-    background:rgba(240,98,146,0.12);
-    border-color:rgba(240,98,146,0.35);
-    color:var(--accent-rose);
-  }
+/* ── INSURANCE ── */
+.ins-card{background:linear-gradient(135deg,rgba(156,127,224,.1),rgba(79,195,247,.06));border:1px solid rgba(156,127,224,.2);border-radius:20px;padding:18px;margin-bottom:10px;position:relative;overflow:hidden}
+.ins-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--violet);margin-bottom:4px}
+.ins-name{font-size:17px;font-weight:600;margin-bottom:2px}
+.ins-policy{font-size:11px;color:var(--t3);font-family:monospace;margin-bottom:12px}
+.cov-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px}
+.cov-item{background:rgba(0,0,0,.2);border-radius:9px;padding:9px}
+.cov-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.cov-val{font-size:13px;font-weight:600;color:var(--violet)}
 
-  /* Hero card on dashboard */
-  .hero-card {
-    background:linear-gradient(135deg, rgba(79,195,247,0.1), rgba(38,217,176,0.08));
-    border:1px solid rgba(79,195,247,0.2);
-    border-radius:var(--radius-lg);
-    padding:22px;
-    margin-bottom:12px;
-    position:relative; overflow:hidden;
-  }
-  .hero-card::before {
-    content:'';
-    position:absolute; top:-40px; right:-40px;
-    width:160px; height:160px;
-    background:radial-gradient(circle, rgba(79,195,247,0.12), transparent 70%);
-    pointer-events:none;
-  }
-  .hero-name {
-    font-family:'DM Serif Display', serif;
-    font-size:26px; margin-bottom:4px;
-  }
-  .hero-meta {
-    font-size:13px; color:var(--text-secondary);
-    display:flex; gap:12px; flex-wrap:wrap;
-  }
-  .hero-meta span { display:flex; align-items:center; gap:4px; }
+/* ── COMPARE ── */
+.cmp-row{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.cmp-row:last-child{border-bottom:none}
+.cmp-v{font-size:14px;font-weight:700;text-align:center}
+.cmp-lbl{font-size:11px;color:var(--t3);text-align:center;white-space:nowrap}
 
-  /* Alert banner */
-  .alert-banner {
-    display:flex; align-items:flex-start; gap:12px;
-    padding:14px 16px;
-    border-radius:var(--radius-md);
-    margin-bottom:10px;
-    font-size:13px;
-  }
-  .alert-banner.warn {
-    background:rgba(255,215,64,0.08);
-    border:1px solid rgba(255,215,64,0.2);
-    color:var(--yellow);
-  }
-  .alert-banner.alert {
-    background:rgba(255,82,82,0.08);
-    border:1px solid rgba(255,82,82,0.2);
-    color:var(--red);
-  }
-  .alert-banner.ok {
-    background:rgba(105,240,174,0.08);
-    border:1px solid rgba(105,240,174,0.2);
-    color:var(--green);
-  }
-  .alert-banner.info {
-    background:rgba(79,195,247,0.08);
-    border:1px solid rgba(79,195,247,0.2);
-    color:var(--accent-blue);
-  }
+/* ── CHART ── */
+.chart-wrap{position:relative;height:180px;width:100%}
 
-  /* Timeline */
-  .timeline-item {
-    display:flex; gap:14px;
-    padding-bottom:18px;
-    position:relative;
-  }
-  .timeline-item::before {
-    content:'';
-    position:absolute; left:15px; top:28px; bottom:0;
-    width:1px; background:var(--glass-border);
-  }
-  .timeline-item:last-child::before { display:none; }
-  .timeline-dot {
-    width:30px; height:30px; border-radius:10px;
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    display:flex; align-items:center; justify-content:center;
-    font-size:14px; flex-shrink:0; margin-top:2px;
-  }
-  .timeline-content { flex:1; }
-  .timeline-title { font-size:14px; font-weight:500; margin-bottom:2px; }
-  .timeline-date { font-size:12px; color:var(--text-muted); }
-  .timeline-desc { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+/* ── MODAL ── */
+#modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);display:flex;align-items:flex-end;padding-bottom:env(safe-area-inset-bottom,0px);opacity:0;pointer-events:none;transition:opacity .3s}
+#modal.on{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;max-height:88vh;background:#15151e;border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--border);overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);padding-bottom:20px}
+#modal.on .modal-sheet{transform:translateY(0)}
+.modal-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:12px auto 18px}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 20px 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.modal-title{font-size:16px;font-weight:700}
+.modal-body{padding:0 20px}
 
-  /* ─── Charts ─────────────────────────────────── */
-  .chart-container {
-    position:relative; width:100%;
-    height:200px;
-  }
-  .chart-header {
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:14px;
-  }
-  .chart-title { font-size:15px; font-weight:600; }
-  .chart-legend {
-    display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;
-  }
-  .legend-item {
-    display:flex; align-items:center; gap:5px;
-    font-size:11px; color:var(--text-secondary);
-  }
-  .legend-dot {
-    width:8px; height:8px; border-radius:50%;
-  }
+/* ── TOAST ── */
+#toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%) translateY(12px);background:rgba(255,255,255,.12);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:9px 16px;font-size:13px;font-weight:500;white-space:nowrap;z-index:300;opacity:0;transition:all .3s;pointer-events:none}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-  /* ─── Health Records ─────────────────────── */
-  .year-selector {
-    display:flex; gap:6px; overflow-x:auto; padding-bottom:4px;
-    margin-bottom:16px; scrollbar-width:none;
-  }
-  .year-selector::-webkit-scrollbar { display:none; }
-  .year-pill {
-    padding:6px 14px;
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    border-radius:20px; cursor:pointer;
-    font-size:13px; font-weight:500;
-    color:var(--text-secondary);
-    white-space:nowrap; flex-shrink:0;
-    transition:all 0.2s;
-  }
-  .year-pill.active {
-    background:rgba(79,195,247,0.12);
-    border-color:rgba(79,195,247,0.4);
-    color:var(--accent-blue);
-  }
+/* ── FORM ── */
+.fg{margin-bottom:14px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+textarea.inp{resize:none;min-height:70px}
+select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;-webkit-appearance:none;appearance:none;background-color:rgba(0,0,0,.35)}
 
-  .health-category {
-    margin-bottom:16px;
-  }
-  .category-header {
-    display:flex; align-items:center; gap:8px;
-    padding:10px 0; cursor:pointer;
-    border-bottom:1px solid var(--glass-border);
-    margin-bottom:10px;
-  }
-  .category-title {
-    font-size:13px; font-weight:600;
-    text-transform:uppercase; letter-spacing:0.06em;
-    color:var(--text-secondary);
-    flex:1;
-  }
-  .category-icon { font-size:16px; }
+/* ── UPLOAD ── */
+.upload-zone{border:2px dashed rgba(255,255,255,.15);border-radius:18px;padding:36px 20px;text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone:hover{border-color:rgba(79,195,247,.4);background:rgba(79,195,247,.04)}
 
-  .data-row {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:10px 0;
-    border-bottom:1px solid rgba(255,255,255,0.05);
-    gap:10px;
-  }
-  .data-row:last-child { border-bottom:none; }
-  .data-name {
-    font-size:13px; color:var(--text-secondary);
-    flex:1; line-height:1.3;
-  }
-  .data-value {
-    font-size:14px; font-weight:600;
-    text-align:right; flex-shrink:0;
-  }
-  .data-normal { font-size:11px; color:var(--text-muted); text-align:right; }
+/* ── SETTINGS LIST ── */
+.li{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer}
+.li:last-child{border-bottom:none}
+.li-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.li-body{flex:1}
+.li-title{font-size:14px;font-weight:500}
+.li-sub{font-size:11px;color:var(--t3)}
 
-  /* ─── Insurance ──────────────────────────── */
-  .insurance-card {
-    background:linear-gradient(135deg, rgba(156,127,224,0.1), rgba(79,195,247,0.06));
-    border:1px solid rgba(156,127,224,0.2);
-    border-radius:var(--radius-lg);
-    padding:20px;
-    margin-bottom:12px;
-    position:relative; overflow:hidden;
-  }
-  .insurance-logo {
-    position:absolute; right:16px; top:16px;
-    font-size:28px; opacity:0.4;
-  }
-  .insurance-type {
-    font-size:11px; font-weight:600;
-    text-transform:uppercase; letter-spacing:0.08em;
-    color:var(--accent-violet);
-    margin-bottom:6px;
-  }
-  .insurance-name {
-    font-size:18px; font-weight:600;
-    margin-bottom:4px;
-  }
-  .insurance-policy {
-    font-size:12px; color:var(--text-muted);
-    font-family:monospace; letter-spacing:0.05em;
-    margin-bottom:14px;
-  }
-  .coverage-grid {
-    display:grid; grid-template-columns:1fr 1fr;
-    gap:8px;
-  }
-  .coverage-item {
-    background:rgba(0,0,0,0.2);
-    border-radius:var(--radius-sm);
-    padding:10px;
-  }
-  .coverage-label {
-    font-size:10px; color:var(--text-muted);
-    text-transform:uppercase; letter-spacing:0.05em;
-    margin-bottom:2px;
-  }
-  .coverage-value {
-    font-size:14px; font-weight:600;
-    color:var(--accent-violet);
-  }
-
-  /* Premium due */
-  .premium-due {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:12px 16px;
-    background:rgba(255,183,77,0.08);
-    border:1px solid rgba(255,183,77,0.2);
-    border-radius:var(--radius-md);
-    margin-bottom:10px;
-  }
-  .premium-info { flex:1; }
-  .premium-title { font-size:13px; font-weight:500; }
-  .premium-date { font-size:12px; color:var(--text-muted); }
-  .premium-amount {
-    font-size:16px; font-weight:700; color:var(--accent-amber);
-  }
-
-  /* ─── Compare Tab ─────────────────────────── */
-  .compare-header {
-    display:flex; gap:10px; margin-bottom:16px; align-items:stretch;
-  }
-  .compare-profile {
-    flex:1; padding:14px;
-    border-radius:var(--radius-md);
-    border:1px solid var(--glass-border);
-    text-align:center;
-  }
-  .compare-profile.r {
-    background:rgba(79,195,247,0.06);
-    border-color:rgba(79,195,247,0.2);
-  }
-  .compare-profile.k {
-    background:rgba(240,98,146,0.06);
-    border-color:rgba(240,98,146,0.2);
-  }
-  .compare-name {
-    font-size:13px; font-weight:600; margin-bottom:2px;
-  }
-  .compare-age { font-size:11px; color:var(--text-muted); }
-
-  .compare-row {
-    display:grid; grid-template-columns:1fr auto 1fr;
-    gap:8px; align-items:center;
-    padding:10px 0;
-    border-bottom:1px solid rgba(255,255,255,0.05);
-  }
-  .compare-row:last-child { border-bottom:none; }
-  .compare-val {
-    font-size:14px; font-weight:600;
-    text-align:center;
-  }
-  .compare-label {
-    font-size:12px; color:var(--text-muted);
-    text-align:center;
-  }
-
-  /* ─── Upload / Photo ─────────────────────── */
-  .upload-zone {
-    border:2px dashed rgba(255,255,255,0.15);
-    border-radius:var(--radius-lg);
-    padding:40px 20px;
-    text-align:center;
-    cursor:pointer;
-    transition:all 0.2s;
-  }
-  .upload-zone:hover {
-    border-color:rgba(79,195,247,0.4);
-    background:rgba(79,195,247,0.04);
-  }
-  .upload-icon { font-size:40px; margin-bottom:12px; }
-  .upload-title { font-size:16px; font-weight:600; margin-bottom:6px; }
-  .upload-sub { font-size:13px; color:var(--text-secondary); }
-
-  /* ─── Form inputs ─────────────────────────── */
-  .form-group { margin-bottom:16px; }
-  .form-label {
-    display:block; font-size:12px; font-weight:600;
-    text-transform:uppercase; letter-spacing:0.06em;
-    color:var(--text-secondary); margin-bottom:8px;
-  }
-  .form-input {
-    width:100%; padding:12px 14px;
-    background:rgba(0,0,0,0.3);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-sm);
-    color:var(--text-primary); font-size:14px;
-    font-family:inherit;
-    transition:all 0.2s; outline:none;
-  }
-  .form-input:focus {
-    border-color:rgba(79,195,247,0.5);
-    background:rgba(79,195,247,0.05);
-  }
-  .form-input::placeholder { color:var(--text-muted); }
-  .form-select {
-    width:100%; padding:12px 14px;
-    background:rgba(0,0,0,0.4);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-sm);
-    color:var(--text-primary); font-size:14px;
-    font-family:inherit; outline:none;
-    -webkit-appearance:none;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.4)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-    background-repeat:no-repeat;
-    background-position:right 14px center;
-  }
-  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-
-  /* ─── Buttons ────────────────────────────────── */
-  .btn {
-    display:inline-flex; align-items:center; justify-content:center;
-    gap:6px; padding:12px 20px;
-    border-radius:var(--radius-md); border:none;
-    font-family:inherit; font-size:14px; font-weight:600;
-    cursor:pointer; transition:all 0.2s; outline:none;
-    user-select:none;
-  }
-  .btn-primary {
-    background:linear-gradient(135deg, var(--accent-blue), var(--accent-teal));
-    color:#000;
-    box-shadow:0 4px 20px rgba(79,195,247,0.3);
-  }
-  .btn-primary:hover { box-shadow:0 6px 30px rgba(79,195,247,0.45); transform:translateY(-1px); }
-  .btn-secondary {
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    color:var(--text-primary);
-  }
-  .btn-secondary:hover { background:var(--glass-hover); }
-  .btn-full { width:100%; }
-  .btn-sm { padding:8px 14px; font-size:13px; }
-
-  /* ─── Divider ────────────────────────────────── */
-  .divider {
-    border:none; border-top:1px solid var(--glass-border);
-    margin:20px 0;
-  }
-
-  /* ─── Empty state ────────────────────────── */
-  .empty-state {
-    text-align:center; padding:60px 20px;
-    color:var(--text-muted);
-  }
-  .empty-icon { font-size:48px; margin-bottom:16px; }
-  .empty-title { font-size:16px; font-weight:600; margin-bottom:8px; color:var(--text-secondary); }
-  .empty-desc { font-size:14px; }
-
-  /* ─── Loading ────────────────────────────── */
-  .spinner {
-    width:24px; height:24px;
-    border:2px solid rgba(79,195,247,0.2);
-    border-top-color:var(--accent-blue);
-    border-radius:50%;
-    animation:spin 0.8s linear infinite;
-    margin:0 auto;
-  }
-  @keyframes spin { to { transform:rotate(360deg); } }
-
-  /* ─── Modal ──────────────────────────────────── */
-  .modal-overlay {
-    position:fixed; inset:0; z-index:200;
-    background:rgba(0,0,0,0.6);
-    backdrop-filter:blur(8px);
-    display:flex; align-items:flex-end;
-    padding-bottom:var(--safe-bottom);
-    opacity:0; pointer-events:none;
-    transition:opacity 0.3s;
-  }
-  .modal-overlay.open { opacity:1; pointer-events:all; }
-  .modal-sheet {
-    width:100%; max-height:85vh;
-    background:#16161e;
-    border-top-left-radius:24px; border-top-right-radius:24px;
-    border:1px solid var(--glass-border);
-    overflow-y:auto;
-    transform:translateY(100%);
-    transition:transform 0.3s cubic-bezier(0.32,0.72,0,1);
-    padding:0 0 16px;
-  }
-  .modal-overlay.open .modal-sheet { transform:translateY(0); }
-  .modal-handle {
-    width:36px; height:4px; border-radius:2px;
-    background:rgba(255,255,255,0.15);
-    margin:12px auto 20px;
-  }
-  .modal-header {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:0 20px 16px;
-    border-bottom:1px solid var(--glass-border);
-    margin-bottom:20px;
-  }
-  .modal-title { font-size:17px; font-weight:700; }
-  .modal-body { padding:0 20px; }
-
-  /* ─── Toast ──────────────────────────────────── */
-  #toast {
-    position:fixed; bottom:calc(var(--tab-height) + var(--safe-bottom) + 16px);
-    left:50%; transform:translateX(-50%) translateY(20px);
-    background:rgba(255,255,255,0.12);
-    backdrop-filter:var(--blur);
-    border:1px solid var(--glass-border);
-    border-radius:20px; padding:10px 18px;
-    font-size:13px; font-weight:500;
-    white-space:nowrap; z-index:300;
-    opacity:0; transition:all 0.3s;
-    pointer-events:none;
-  }
-  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-
-  /* ─── AI Processing indicator ─────────────── */
-  .ai-processing {
-    display:flex; align-items:center; gap:10px;
-    padding:14px 16px;
-    background:rgba(156,127,224,0.08);
-    border:1px solid rgba(156,127,224,0.2);
-    border-radius:var(--radius-md);
-    margin-top:12px;
-    font-size:13px; color:var(--accent-violet);
-  }
-
-  /* Pulse animation */
-  @keyframes pulse {
-    0%, 100% { opacity:1; }
-    50% { opacity:0.4; }
-  }
-  .pulse { animation:pulse 1.5s ease infinite; }
-
-  /* ─── Trend arrows ─────────────────────── */
-  .trend-up::after { content:' ↑'; color:var(--red); font-size:11px; }
-  .trend-down::after { content:' ↓'; color:var(--green); font-size:11px; }
-  .trend-up-good::after { content:' ↑'; color:var(--green); font-size:11px; }
-  .trend-neutral::after { content:' →'; color:var(--text-muted); font-size:11px; }
-
-  /* Scroll fade */
-  .fade-in {
-    animation:fadeIn 0.4s ease both;
-  }
-  @keyframes fadeIn {
-    from { opacity:0; transform:translateY(8px); }
-    to { opacity:1; transform:translateY(0); }
-  }
-
-  /* Chips row */
-  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
-  .chip {
-    padding:5px 10px;
-    background:var(--glass-bg);
-    border:1px solid var(--glass-border);
-    border-radius:20px;
-    font-size:12px; color:var(--text-secondary);
-    cursor:pointer;
-    transition:all 0.2s;
-  }
-  .chip.active {
-    background:rgba(79,195,247,0.12);
-    border-color:rgba(79,195,247,0.35);
-    color:var(--accent-blue);
-  }
-
-  /* Progress bar */
-  .progress-bar {
-    height:6px; background:rgba(255,255,255,0.08);
-    border-radius:3px; overflow:hidden; margin-top:8px;
-  }
-  .progress-fill {
-    height:100%; border-radius:3px;
-    background:linear-gradient(90deg, var(--accent-blue), var(--accent-teal));
-    transition:width 0.6s ease;
-  }
-  .progress-fill.warn { background:linear-gradient(90deg, var(--yellow), var(--accent-amber)); }
-  .progress-fill.alert { background:linear-gradient(90deg, var(--red), var(--accent-rose)); }
-
-  /* Compact row for settings/admin */
-  .list-item {
-    display:flex; align-items:center; gap:12px;
-    padding:14px 0;
-    border-bottom:1px solid rgba(255,255,255,0.05);
-    cursor:pointer;
-  }
-  .list-item:last-child { border-bottom:none; }
-  .list-item-icon {
-    width:36px; height:36px; border-radius:10px;
-    display:flex; align-items:center; justify-content:center;
-    font-size:16px; flex-shrink:0;
-  }
-  .list-item-text { flex:1; }
-  .list-item-title { font-size:14px; font-weight:500; }
-  .list-item-sub { font-size:12px; color:var(--text-muted); }
-  .list-arrow { color:var(--text-muted); font-size:12px; }
-
-  /* Notice card */
-  .notice {
-    background:rgba(156,127,224,0.06);
-    border:1px solid rgba(156,127,224,0.15);
-    border-radius:var(--radius-md);
-    padding:14px 16px;
-    font-size:13px; color:var(--text-secondary);
-    margin-bottom:12px;
-    line-height:1.6;
-  }
-
-  /* Responsive tweaks */
-  @media (min-width:428px) {
-    .metric-grid-3 { grid-template-columns:1fr 1fr 1fr; }
-  }
+hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
+.notice{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.15);border-radius:13px;padding:13px 15px;font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:10px}
+.ai-box{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.2);border-radius:14px;padding:14px;margin-top:10px;font-size:13px;color:var(--t2);line-height:1.7}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .35s ease both}
+.prem-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.2);border-radius:13px;margin-bottom:8px}
+.prem-amt{font-size:16px;font-weight:700;color:var(--amber)}
 </style>
 </head>
 <body>
 
-<!-- Auth Screen -->
+<!-- AUTH -->
 <div id="auth-screen">
-  <div class="auth-logo">🫀</div>
+  <div class="auth-logo">&#x1FAC0;</div>
   <h1 class="auth-title">HealthVault</h1>
-  <p class="auth-subtitle">Personal Health & Insurance Manager</p>
+  <p class="auth-sub">Personal Health &amp; Insurance Manager</p>
   <div class="auth-card">
-    <div class="auth-tabs">
-      <div class="auth-tab active" onclick="switchAuthTab('login')">Sign In</div>
-      <div class="auth-tab" onclick="switchAuthTab('register')">Register</div>
+    <div class="tab-row">
+      <button class="tab-btn on" id="tab-signin" onclick="showAuthTab('signin')">Sign In</button>
+      <button class="tab-btn" id="tab-register" onclick="showAuthTab('register')">Register</button>
     </div>
-    <div id="auth-login">
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input class="form-input" type="email" id="login-email" placeholder="your@email.com">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input class="form-input" type="password" id="login-password" placeholder="••••••••">
-      </div>
-      <button class="btn btn-primary btn-full" onclick="doLogin()" style="margin-top:8px;">Sign In</button>
-      <div style="text-align:center;margin-top:16px;">
-        <span style="font-size:13px;color:var(--text-muted);">Demo: </span>
-        <span style="font-size:13px;color:var(--accent-blue);cursor:pointer;" onclick="demoLogin()">Use demo mode</span>
-      </div>
+    <!-- SIGN IN -->
+    <div id="pane-signin">
+      <label class="lbl">Email</label>
+      <input class="inp" type="email" id="si-email" placeholder="your@email.com">
+      <label class="lbl">Password</label>
+      <input class="inp" type="password" id="si-pass" placeholder="••••••••">
+      <button class="btn btn-primary" id="si-btn" onclick="doSignIn()">Sign In</button>
+      <div class="demo-link">or <span onclick="enterDemo()">Use demo mode</span></div>
     </div>
-    <div id="auth-register" style="display:none;">
-      <div class="form-group">
-        <label class="form-label">Full Name</label>
-        <input class="form-input" type="text" id="reg-name" placeholder="Your name">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input class="form-input" type="email" id="reg-email" placeholder="your@email.com">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input class="form-input" type="password" id="reg-password" placeholder="••••••••">
-      </div>
-      <button class="btn btn-primary btn-full" onclick="doRegister()" style="margin-top:8px;">Create Account</button>
+    <!-- REGISTER -->
+    <div id="pane-register" style="display:none">
+      <label class="lbl">Full Name</label>
+      <input class="inp" type="text" id="rg-name" placeholder="Your name">
+      <label class="lbl">Email</label>
+      <input class="inp" type="email" id="rg-email" placeholder="your@email.com">
+      <label class="lbl">Password</label>
+      <input class="inp" type="password" id="rg-pass" placeholder="••••••••">
+      <button class="btn btn-primary" id="rg-btn" onclick="doRegister()">Create Account</button>
+      <div class="demo-link">or <span onclick="enterDemo()">Use demo mode</span></div>
     </div>
   </div>
 </div>
 
-<!-- Main App -->
-<div id="app" style="display:none;">
-
-  <!-- Header -->
-  <div id="header">
-    <div class="header-profile">
-      <div class="header-avatar" id="header-avatar"></div>
-      <div>
-        <div class="header-name" id="header-name">HealthVault</div>
-      </div>
+<!-- APP -->
+<div id="app">
+  <div id="hdr">
+    <div class="hdr-left">
+      <div class="av av-r" id="hdr-av">R</div>
+      <div class="hdr-name" id="hdr-name">HealthVault</div>
     </div>
-    <div class="header-actions">
-      <div class="icon-btn" onclick="openNotifications()" title="Notifications">🔔</div>
-      <div class="icon-btn" onclick="logout()" title="Sign out">⎋</div>
+    <div class="hdr-right">
+      <div class="ico-btn" onclick="openNotif()">&#x1F514;</div>
+      <div class="ico-btn" onclick="doLogout()">&#x23CE;</div>
     </div>
   </div>
 
-  <!-- Content -->
   <div id="content">
-    <!-- Dashboard Tab -->
-    <div id="page-dashboard" class="page active">
-      <div id="dashboard-content"></div>
-    </div>
-
-    <!-- Health Records Tab -->
-    <div id="page-health" class="page">
-      <div id="health-content"></div>
-    </div>
-
-    <!-- Trends / Compare Tab -->
-    <div id="page-trends" class="page">
-      <div id="trends-content"></div>
-    </div>
-
-    <!-- Insurance Tab -->
-    <div id="page-insurance" class="page">
-      <div id="insurance-content"></div>
-    </div>
-
-    <!-- Settings / Admin Tab -->
-    <div id="page-settings" class="page">
-      <div id="settings-content"></div>
-    </div>
+    <div id="pg-dashboard" class="page on"></div>
+    <div id="pg-health" class="page"></div>
+    <div id="pg-trends" class="page"></div>
+    <div id="pg-insurance" class="page"></div>
+    <div id="pg-settings" class="page"></div>
   </div>
 
-  <!-- Tab Bar -->
   <div id="tabbar">
-    <div class="tab-item active" onclick="switchTab('dashboard')" data-tab="dashboard">
-      <div class="tab-icon">🏠</div>
-      <div class="tab-label">Dashboard</div>
-    </div>
-    <div class="tab-item" onclick="switchTab('health')" data-tab="health">
-      <div class="tab-icon">🩺</div>
-      <div class="tab-label">Health</div>
-    </div>
-    <div class="tab-item" onclick="switchTab('trends')" data-tab="trends">
-      <div class="tab-icon">📈</div>
-      <div class="tab-label">Trends</div>
-    </div>
-    <div class="tab-item" onclick="switchTab('insurance')" data-tab="insurance">
-      <div class="tab-icon">🛡️</div>
-      <div class="tab-label">Insurance</div>
-    </div>
-    <div class="tab-item" onclick="switchTab('settings')" data-tab="settings">
-      <div class="tab-icon">⚙️</div>
-      <div class="tab-label">Settings</div>
-    </div>
+    <div class="tb on" data-pg="dashboard" onclick="switchTab('dashboard')"><div class="tb-ic">&#x1F3E0;</div><div class="tb-lbl">Dashboard</div></div>
+    <div class="tb" data-pg="health" onclick="switchTab('health')"><div class="tb-ic">&#x1FA7A;</div><div class="tb-lbl">Health</div></div>
+    <div class="tb" data-pg="trends" onclick="switchTab('trends')"><div class="tb-ic">&#x1F4C8;</div><div class="tb-lbl">Trends</div></div>
+    <div class="tb" data-pg="insurance" onclick="switchTab('insurance')"><div class="tb-ic">&#x1F6E1;&#xFE0F;</div><div class="tb-lbl">Insurance</div></div>
+    <div class="tb" data-pg="settings" onclick="switchTab('settings')"><div class="tb-ic">&#x2699;&#xFE0F;</div><div class="tb-lbl">Settings</div></div>
   </div>
 </div>
 
-<!-- Modals -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal-sheet" id="modal-sheet">
+<!-- MODAL -->
+<div id="modal" onclick="closeModal(event)">
+  <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-header">
+    <div class="modal-hdr">
       <span class="modal-title" id="modal-title"></span>
-      <span style="cursor:pointer;font-size:20px;color:var(--text-muted);" onclick="closeModal()">✕</span>
+      <span style="cursor:pointer;font-size:18px;color:var(--t2)" onclick="closeModal()">&#x2715;</span>
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>
 </div>
 
-<!-- Toast -->
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════
-const SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
-
-// Initialize Supabase (gracefully handle missing config)
-let supabase = null;
-let supabaseAuth = null;
+// ── SUPABASE (optional) ──────────────────────────────
+var SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
+var sbAuth = null;
 try {
-  if (SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
-    // Auth client uses default public schema (required for auth to work)
-    supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
-    });
-    // Data client uses healthvault schema
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      db: { schema: 'healthvault' },
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
+  if (typeof window.supabase !== 'undefined') {
+    sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   }
-} catch(e) { console.log('Supabase not configured — demo mode'); }
+} catch(e) { console.warn('Supabase unavailable'); }
 
-// ═══════════════════════════════════════════════════════
-// DEMO DATA (from your actual Excel file)
-// ═══════════════════════════════════════════════════════
-const DEMO_DATA = {
-  profiles: [
-    {
-      id: 'rutchapon',
-      name: 'Rutchapon',
-      nickname: 'Pom',
-      gender: 'Male',
-      bloodGroup: 'O',
-      avatar: 'R',
-      avatarClass: 'avatar-r',
-      color: '#4fc3f7',
-      dob: '1970-01-01',
-      hospital: 'Praram 9',
-    },
-    {
-      id: 'kanokpai',
-      name: 'Kanokpai',
-      nickname: 'Nok',
-      gender: 'Female',
-      bloodGroup: 'B',
-      avatar: 'K',
-      avatarClass: 'avatar-k',
-      color: '#f06292',
-      dob: '1973-01-01',
-      hospital: 'Praram 9 / St. Louis',
-    }
-  ],
-  healthRecords: {
-    rutchapon: {
-      2021: { date:'2021-11-05', age:51, hospital:'Vichaiyut', weight:60, height:160.5, bp:'N/A', pulse:null, bmi:23.3, hemoglobin:null, hematocrit:null, mcv:85.5, rdw:11.9, wbc:null, neutrophil:null, lymphocyte:26, eosinophil:5, basophil:1, monocyte:5, platelet:247000, bloodSugar:97, cholesterol:219, triglyceride:89, hdl:58, ldl:161, uricAcid:5.8, bun:9, creatinine:0.85, egfr:101, sgot:null, sgpt:null, alp:63, afp:2.11, cea:1.2, psa:0.21, ekgNormal:true, notes:'LDL too high. MAY21: Appendix surgery at Praram 9; Hemorrhoid surgery at Vejthani; Colon scope – all clear.' },
-      2022: { date:'2022-10-31', age:52, hospital:'Param 9', weight:59.3, height:162.5, bp:'109/74', pulse:65, bmi:22.4, hemoglobin:14.7, hematocrit:43, mcv:89, rdw:12.8, wbc:7230, neutrophil:70.4, lymphocyte:18, eosinophil:3.1, basophil:0.3, monocyte:8.2, platelet:219000, bloodSugar:94, cholesterol:207, triglyceride:83, hdl:52, ldl:138, uricAcid:6.5, bun:12.7, creatinine:1.01, egfr:85, sgot:22, sgpt:14, alp:68, afp:2, cea:0.73, psa:0.21, ekgNormal:true, notes:'OCT22 – Stomach scope at Vejthani: found fungal infection, on medication.' },
-      2023: { date:'2022-10-31', age:53, hospital:'Param 9', weight:60.2, height:161.9, bp:'110/73', pulse:66, bmi:22.96, hemoglobin:14.8, hematocrit:45, mcv:91, rdw:11.9, wbc:5490, neutrophil:58.1, lymphocyte:28.7, eosinophil:6.4, basophil:0.7, monocyte:6.1, platelet:250000, bloodSugar:92, cholesterol:204, triglyceride:108, hdl:47, ldl:135, uricAcid:6.5, bun:12.7, creatinine:1.01, egfr:85, sgot:16, sgpt:15, alp:70, afp:2.01, cea:1.32, psa:0.23, ekgNormal:true, notes:'Weight too high, HDL low. GB polyp 0.3cm – monitor. Exercise 150 min/week.' },
-      2024: { date:'2024-09-13', age:54, hospital:'Param 9', weight:62.7, height:161.9, bp:'115/74', pulse:64, bmi:23.9, hemoglobin:14.8, hematocrit:46, mcv:90, rdw:12.6, wbc:6040, neutrophil:57.6, lymphocyte:29, eosinophil:7.4, basophil:0.3, monocyte:5.7, platelet:222000, bloodSugar:96, hba1c:5.4, cholesterol:223, triglyceride:86, hdl:53, ldl:162, uricAcid:5.6, bun:14.6, creatinine:0.84, egfr:99, sgot:21, sgpt:26, alp:75, afp:2.15, cea:1.3, psa:0.18, ekgNormal:true, notes:'Mild fatty liver; GB polyp 0.3cm. LDL high – see cardiologist.' },
-      2025: { date:'2025-09-07', age:55, hospital:'Param 9', weight:61.4, height:161.6, bp:'107/70', pulse:64, bmi:23.51, hemoglobin:15.1, hematocrit:45, mcv:90, rdw:12.3, wbc:6990, neutrophil:62, lymphocyte:25.7, eosinophil:5.5, basophil:0.4, monocyte:6.4, platelet:239000, bloodSugar:93, hba1c:5.2, cholesterol:223, triglyceride:89, hdl:55, ldl:171, uricAcid:6.5, bun:12.7, creatinine:1.01, egfr:85, sgot:22, sgpt:26, alp:78, afp:2.43, cea:1.04, psa:0.29, ekgNormal:true, notes:'LDL high (171), eosinophil slightly elevated – allergy response. GB polyp stable 0.3cm. Blood sugar 5.2 HbA1c.' },
-    },
-    kanokpai: {
-      2017: { date:'2017-01-01', age:44, hospital:'N/A', weight:null, height:null, bp:null, pulse:null, bloodSugar:94, cholesterol:195, triglyceride:81, hdl:63, ldl:129.5, uricAcid:3.7, bun:8, sgot:14, sgpt:11, alp:49 },
-      2018: { date:'2018-01-01', age:45, hospital:'N/A', weight:null, height:null, bp:null, pulse:null, bloodSugar:92, cholesterol:153, triglyceride:38, hdl:54.6, ldl:108, uricAcid:3.8, bun:8.9, sgot:11, sgpt:8, alp:46 },
-      2019: { date:'2019-01-01', age:46, hospital:'Vichaiyut', weight:null, height:null, bp:null, pulse:null, hemoglobin:12.6, hematocrit:39.8, mcv:84.5, rdw:13.2, wbc:5800, neutrophil:61, lymphocyte:28, eosinophil:3, basophil:1, monocyte:7, platelet:280000, bloodSugar:91, cholesterol:180, triglyceride:47, hdl:53, ldl:117, uricAcid:4.1, bun:10, creatinine:0.65, egfr:107, sgot:13, sgpt:11, alp:37, afp:1.74, cea:1.5 },
-      2020: { date:'2020-10-09', age:47, hospital:'Vichaiyut', weight:null, height:null, bp:null, pulse:null, hemoglobin:13.7, hematocrit:42, mcv:81.6, rdw:13.1, wbc:7020, neutrophil:65, lymphocyte:26, eosinophil:3, basophil:null, monocyte:6, bloodSugar:90, cholesterol:201, triglyceride:47, hdl:59, ldl:140, uricAcid:4.2, bun:11, creatinine:0.62, egfr:108, sgot:14, sgpt:8, alp:38, afp:2.09, cea:0.9, ekgNormal:true, notes:'Mild bilateral apical pleural thickening. Spine curvature.' },
-      2021: { date:'2021-11-05', age:48, hospital:'Vichaiyut', weight:44.3, height:159, bp:null, pulse:null, bmi:17.5, hemoglobin:12.7, hematocrit:39.1, mcv:82.5, rdw:13.3, wbc:5370, neutrophil:56, lymphocyte:33, eosinophil:4, basophil:1, monocyte:6, bloodSugar:90, cholesterol:189, triglyceride:61, hdl:53, ldl:136, uricAcid:4, bun:10, creatinine:0.54, egfr:112, sgot:13, sgpt:9, alp:41, afp:1.88, ekgNormal:true, notes:'Pleural thickening. Mild spine scoliosis. Liver cyst 1cm, GB polyps 0.5cm, kidney stones bilaterally.' },
-      2022: { date:'2022-10-31', age:49, hospital:"Praram9 Central's family", weight:45, height:157.6, bp:'105/70', pulse:70, bmi:18.1, hemoglobin:12.3, hematocrit:38, mcv:82, rdw:12.8, wbc:4460, neutrophil:47.2, lymphocyte:36.2, eosinophil:4.8, basophil:0.6, monocyte:11.2, platelet:248000, bloodSugar:91, cholesterol:188, triglyceride:86, hdl:56, ldl:115, uricAcid:4.3, bun:8.5, creatinine:0.62, egfr:106, sgot:22, sgpt:20, alp:51, afp:1.71, cea:1.06, ekgNormal:true, notes:'Mild anemia; blood in urine – drink more water. Liver cyst 1cm. GB polyps. Kidney stones bilat. JUN22 Mammogram OK. SEP22 H.pylori found at Vejthani – treated.' },
-      2023: { date:'2023-10-21', age:50, hospital:"Praram9 Central's family", weight:45.9, height:157.5, bp:'100/65', pulse:79, bmi:18.5, hemoglobin:12.4, hematocrit:38, mcv:83, rdw:12.6, wbc:6750, neutrophil:60.8, lymphocyte:27.9, eosinophil:3.8, basophil:0.7, monocyte:6.8, platelet:264000, bloodSugar:95, hba1c:5.2, cholesterol:179, triglyceride:75, hdl:50, ldl:114, uricAcid:3.3, bun:8.7, creatinine:0.59, egfr:107, sgot:19, sgpt:18, alp:48, afp:1.68, cea:1.22, ekgNormal:true, notes:'HDL low – risk of arterial stenosis. EKG minor anomaly but no heart disease indication. Kidney stones. GB polyps stable.' },
-      2024: { date:'2024-07-08', age:51, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'92/60', pulse:71, bmi:18.4, hemoglobin:12.8, hematocrit:41, mcv:83, rdw:13.1, wbc:6360, neutrophil:57.6, lymphocyte:30.3, eosinophil:5.1, basophil:0.4, monocyte:6.6, platelet:288000, bloodSugar:92, hba1c:5.2, cholesterol:202, triglyceride:63, hdl:57, ldl:144, uricAcid:4.3, bun:11.4, creatinine:0.64, egfr:104, sgot:17, sgpt:15, alp:51, afp:1.86, cea:1.34, ekgNormal:true, notes:'Subcapsular liver cyst 1.3cm. 3 right + 2 left kidney stones (3-6mm). GB polyps 4-5mm with calcification. Uterus normal.' },
-      2025: { date:'2025-07-23', age:52, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'89/59', pulse:74, bmi:18.4, hemoglobin:12.8, hematocrit:39, mcv:82, rdw:12.9, wbc:7120, neutrophil:61.2, lymphocyte:28.3, eosinophil:3.6, basophil:0.2, monocyte:6.7, platelet:288000, bloodSugar:98, hba1c:5.3, cholesterol:185, triglyceride:62, hdl:56, ldl:130, uricAcid:3.8, bun:11, creatinine:0.58, egfr:106, sgot:18, sgpt:15, alp:56, afp:1.88, cea:1.21, ekgNormal:true, notes:'EST treadmill test – excellent! Kidney stones stable. GB polyps unchanged. Liver cyst 1.4-1.6cm. Shingles vaccine done. LDL improved to 130.' },
-    }
+// ── STATE ────────────────────────────────────────────
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{} };
+
+// ── DEMO DATA ────────────────────────────────────────
+var PROFILES = [
+  { id:'rutchapon', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
+  { id:'kanokpai',  name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
+];
+
+var HR = {
+  rutchapon: {
+    2021:{ date:'2021-11-05', age:51, hospital:'Vichaiyut', weight:60,   height:160.5, bp:'N/A',    pulse:null, bmi:23.3, hb:null, hct:null, mcv:85.5, wbc:null,  neut:null, lymph:26, eos:5,   plat:247000, sugar:97,  chol:219, trig:89, hdl:58, ldl:161, uric:5.8, bun:9,    creat:0.85, egfr:101, sgot:null, sgpt:null, alp:63, afp:2.11, cea:1.2,  psa:0.21, ekg:true, notes:'LDL too high. MAY21: Appendix surgery Praram9, Hemorrhoid surgery Vejthani, Colon scope clear.' },
+    2022:{ date:'2022-10-31', age:52, hospital:'Praram 9',  weight:59.3, height:162.5, bp:'109/74', pulse:65,   bmi:22.4, hb:14.7, hct:43, mcv:89,   wbc:7230,  neut:70.4, lymph:18, eos:3.1, plat:219000, sugar:94,  chol:207, trig:83, hdl:52, ldl:138, uric:6.5, bun:12.7, creat:1.01, egfr:85,  sgot:22,   sgpt:14,   alp:68, afp:2.0,  cea:0.73, psa:0.21, ekg:true, notes:'Gastroscopy Vejthani: fungal infection found, medication prescribed.' },
+    2023:{ date:'2023-10-31', age:53, hospital:'Praram 9',  weight:60.2, height:161.9, bp:'110/73', pulse:66,   bmi:23.0, hb:14.8, hct:45, mcv:91,   wbc:5490,  neut:58.1, lymph:28.7, eos:6.4, plat:250000, sugar:92,  chol:204, trig:108, hdl:47, ldl:135, uric:6.5, bun:12.7, creat:1.01, egfr:85, sgot:16, sgpt:15, alp:70, afp:2.01, cea:1.32, psa:0.23, ekg:true, notes:'WBC elevated - allergy response. LDL high. GB polyp 0.3cm stable.' },
+    2024:{ date:'2024-09-13', age:54, hospital:'Praram 9',  weight:62.7, height:161.9, bp:'115/74', pulse:64,   bmi:23.9, hb:14.8, hct:46, mcv:90,   wbc:6040,  neut:57.6, lymph:29, eos:7.4, plat:222000, sugar:96, hba1c:5.4, chol:223, trig:86, hdl:53, ldl:162, uric:5.6, bun:14.6, creat:0.84, egfr:99, sgot:21, sgpt:26, alp:75, afp:2.15, cea:1.3,  psa:0.18, ekg:true, notes:'Mild fatty liver. GB polyp 0.3cm. LDL high - see cardiologist.' },
+    2025:{ date:'2025-09-07', age:55, hospital:'Praram 9',  weight:61.4, height:161.6, bp:'107/70', pulse:64,   bmi:23.51, hb:15.1, hct:45, mcv:90,  wbc:6990,  neut:62,   lymph:25.7, eos:5.5, plat:239000, sugar:93, hba1c:5.2, chol:223, trig:89, hdl:55, ldl:171, uric:6.5, bun:12.7, creat:1.01, egfr:85, sgot:22, sgpt:26, alp:78, afp:2.43, cea:1.04, psa:0.29, ekg:true, notes:'LDL 171 high. Eosinophil elevated - allergy. GB polyp 0.3cm stable.' }
   },
-  insurance: [
-    { id:1, type:'Health', name:'AIA Health Insurance', policyNo:'TH-AIA-001-2024', insurer:'AIA Thailand', holder:'Rutchapon', coverage: { ipd:'2,000,000 THB', opd:'50,000 THB', surgery:'Covered', dental:'30,000 THB' }, premium:48000, dueMonth:3, dueYear:2025, paid:true, notes:'Annual renewal March' },
-    { id:2, type:'Life', name:'Muang Thai Life', policyNo:'MT-LIFE-002-2020', insurer:'Muang Thai Life', holder:'Rutchapon', coverage: { deathBenefit:'5,000,000 THB', accidentalDeath:'10,000,000 THB', criticalIllness:'1,000,000 THB', disability:'Covered' }, premium:65000, dueMonth:1, dueYear:2025, paid:true, notes:'20-year policy, ends 2040' },
-    { id:3, type:'Health', name:'AIA Health Insurance', policyNo:'TH-AIA-003-2024', insurer:'AIA Thailand', holder:'Kanokpai', coverage: { ipd:'2,000,000 THB', opd:'50,000 THB', surgery:'Covered', dental:'30,000 THB' }, premium:52000, dueMonth:3, dueYear:2025, paid:true, notes:'Annual renewal March' },
-    { id:4, type:'Life', name:'Muang Thai Life', policyNo:'MT-LIFE-004-2020', insurer:'Muang Thai Life', holder:'Kanokpai', coverage: { deathBenefit:'3,000,000 THB', accidentalDeath:'6,000,000 THB', criticalIllness:'800,000 THB', disability:'Covered' }, premium:55000, dueMonth:1, dueYear:2025, paid:false, notes:'Review beneficiary annually' },
-  ],
-  doctorVisits: [
-    { id:1, profile:'rutchapon', date:'2021-05-15', type:'Surgery', doctor:'Dr. Smith', hospital:'Praram 9', procedure:'Appendectomy', notes:'Appendix removal – successful', followUp:null },
-    { id:2, profile:'rutchapon', date:'2021-06-20', type:'Surgery', doctor:'Dr. Panya', hospital:'Vejthani', procedure:'Hemorrhoidectomy', notes:'Hemorrhoid surgery', followUp:'3 months' },
-    { id:3, profile:'rutchapon', date:'2022-10-15', type:'Endoscopy', doctor:'Dr. Somchai', hospital:'Vejthani', procedure:'Gastroscopy', notes:'Fungal infection found, medication prescribed', followUp:'Nov 2022' },
-    { id:4, profile:'kanokpai', date:'2022-06-10', type:'Screening', doctor:'Dr. Nipa', hospital:'St. Louis', procedure:'Mammogram & Breast Ultrasound', notes:'BIRAD2 – OK. Biopsy since 2016', followUp:'Annual' },
-    { id:5, profile:'kanokpai', date:'2022-09-15', type:'Endoscopy', doctor:'Dr. Wisit', hospital:'Vejthani', procedure:'Gastroscopy & Colonoscopy', notes:'H. pylori found – antibiotic treatment. Colonoscopy clear. Next colonoscopy in 5 years.', followUp:'Nov 2022 – breath test' },
-    { id:6, profile:'kanokpai', date:'2024-07-12', type:'Cardiac', doctor:'Dr. Usa', hospital:'St. Louis', procedure:'EST Treadmill Test', notes:'Excellent result – heart strong. Continue monitoring lipids.', followUp:'2-3 years' },
-  ]
+  kanokpai: {
+    2019:{ date:'2019-01-01', age:46, hospital:'Vichaiyut',  weight:null, height:null,  bp:null,     pulse:null, hb:12.6, hct:39.8, mcv:84.5, wbc:5800, neut:61, lymph:28, eos:3, plat:280000, sugar:91, chol:180, trig:47, hdl:53, ldl:117, uric:4.1, bun:10, creat:0.65, egfr:107, sgot:13, sgpt:11, alp:37, afp:1.74, cea:1.5 },
+    2020:{ date:'2020-10-09', age:47, hospital:'Vichaiyut',  weight:null, height:null,  bp:null,     pulse:null, hb:13.7, hct:42,   mcv:81.6, wbc:7020, neut:65, lymph:26, eos:3, plat:null, sugar:90, chol:201, trig:47, hdl:59, ldl:140, uric:4.2, bun:11, creat:0.62, egfr:108, sgot:14, sgpt:8,  alp:38, afp:2.09, cea:0.9, ekg:true, notes:'Mild pleural thickening. Spine curvature noted.' },
+    2021:{ date:'2021-11-05', age:48, hospital:'Vichaiyut',  weight:44.3, height:159,   bp:null,     pulse:null, bmi:17.5, hb:12.7, hct:39.1, mcv:82.5, wbc:5370, neut:56, lymph:33, eos:4, plat:null, sugar:90, chol:189, trig:61, hdl:53, ldl:136, uric:4.0, bun:10, creat:0.54, egfr:112, sgot:13, sgpt:9, alp:41, afp:1.88, ekg:true, notes:'Liver cyst 1cm. GB polyps 0.5cm. Kidney stones bilateral.' },
+    2022:{ date:'2022-10-31', age:49, hospital:'Praram 9',   weight:45,   height:157.6, bp:'105/70', pulse:70,   bmi:18.1, hb:12.3, hct:38,   mcv:82,   wbc:4460, neut:47.2, lymph:36.2, eos:4.8, plat:248000, sugar:91, chol:188, trig:86, hdl:56, ldl:115, uric:4.3, bun:8.5, creat:0.62, egfr:106, sgot:22, sgpt:20, alp:51, afp:1.71, cea:1.06, ekg:true, notes:'H.pylori treated. Mammogram OK. Kidney stones bilateral. Liver cyst 1cm.' },
+    2023:{ date:'2023-10-21', age:50, hospital:'Praram 9',   weight:45.9, height:157.5, bp:'100/65', pulse:79,   bmi:18.5, hb:12.4, hct:38,   mcv:83,   wbc:6750, neut:60.8, lymph:27.9, eos:3.8, plat:264000, sugar:95, hba1c:5.2, chol:179, trig:75, hdl:50, ldl:114, uric:3.3, bun:8.7, creat:0.59, egfr:107, sgot:19, sgpt:18, alp:48, afp:1.68, cea:1.22, ekg:true, notes:'HDL borderline low. EKG minor anomaly - no heart disease. Kidney stones stable.' },
+    2024:{ date:'2024-07-08', age:51, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'92/60', pulse:71, bmi:18.4, hb:12.8, hct:41, mcv:83, wbc:6360, neut:57.6, lymph:30.3, eos:5.1, plat:288000, sugar:92, hba1c:5.2, chol:202, trig:63, hdl:57, ldl:144, uric:4.3, bun:11.4, creat:0.64, egfr:104, sgot:17, sgpt:15, alp:51, afp:1.86, cea:1.34, ekg:true, notes:'Liver cyst 1.3cm. Kidney stones 3R+2L. GB polyps 4-5mm. EST treadmill excellent!' },
+    2025:{ date:'2025-07-23', age:52, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'89/59', pulse:74, bmi:18.4, hb:12.8, hct:39, mcv:82, wbc:7120, neut:61.2, lymph:28.3, eos:3.6, plat:288000, sugar:98, hba1c:5.3, chol:185, trig:62, hdl:56, ldl:130, uric:3.8, bun:11, creat:0.58, egfr:106, sgot:18, sgpt:15, alp:56, afp:1.88, cea:1.21, ekg:true, notes:'LDL improved to 130. Kidney stones stable. Shingles vaccine done. EST excellent.' }
+  }
 };
 
-// ═══════════════════════════════════════════════════════
-// APP STATE
-// ═══════════════════════════════════════════════════════
-let state = {
-  user: null,
-  activeTab: 'dashboard',
-  activeProfile: 'rutchapon',
-  selectedYear: 2025,
-  demoMode: true,
-  chartsInstances: {}
-};
+var VISITS = [
+  { id:1, pid:'rutchapon', date:'2021-05-15', type:'Surgery',   hospital:'Praram 9', proc:'Appendectomy',    notes:'Appendix removal - successful.', fu:'3 months' },
+  { id:2, pid:'rutchapon', date:'2021-06-20', type:'Surgery',   hospital:'Vejthani',  proc:'Hemorrhoidectomy', notes:'Hemorrhoid surgery completed.', fu:null },
+  { id:3, pid:'rutchapon', date:'2022-10-15', type:'Endoscopy', hospital:'Vejthani',  proc:'Gastroscopy',     notes:'Fungal infection found, medication prescribed.', fu:'Nov 2022' },
+  { id:4, pid:'kanokpai',  date:'2022-06-10', type:'Screening', hospital:'St. Louis', proc:'Mammogram + Breast Ultrasound', notes:'BIRAD2 - OK. Regular monitoring.', fu:'Annual' },
+  { id:5, pid:'kanokpai',  date:'2022-09-15', type:'Endoscopy', hospital:'Vejthani',  proc:'Gastroscopy + Colonoscopy', notes:'H. pylori treated. Colonoscopy clear - next in 5 years.', fu:'Nov 2022 breath test' },
+  { id:6, pid:'kanokpai',  date:'2024-07-12', type:'Cardiac',   hospital:'St. Louis', proc:'EST Treadmill Test', notes:'Excellent result - heart strong! Continue monitoring lipids.', fu:'2-3 years' }
+];
 
-// ═══════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════
-function switchAuthTab(tab) {
-  document.querySelectorAll('.auth-tab').forEach((el,i) => {
-    el.classList.toggle('active', (i===0 && tab==='login') || (i===1 && tab==='register'));
-  });
-  document.getElementById('auth-login').style.display = tab==='login' ? 'block' : 'none';
-  document.getElementById('auth-register').style.display = tab==='register' ? 'block' : 'none';
+var INSURANCE = [
+  { id:1, holder:'Rutchapon', type:'Health', name:'AIA Health Insurance',   policy:'TH-AIA-001-2024', insurer:'AIA Thailand',    cov:{ IPD:'2,000,000 THB', OPD:'50,000 THB', Surgery:'Covered', Dental:'30,000 THB' }, prem:48000, dueM:3,  paid:true  },
+  { id:2, holder:'Rutchapon', type:'Life',   name:'Muang Thai Life',         policy:'MT-LIFE-002-2020', insurer:'Muang Thai Life', cov:{ Death:'5,000,000 THB', Accident:'10,000,000 THB', Critical:'1,000,000 THB', Disability:'Covered' }, prem:65000, dueM:1, paid:true },
+  { id:3, holder:'Kanokpai',  type:'Health', name:'AIA Health Insurance',   policy:'TH-AIA-003-2024', insurer:'AIA Thailand',    cov:{ IPD:'2,000,000 THB', OPD:'50,000 THB', Surgery:'Covered', Dental:'30,000 THB' }, prem:52000, dueM:3,  paid:true  },
+  { id:4, holder:'Kanokpai',  type:'Life',   name:'Muang Thai Life',         policy:'MT-LIFE-004-2020', insurer:'Muang Thai Life', cov:{ Death:'3,000,000 THB', Accident:'6,000,000 THB', Critical:'800,000 THB', Disability:'Covered' }, prem:55000, dueM:1, paid:false }
+];
+
+// ── HELPERS ──────────────────────────────────────────
+function prof(id){ return PROFILES.find(function(p){ return p.id===id; }); }
+function rec(id, yr){ return (HR[id]||{})[yr]; }
+function latestRec(id){
+  var yrs = Object.keys(HR[id]||{}).map(Number).sort(function(a,b){return b-a;});
+  return yrs.length ? HR[id][yrs[0]] : null;
 }
-
-async function doLogin() {
-  const btn = document.querySelector('#auth-login .btn-primary');
-  if (btn) { btn.textContent = 'Signing in…'; btn.disabled = true; }
-
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  if (!email || !password) { showToast('Please enter email and password'); return; }
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      state.user = data.user;
-      state.demoMode = false;
-      enterApp();
-    } catch(e) {
-      if (btn) { btn.textContent = 'Sign In'; btn.disabled = false; }
-      showToast('❌ ' + e.message); console.error('Login error:', e);
-    }
-  } else {
-    showToast('Supabase not configured. Using demo mode.');
-    demoLogin();
-  }
+function years(id){ return Object.keys(HR[id]||{}).map(Number).sort(function(a,b){return a-b;}); }
+function bmi(w,h){ return (w&&h) ? (w/((h/100)*(h/100))).toFixed(1) : null; }
+function bmiLbl(b){
+  if(!b) return {t:'N/A',c:'b-info'};
+  var v=parseFloat(b);
+  if(v<18.5) return {t:'Underweight',c:'b-warn'};
+  if(v<=22.9) return {t:'Normal',c:'b-ok'};
+  if(v<=24.9) return {t:'Overweight',c:'b-warn'};
+  return {t:'Obese',c:'b-alert'};
 }
-
-async function doRegister() {
-  const name = document.getElementById('reg-name').value;
-  const email = document.getElementById('reg-email').value;
-  const password = document.getElementById('reg-password').value;
-  if (!name || !email || !password) { showToast('Please fill all fields'); return; }
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabaseAuth.auth.signUp({ email, password, options:{ data: { full_name: name } } });
-      if (error) throw error;
-      showToast('Account created! Please check email to verify.');
-    } catch(e) {
-      showToast('Registration failed: ' + e.message);
-    }
-  } else {
-    showToast('Supabase not configured. Using demo mode.');
-    demoLogin();
-  }
+function fmtDate(d){ try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }catch(e){return d;} }
+function fmtTHB(n){ return n ? n.toLocaleString()+' THB' : '-'; }
+function delta(cur, prev, lowerBetter){
+  if(cur==null||prev==null) return '';
+  var d=parseFloat(cur)-parseFloat(prev);
+  if(Math.abs(d)<0.01) return '<span class="same">&#8594; no change</span>';
+  var up=d>0, good=lowerBetter?!up:up;
+  return '<span class="'+(good?'dn':'up')+'">'+(up?'&#8593;':'&#8595;')+' '+Math.abs(d).toFixed(1)+'</span>';
 }
-
-function demoLogin() {
-  state.user = { email: 'rutchapon@demo.com', id: 'demo' };
-  state.demoMode = true;
-  enterApp();
+function statusBadge(v, min, max, hiBetter){
+  if(v==null||v===undefined||v==='') return '';
+  var n=parseFloat(v); if(isNaN(n)) return '';
+  var ok=(min==null||n>=min)&&(max==null||n<=max);
+  if(ok) return '<span class="badge b-ok">&#x2713;</span>';
+  if(!ok && hiBetter && n<min) return '<span class="badge b-alert">Low</span>';
+  return '<span class="badge b-alert">High</span>';
 }
-
-function enterApp() {
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  updateHeader();
-  renderPage('dashboard');
-}
-
-function logout() {
-  if (supabaseAuth) supabaseAuth.auth.signOut();
-  state.user = null;
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('auth-screen').style.display = 'flex';
-}
-
-function updateHeader() {
-  const profile = DEMO_DATA.profiles.find(p => p.id === state.activeProfile);
-  const avatar = document.getElementById('header-avatar');
-  avatar.className = 'header-avatar ' + profile.avatarClass;
-  avatar.textContent = profile.avatar;
-  document.getElementById('header-name').textContent = profile.name;
-}
-
-// ═══════════════════════════════════════════════════════
-// TAB NAVIGATION
-// ═══════════════════════════════════════════════════════
-function switchTab(tab) {
-  state.activeTab = tab;
-  document.querySelectorAll('.tab-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.tab === tab);
-  });
-  document.querySelectorAll('.page').forEach(el => {
-    el.classList.toggle('active', el.id === 'page-' + tab);
-  });
-  renderPage(tab);
-}
-
-function renderPage(tab) {
-  if (tab === 'dashboard') renderDashboard();
-  else if (tab === 'health') renderHealth();
-  else if (tab === 'trends') renderTrends();
-  else if (tab === 'insurance') renderInsurance();
-  else if (tab === 'settings') renderSettings();
-}
-
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-function getProfile(id) {
-  return DEMO_DATA.profiles.find(p => p.id === id);
-}
-
-function getRecord(profileId, year) {
-  return (DEMO_DATA.healthRecords[profileId] || {})[year];
-}
-
-function getLatestRecord(profileId) {
-  const years = Object.keys(DEMO_DATA.healthRecords[profileId] || {}).map(Number).sort((a,b)=>b-a);
-  if (!years.length) return null;
-  return { year: years[0], ...DEMO_DATA.healthRecords[profileId][years[0]] };
-}
-
-function getBMI(weight, height) {
-  if (!weight || !height) return null;
-  return (weight / ((height/100)**2)).toFixed(1);
-}
-
-function bmiStatus(bmi) {
-  if (!bmi) return { label: 'N/A', cls: 'badge-info' };
-  const b = parseFloat(bmi);
-  if (b < 18.5) return { label: 'Underweight', cls: 'badge-warn' };
-  if (b <= 22.9) return { label: 'Normal', cls: 'badge-ok' };
-  if (b <= 24.9) return { label: 'Overweight', cls: 'badge-warn' };
-  return { label: 'Obese', cls: 'badge-alert' };
-}
-
-function ldlStatus(ldl) {
-  if (!ldl) return { cls: 'data-value', badge: '' };
-  if (ldl < 100) return { cls: 'data-value', badge: '<span class="badge badge-ok">Optimal</span>' };
-  if (ldl < 130) return { cls: 'data-value', badge: '<span class="badge badge-ok">Good</span>' };
-  if (ldl < 160) return { cls: 'data-value', badge: '<span class="badge badge-warn">Borderline</span>' };
-  return { cls: 'data-value trend-up', badge: '<span class="badge badge-alert">High</span>' };
-}
-
-function statusBadge(value, min, max, higherBetter=false) {
-  if (value === null || value === undefined) return '<span class="badge badge-info">N/A</span>';
-  const v = parseFloat(value);
-  if (isNaN(v)) return '<span class="badge badge-info">—</span>';
-  const inRange = v >= min && v <= max;
-  if (inRange) return '<span class="badge badge-ok">Normal</span>';
-  if (!inRange && higherBetter && v < min) return '<span class="badge badge-alert">Low</span>';
-  if (!inRange && !higherBetter && v > max) return '<span class="badge badge-alert">High</span>';
-  return '<span class="badge badge-warn">Borderline</span>';
-}
-
-function formatDate(dateStr) {
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
-  } catch { return dateStr; }
-}
-
-function deltaArrow(current, previous, lowerBetter=false) {
-  if (!previous || !current) return '';
-  const diff = parseFloat(current) - parseFloat(previous);
-  if (Math.abs(diff) < 0.01) return '<span class="delta-neutral">→ No change</span>';
-  const up = diff > 0;
-  const good = lowerBetter ? !up : up;
-  const cls = good ? 'delta-down' : 'delta-up';
-  const icon = up ? '↑' : '↓';
-  return `<span class="${cls}">${icon} ${Math.abs(diff).toFixed(1)}</span>`;
-}
-
-function getYearsForProfile(profileId) {
-  return Object.keys(DEMO_DATA.healthRecords[profileId] || {}).map(Number).sort((a,b)=>a-b);
-}
-
-function fmtTHB(n) {
-  return n ? n.toLocaleString('th-TH') + ' THB' : '—';
-}
-
-// ═══════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════
-function renderDashboard() {
-  const pid = state.activeProfile;
-  const profile = getProfile(pid);
-  const rec = getLatestRecord(pid);
-  const prevYear = rec ? rec.year - 1 : null;
-  const prevRec = prevYear ? getRecord(pid, prevYear) : null;
-
-  const bmi = rec ? (rec.bmi || getBMI(rec.weight, rec.height)) : null;
-  const bmiInfo = bmiStatus(bmi);
-
-  // Generate alerts
-  const alerts = [];
-  if (rec) {
-    if (rec.ldl > 160) alerts.push({ type:'alert', icon:'⚠️', text:`LDL ${rec.ldl} mg/dL — High cholesterol. Consult cardiologist.` });
-    if (rec.ldl > 130 && rec.ldl <= 160) alerts.push({ type:'warn', icon:'💡', text:`LDL ${rec.ldl} mg/dL — Borderline. Reduce saturated fat, increase exercise.` });
-    if (rec.hdl < 50) alerts.push({ type:'warn', icon:'💡', text:`HDL ${rec.hdl} mg/dL — Low HDL. Risk of arterial stenosis.` });
-    if (parseFloat(bmi) > 23) alerts.push({ type:'warn', icon:'⚖️', text:`BMI ${bmi} — Above Asian normal range (18.5–22.9). Diet control recommended.` });
-    if (rec.eosinophil > 5) alerts.push({ type:'info', icon:'🔬', text:`Eosinophil ${rec.eosinophil}% — Slightly elevated. May indicate allergy/asthma response.` });
-    if (rec.hba1c && parseFloat(rec.hba1c) >= 5.7) alerts.push({ type:'warn', icon:'🩸', text:`HbA1c ${rec.hba1c}% — Prediabetes risk. Monitor blood sugar.` });
-    if (alerts.length === 0) alerts.push({ type:'ok', icon:'✅', text:'Overall health indicators are stable. Keep up the good work!' });
-  }
-
-  // Upcoming premiums
-  const upcoming = DEMO_DATA.insurance.filter(i => i.holder === profile.name && !i.paid);
-
-  const html = `
-    <div class="fade-in">
-      <!-- Profile switcher -->
-      <div class="profile-switcher" style="margin-top:8px;">
-        ${DEMO_DATA.profiles.map(p => `
-          <div class="profile-pill ${p.id===pid ? (p.id==='kanokpai' ? 'active active-k' : 'active') : ''}"
-               onclick="switchProfile('${p.id}')">
-            <div class="header-avatar ${p.avatarClass}" style="width:24px;height:24px;border-radius:8px;font-size:11px;">${p.avatar}</div>
-            ${p.name}
-          </div>
-        `).join('')}
-      </div>
-
-      <!-- Hero Card -->
-      <div class="hero-card">
-        <div class="hero-name">${profile.name}</div>
-        <div class="hero-meta">
-          <span>🩸 Blood ${profile.bloodGroup}</span>
-          <span>🏥 ${profile.hospital}</span>
-          ${rec ? `<span>📅 Last check ${formatDate(rec.date)}</span>` : ''}
-        </div>
-        ${rec ? `
-        <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-          <div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Weight</div>
-            <div style="font-size:17px;font-weight:600;">${rec.weight || '—'}<span style="font-size:11px;color:var(--text-muted);"> kg</span></div>
-          </div>
-          <div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">BMI</div>
-            <div style="font-size:17px;font-weight:600;">${bmi || '—'}</div>
-            ${bmi ? `<span class="badge ${bmiInfo.cls}" style="font-size:10px;padding:2px 6px;">${bmiInfo.label}</span>` : ''}
-          </div>
-          <div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">BP</div>
-            <div style="font-size:17px;font-weight:600;">${rec.bp || '—'}</div>
-          </div>
-        </div>
-        ` : ''}
-      </div>
-
-      <!-- Alerts -->
-      ${alerts.map(a => `
-        <div class="alert-banner ${a.type}">
-          <span style="flex-shrink:0;font-size:16px;">${a.icon}</span>
-          <span>${a.text}</span>
-        </div>
-      `).join('')}
-
-      <!-- Key metrics -->
-      ${rec ? `
-      <p class="section-title">Key Results ${rec.year}</p>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-label">Cholesterol</div>
-          <div class="metric-value" style="color:${rec.cholesterol>200?'var(--yellow)':'var(--green)'}">${rec.cholesterol || '—'}</div>
-          <div class="metric-unit">mg/dL <span style="color:var(--text-muted);">/ &lt;200</span></div>
-          <div class="metric-delta">${deltaArrow(rec.cholesterol, prevRec?.cholesterol, true)}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">LDL</div>
-          <div class="metric-value" style="color:${rec.ldl>160?'var(--red)':rec.ldl>130?'var(--yellow)':'var(--green)'}">${rec.ldl || '—'}</div>
-          <div class="metric-unit">mg/dL <span style="color:var(--text-muted);">/ &lt;130</span></div>
-          <div class="metric-delta">${deltaArrow(rec.ldl, prevRec?.ldl, true)}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Blood Sugar</div>
-          <div class="metric-value" style="color:${rec.bloodSugar>100?'var(--yellow)':'var(--green)'}">${rec.bloodSugar || '—'}</div>
-          <div class="metric-unit">mg/dL <span style="color:var(--text-muted);">/ 70–99</span></div>
-          <div class="metric-delta">${deltaArrow(rec.bloodSugar, prevRec?.bloodSugar, true)}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">HDL</div>
-          <div class="metric-value" style="color:${rec.hdl<50?'var(--yellow)':'var(--green)'}">${rec.hdl || '—'}</div>
-          <div class="metric-unit">mg/dL <span style="color:var(--text-muted);">/ &gt;50</span></div>
-          <div class="metric-delta">${deltaArrow(rec.hdl, prevRec?.hdl, false)}</div>
-        </div>
-      </div>
-      ` : ''}
-
-      <!-- Insurance summary -->
-      ${upcoming.length > 0 ? `
-        <p class="section-title">⚠️ Premium Due</p>
-        ${upcoming.map(ins => `
-          <div class="premium-due">
-            <div class="premium-info">
-              <div class="premium-title">${ins.name}</div>
-              <div class="premium-date">Due: ${ins.dueMonth}/${ins.dueYear} · ${ins.type}</div>
-            </div>
-            <div class="premium-amount">${fmtTHB(ins.premium)}</div>
-          </div>
-        `).join('')}
-      ` : `
-        <p class="section-title">Insurance</p>
-        <div class="alert-banner ok"><span>✅</span><span>All ${profile.name}'s premiums are paid and up to date.</span></div>
-      `}
-
-      <!-- Recent Doctor Visits -->
-      <p class="section-title">Recent Visits</p>
-      <p class="section-subtitle">Surgeries, screenings & key appointments</p>
-      ${DEMO_DATA.doctorVisits.filter(v => v.profile===pid).slice(-3).reverse().map(v => `
-        <div class="timeline-item">
-          <div class="timeline-dot">${v.type==='Surgery'?'🔪':v.type==='Endoscopy'?'🔬':v.type==='Cardiac'?'❤️':'🏥'}</div>
-          <div class="timeline-content">
-            <div class="timeline-title">${v.procedure}</div>
-            <div class="timeline-date">${formatDate(v.date)} · ${v.hospital}</div>
-            <div class="timeline-desc">${v.notes}</div>
-            ${v.followUp ? `<div style="margin-top:4px;"><span class="badge badge-violet">Follow-up: ${v.followUp}</span></div>` : ''}
-          </div>
-        </div>
-      `).join('') || '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No visits recorded</div></div>'}
-
-      <div style="height:20px;"></div>
-    </div>
-  `;
-
-  document.getElementById('dashboard-content').innerHTML = html;
-}
-
-function switchProfile(pid) {
-  state.activeProfile = pid;
-  updateHeader();
-  renderPage(state.activeTab);
-}
-
-// ═══════════════════════════════════════════════════════
-// HEALTH RECORDS
-// ═══════════════════════════════════════════════════════
-function renderHealth() {
-  const pid = state.activeProfile;
-  const years = getYearsForProfile(pid);
-  const year = state.selectedYear;
-  const rec = getRecord(pid, year);
-
-  const html = `
-    <div class="fade-in">
-      <!-- Profile switcher -->
-      <div class="profile-switcher" style="margin-top:8px;">
-        ${DEMO_DATA.profiles.map(p => `
-          <div class="profile-pill ${p.id===pid ? (p.id==='kanokpai'?'active active-k':'active') : ''}"
-               onclick="switchProfile('${p.id}')">
-            <div class="header-avatar ${p.avatarClass}" style="width:24px;height:24px;border-radius:8px;font-size:11px;">${p.avatar}</div>
-            ${p.name}
-          </div>
-        `).join('')}
-      </div>
-
-      <!-- Year selector -->
-      <div class="year-selector">
-        ${years.map(y => `
-          <div class="year-pill ${y===year?'active':''}" onclick="selectYear(${y})">${y}</div>
-        `).join('')}
-      </div>
-
-      ${rec ? renderHealthRecord(pid, year, rec) : `
-        <div class="empty-state">
-          <div class="empty-icon">📂</div>
-          <div class="empty-title">No data for ${year}</div>
-          <div class="empty-desc">Upload a health report or enter data manually</div>
-          <button class="btn btn-primary" style="margin-top:16px;" onclick="openAddRecord()">+ Add Record</button>
-        </div>
-      `}
-
-      <!-- Add Record Button -->
-      <div style="margin-top:20px; display:flex; gap:10px;">
-        <button class="btn btn-primary" style="flex:1;" onclick="openUploadPhoto()">📷 Upload Report</button>
-        <button class="btn btn-secondary" style="flex:1;" onclick="openManualEntry()">✏️ Manual Entry</button>
-      </div>
-
-      <!-- Doctor Visits -->
-      <p class="section-title">Doctor Visits ${year}</p>
-      ${renderVisitsForYear(pid, year)}
-
-      <div style="height:20px;"></div>
-    </div>
-  `;
-
-  document.getElementById('health-content').innerHTML = html;
-}
-
-function renderHealthRecord(pid, year, rec) {
-  const profile = getProfile(pid);
-  const prevRec = getRecord(pid, year-1);
-  const bmi = rec.bmi || getBMI(rec.weight, rec.height);
-  const bmiInfo = bmiStatus(bmi);
-
-  const isMale = profile.gender === 'Male';
-
-  return `
-    <!-- Overview -->
-    <div class="card" style="margin-bottom:14px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <div>
-          <div style="font-size:16px;font-weight:700;">${year} Annual Checkup</div>
-          <div style="font-size:12px;color:var(--text-muted);">${formatDate(rec.date)} · ${rec.hospital || '—'} · Age ${rec.age}</div>
-        </div>
-        ${rec.notes ? `<div style="font-size:18px;">📝</div>` : ''}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-        <div style="text-align:center;">
-          <div style="font-size:24px;font-weight:700;">${rec.weight||'—'}</div>
-          <div style="font-size:11px;color:var(--text-muted);">kg</div>
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:24px;font-weight:700;">${bmi||'—'}</div>
-          <div style="font-size:11px;color:var(--text-muted);">BMI</div>
-          ${bmi?`<span class="badge ${bmiInfo.cls}" style="font-size:10px;">${bmiInfo.label}</span>`:''}
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:24px;font-weight:700;">${rec.bp||'—'}</div>
-          <div style="font-size:11px;color:var(--text-muted);">mmHg</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Lipid Profile -->
-    <div class="health-category">
-      <div class="category-header">
-        <span class="category-icon">🩸</span>
-        <span class="category-title">Lipid Profile</span>
-      </div>
-      <div class="card card-sm">
-        ${dataRow('Total Cholesterol', rec.cholesterol, 'mg/dL', null, 200, null, prevRec?.cholesterol)}
-        ${dataRow('LDL Cholesterol', rec.ldl, 'mg/dL', null, 130, null, prevRec?.ldl)}
-        ${dataRow('HDL Cholesterol', rec.hdl, 'mg/dL', 50, 999, null, prevRec?.hdl, true)}
-        ${dataRow('Triglycerides', rec.triglyceride, 'mg/dL', null, 150, null, prevRec?.triglyceride)}
-        ${rec.hba1c ? dataRow('HbA1c', rec.hba1c, '%', null, 5.7, null, prevRec?.hba1c) : ''}
-        ${dataRow('Blood Sugar', rec.bloodSugar, 'mg/dL', 70, 99, null, prevRec?.bloodSugar)}
-      </div>
-    </div>
-
-    <!-- Complete Blood Count -->
-    <div class="health-category">
-      <div class="category-header">
-        <span class="category-icon">🔬</span>
-        <span class="category-title">Complete Blood Count</span>
-      </div>
-      <div class="card card-sm">
-        ${dataRow('Hemoglobin', rec.hemoglobin, 'g/dL', isMale?13.4:12.5, isMale?16.2:14.9, null, prevRec?.hemoglobin)}
-        ${dataRow('Hematocrit', rec.hematocrit, '%', isMale?40:38, isMale?48:44, null, prevRec?.hematocrit)}
-        ${dataRow('WBC', rec.wbc, 'cells/mm³', 4500, 10500, null, prevRec?.wbc)}
-        ${dataRow('Neutrophil', rec.neutrophil, '%', 41, 70, null, prevRec?.neutrophil)}
-        ${dataRow('Lymphocyte', rec.lymphocyte, '%', 19, 47, null, prevRec?.lymphocyte)}
-        ${dataRow('Eosinophil', rec.eosinophil, '%', 0, 5, null, prevRec?.eosinophil)}
-        ${dataRow('Platelet', rec.platelet ? (rec.platelet/1000).toFixed(0)+'K' : null, 'cells/mm³', null, null, '150K–450K', prevRec?.platelet ? (prevRec.platelet/1000).toFixed(0)+'K' : null)}
-      </div>
-    </div>
-
-    <!-- Kidney Function -->
-    <div class="health-category">
-      <div class="category-header">
-        <span class="category-icon">🫘</span>
-        <span class="category-title">Kidney Function</span>
-      </div>
-      <div class="card card-sm">
-        ${dataRow('Creatinine', rec.creatinine, 'mg/dL', 0.55, 1.02, null, prevRec?.creatinine)}
-        ${dataRow('eGFR', rec.egfr, 'ml/min', 60, 999, null, prevRec?.egfr, true)}
-        ${dataRow('BUN', rec.bun, 'mg/dL', 7, 18.7, null, prevRec?.bun)}
-        ${dataRow('Uric Acid', rec.uricAcid, 'mg/dL', isMale?3.7:2.5, isMale?7.7:6.2, null, prevRec?.uricAcid)}
-      </div>
-    </div>
-
-    <!-- Liver Function -->
-    <div class="health-category">
-      <div class="category-header">
-        <span class="category-icon">🫀</span>
-        <span class="category-title">Liver Function</span>
-      </div>
-      <div class="card card-sm">
-        ${dataRow('SGOT (AST)', rec.sgot, 'U/L', 0, isMale?40:32, null, prevRec?.sgot)}
-        ${dataRow('SGPT (ALT)', rec.sgpt, 'U/L', 0, isMale?41:33, null, prevRec?.sgpt)}
-        ${dataRow('ALP', rec.alp, 'U/L', 40, 150, null, prevRec?.alp)}
-        ${rec.afp !== undefined ? dataRow('AFP (Liver Cancer Marker)', rec.afp, 'ng/mL', 0, 13.6, null, prevRec?.afp) : ''}
-        ${rec.cea !== undefined ? dataRow('CEA (Colon Cancer Marker)', rec.cea, 'ng/mL', 0, 4.3, null, prevRec?.cea) : ''}
-        ${rec.psa !== undefined ? dataRow('PSA (Prostate, Male)', rec.psa, 'ng/mL', 0, 4, null, prevRec?.psa) : ''}
-      </div>
-    </div>
-
-    <!-- Radiology / Imaging -->
-    <div class="health-category">
-      <div class="category-header">
-        <span class="category-icon">🩻</span>
-        <span class="category-title">Imaging & Other</span>
-      </div>
-      <div class="card card-sm">
-        <div class="data-row">
-          <div class="data-name">EKG</div>
-          <div class="data-value">${rec.ekgNormal !== undefined ? (rec.ekgNormal ? '<span class="badge badge-ok">Normal</span>' : '<span class="badge badge-alert">Abnormal</span>') : '—'}</div>
-        </div>
-        <div class="data-row">
-          <div class="data-name">Pulse Rate</div>
-          <div class="data-value">${rec.pulse || '—'} <span class="metric-unit">bpm</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Doctor Notes -->
-    ${rec.notes ? `
-      <div class="health-category">
-        <div class="category-header">
-          <span class="category-icon">📝</span>
-          <span class="category-title">Doctor Notes</span>
-        </div>
-        <div class="card card-sm" style="line-height:1.6;font-size:13px;color:var(--text-secondary);">
-          ${rec.notes}
-        </div>
-      </div>
-    ` : ''}
-  `;
-}
-
-function dataRow(name, value, unit, min, max, normalText, prevValue, higherBetter=false) {
-  if (value === null || value === undefined) return '';
-  const v = parseFloat(value);
-  let statusClass = 'data-value';
-  let badgeHtml = '';
-  
-  if (!isNaN(v) && (min !== null || max !== null)) {
-    const aboveMin = min === null || v >= min;
-    const belowMax = max === null || v <= max;
-    if (aboveMin && belowMax) {
-      badgeHtml = '<span class="badge badge-ok">✓</span>';
-    } else if (!aboveMin) {
-      statusClass = 'data-value';
-      badgeHtml = higherBetter ? '<span class="badge badge-alert">Low</span>' : '<span class="badge badge-warn">Low</span>';
-    } else {
-      statusClass = 'data-value';
-      badgeHtml = !higherBetter ? '<span class="badge badge-alert">High</span>' : '<span class="badge badge-ok">High ✓</span>';
-    }
-  }
-
-  const normalRange = normalText || (min !== null || max !== null ? `${min!==null&&min!==0?min+'-':''}${max!==999&&max!==null?max:''}` : '');
-  
-  return `
-    <div class="data-row">
-      <div>
-        <div class="data-name">${name}</div>
-        ${normalRange ? `<div class="data-normal">${normalRange} ${unit}</div>` : ''}
-      </div>
-      <div style="text-align:right;">
-        <div class="${statusClass}">${value} <span class="metric-unit">${unit}</span></div>
-        <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px;">
-          ${badgeHtml}
-          ${prevValue !== null && prevValue !== undefined ? deltaArrow(value, prevValue, !higherBetter) : ''}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderVisitsForYear(pid, year) {
-  const visits = DEMO_DATA.doctorVisits.filter(v => {
-    if (v.profile !== pid) return false;
-    const y = new Date(v.date).getFullYear();
-    return y === year;
-  });
-
-  if (!visits.length) return `<div class="notice">No major doctor visits recorded for ${year}.</div>`;
-  return visits.map(v => `
-    <div class="card card-sm" style="margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span style="font-size:18px;">${v.type==='Surgery'?'🔪':v.type==='Endoscopy'?'🔬':v.type==='Cardiac'?'❤️':v.type==='Screening'?'🩺':'🏥'}</span>
-        <div>
-          <div style="font-size:14px;font-weight:600;">${v.procedure}</div>
-          <div style="font-size:12px;color:var(--text-muted);">${formatDate(v.date)} · ${v.hospital}</div>
-        </div>
-        <span class="badge badge-violet" style="margin-left:auto;">${v.type}</span>
-      </div>
-      <div style="font-size:13px;color:var(--text-secondary);">${v.notes}</div>
-      ${v.followUp ? `<div style="margin-top:6px;"><span class="badge badge-info">Follow-up: ${v.followUp}</span></div>` : ''}
-    </div>
-  `).join('');
-}
-
-function selectYear(y) {
-  state.selectedYear = y;
-  renderHealth();
-}
-
-// ═══════════════════════════════════════════════════════
-// TRENDS PAGE
-// ═══════════════════════════════════════════════════════
-function renderTrends() {
-  const html = `
-    <div class="fade-in">
-      <div class="profile-switcher" style="margin-top:8px;">
-        <div class="profile-pill ${state.activeProfile==='rutchapon'?'active':''}" onclick="switchProfile('rutchapon')">
-          <div class="header-avatar avatar-r" style="width:24px;height:24px;border-radius:8px;font-size:11px;">R</div>
-          Rutchapon
-        </div>
-        <div class="profile-pill ${state.activeProfile==='kanokpai'?'active active-k':''}" onclick="switchProfile('kanokpai')">
-          <div class="header-avatar avatar-k" style="width:24px;height:24px;border-radius:8px;font-size:11px;">K</div>
-          Kanokpai
-        </div>
-        <div class="profile-pill ${state.activeProfile==='compare'?'active':''}" onclick="switchProfile('compare');renderTrends();">
-          ⚖️ Compare
-        </div>
-      </div>
-
-      ${state.activeProfile === 'compare' ? renderCompare() : renderProfileTrends(state.activeProfile)}
-      
-      <div style="height:20px;"></div>
-    </div>
-  `;
-  document.getElementById('trends-content').innerHTML = html;
-  
-  if (state.activeProfile !== 'compare') {
-    setTimeout(() => drawCharts(state.activeProfile), 100);
-  }
-}
-
-function renderProfileTrends(pid) {
-  const profile = getProfile(pid);
-  const years = getYearsForProfile(pid);
-  const records = years.map(y => ({ year: y, ...DEMO_DATA.healthRecords[pid][y] }));
-  
-  // LDL trend analysis
-  const ldlValues = records.map(r => r.ldl).filter(Boolean);
-  const ldlTrend = ldlValues.length > 1 ? (ldlValues[ldlValues.length-1] - ldlValues[0] > 10 ? 'increasing' : ldlValues[ldlValues.length-1] - ldlValues[0] < -10 ? 'decreasing' : 'stable') : 'stable';
-
-  return `
-    <p class="section-title">Health Trends — ${profile.name}</p>
-    <p class="section-subtitle">Multi-year analysis with risk insights</p>
-
-    <!-- LDL Trend -->
-    <div class="card">
-      <div class="chart-header">
-        <span class="chart-title">Cholesterol & Lipids</span>
-        ${ldlTrend === 'increasing' ? '<span class="badge badge-alert">↑ Rising LDL</span>' : ldlTrend === 'decreasing' ? '<span class="badge badge-ok">↓ Improving</span>' : '<span class="badge badge-info">→ Stable</span>'}
-      </div>
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#ff5252;"></div> LDL (goal &lt;130)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#69f0ae;"></div> HDL (goal &gt;50)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7;"></div> Cholesterol</div>
-      </div>
-      <div class="chart-container"><canvas id="chart-lipids-${pid}"></canvas></div>
-      ${ldlTrend === 'increasing' ? `
-        <div class="alert-banner warn" style="margin-top:12px;">
-          <span>💡</span>
-          <span>LDL has been trending upward. Key actions: reduce saturated fats (butter, cheese, fried foods), exercise 150+ min/week, consider statins consultation if LDL &gt;160.</span>
-        </div>
-      ` : ''}
-    </div>
-
-    <!-- Weight / BMI -->
-    <div class="card">
-      <div class="chart-header">
-        <span class="chart-title">Weight & BMI</span>
-      </div>
-      <div class="chart-container"><canvas id="chart-weight-${pid}"></canvas></div>
-    </div>
-
-    <!-- Blood Sugar -->
-    <div class="card">
-      <div class="chart-header">
-        <span class="chart-title">Blood Sugar & HbA1c</span>
-      </div>
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#ffb74d;"></div> Blood Sugar (goal 70–99)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#f06292;"></div> HbA1c % ×20</div>
-      </div>
-      <div class="chart-container"><canvas id="chart-sugar-${pid}"></canvas></div>
-    </div>
-
-    <!-- Kidney -->
-    <div class="card">
-      <div class="chart-header">
-        <span class="chart-title">Kidney Function (eGFR)</span>
-        <span class="badge badge-ok">&gt;60 Normal</span>
-      </div>
-      <div class="chart-container"><canvas id="chart-kidney-${pid}"></canvas></div>
-    </div>
-
-    <!-- AI Insight Box -->
-    <div class="card" style="background:rgba(156,127,224,0.06);border-color:rgba(156,127,224,0.2);">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <span style="font-size:20px;">🤖</span>
-        <span style="font-size:15px;font-weight:600;color:var(--accent-violet);">AI Health Insight</span>
-        <span class="badge badge-violet">Auto-generated</span>
-      </div>
-      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">
-        ${generateInsight(pid)}
-      </div>
-    </div>
-  `;
-}
-
-function generateInsight(pid) {
-  const records = Object.entries(DEMO_DATA.healthRecords[pid]).map(([y,r]) => ({year:parseInt(y),...r})).sort((a,b)=>a.year-b.year);
-  const latest = records[records.length-1];
-  const profile = getProfile(pid);
-  
-  const insights = [];
-  
-  // LDL
-  const ldlValues = records.map(r=>r.ldl).filter(Boolean);
-  if (ldlValues.length > 1) {
-    const trend = ldlValues[ldlValues.length-1] - ldlValues[0];
-    if (trend > 20) insights.push(`🔴 <strong>LDL has increased ${trend.toFixed(0)} mg/dL over ${records.length} years</strong>. Current level (${latest.ldl} mg/dL) exceeds the 130 mg/dL target. This significantly increases cardiovascular risk. Recommend: dietary intervention, regular exercise, and cardiologist consultation.`);
-    else if (latest.ldl > 130) insights.push(`🟡 <strong>LDL is elevated</strong> at ${latest.ldl} mg/dL. Reduce saturated fats, trans fats, and refined carbohydrates. Increase soluble fiber (oats, beans, fruits).`);
-  }
-  
-  // HDL
-  if (latest.hdl < 50) insights.push(`🟡 <strong>HDL is low</strong> (${latest.hdl} mg/dL). Low HDL reduces the body's ability to clear arterial plaque. Aerobic exercise, quitting smoking, and moderate alcohol consumption can help raise HDL.`);
-  
-  // Blood sugar
-  if (latest.bloodSugar > 99) insights.push(`🟡 <strong>Blood sugar is borderline</strong> (${latest.bloodSugar} mg/dL). Prediabetes range is 100–125. Reducing refined sugar intake and increasing physical activity are key preventive measures.`);
-  if (latest.hba1c && parseFloat(latest.hba1c) > 5.6) insights.push(`🟡 <strong>HbA1c (${latest.hba1c}%) approaching prediabetes threshold</strong> (≥5.7%). Monitor closely with annual tests.`);
-  
-  // Weight
-  const bmi = latest.bmi || getBMI(latest.weight, latest.height);
-  if (bmi && parseFloat(bmi) > 23) insights.push(`🟡 <strong>BMI ${bmi} is above Asian healthy range</strong> (18.5–22.9). Even modest weight loss (5–10%) can significantly improve lipid profiles and reduce diabetes risk.`);
-  
-  // Positive
-  const creatValues = records.map(r=>r.creatinine).filter(Boolean);
-  if (creatValues.every(v => v <= 1.02)) insights.push(`🟢 <strong>Kidney function has remained stable and normal</strong> across all years. Continue adequate hydration (2L+/day).`);
-  
-  if (!insights.length) insights.push(`🟢 <strong>Overall health markers are within acceptable ranges</strong>. Continue annual health checkups and maintain current lifestyle habits.`);
-  
-  return insights.join('<br><br>');
-}
-
-function drawCharts(pid) {
-  const records = Object.entries(DEMO_DATA.healthRecords[pid]).map(([y,r])=>({year:parseInt(y),...r})).sort((a,b)=>a.year-b.year);
-  const years = records.map(r=>r.year.toString());
-  
-  const chartDefaults = {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'rgba(20,20,30,0.9)', titleColor:'#fff', bodyColor:'rgba(255,255,255,0.7)', borderColor:'rgba(255,255,255,0.1)', borderWidth:1 } },
-    scales:{
-      x:{ grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ color:'rgba(255,255,255,0.4)', font:{ size:11 } } },
-      y:{ grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ color:'rgba(255,255,255,0.4)', font:{ size:11 } } }
-    }
-  };
-
-  // Destroy existing
-  Object.keys(state.chartsInstances).forEach(k => { try { state.chartsInstances[k].destroy(); } catch(e){} });
-  state.chartsInstances = {};
-
-  // Lipids chart
-  const lipidsEl = document.getElementById('chart-lipids-' + pid);
-  if (lipidsEl) {
-    state.chartsInstances['lipids'] = new Chart(lipidsEl, {
-      type:'line',
-      data:{
-        labels:years,
-        datasets:[
-          { label:'LDL', data:records.map(r=>r.ldl), borderColor:'#ff5252', backgroundColor:'rgba(255,82,82,0.1)', tension:0.4, pointRadius:4, fill:false },
-          { label:'HDL', data:records.map(r=>r.hdl), borderColor:'#69f0ae', backgroundColor:'rgba(105,240,174,0.1)', tension:0.4, pointRadius:4, fill:false },
-          { label:'Cholesterol', data:records.map(r=>r.cholesterol), borderColor:'#4fc3f7', backgroundColor:'rgba(79,195,247,0.1)', tension:0.4, pointRadius:4, fill:false, borderDash:[4,4] },
-        ]
-      },
-      options:{ ...chartDefaults, scales:{ ...chartDefaults.scales, y:{ ...chartDefaults.scales.y, min:0 } } }
-    });
-  }
-
-  // Weight chart
-  const weightEl = document.getElementById('chart-weight-' + pid);
-  if (weightEl) {
-    const validRecs = records.filter(r=>r.weight);
-    state.chartsInstances['weight'] = new Chart(weightEl, {
-      type:'bar',
-      data:{
-        labels:validRecs.map(r=>r.year.toString()),
-        datasets:[
-          { label:'Weight (kg)', data:validRecs.map(r=>r.weight), backgroundColor:'rgba(79,195,247,0.4)', borderColor:'#4fc3f7', borderWidth:2, borderRadius:6 },
-        ]
-      },
-      options:chartDefaults
-    });
-  }
-
-  // Sugar chart
-  const sugarEl = document.getElementById('chart-sugar-' + pid);
-  if (sugarEl) {
-    state.chartsInstances['sugar'] = new Chart(sugarEl, {
-      type:'line',
-      data:{
-        labels:years,
-        datasets:[
-          { label:'Blood Sugar', data:records.map(r=>r.bloodSugar), borderColor:'#ffb74d', backgroundColor:'rgba(255,183,77,0.1)', tension:0.4, pointRadius:4, fill:true },
-          { label:'HbA1c×20', data:records.map(r=>r.hba1c ? r.hba1c*20 : null), borderColor:'#f06292', tension:0.4, pointRadius:4, fill:false, borderDash:[3,3] },
-        ]
-      },
-      options:chartDefaults
-    });
-  }
-
-  // Kidney chart
-  const kidneyEl = document.getElementById('chart-kidney-' + pid);
-  if (kidneyEl) {
-    const validRecs = records.filter(r=>r.egfr);
-    state.chartsInstances['kidney'] = new Chart(kidneyEl, {
-      type:'line',
-      data:{
-        labels:validRecs.map(r=>r.year.toString()),
-        datasets:[
-          { label:'eGFR', data:validRecs.map(r=>r.egfr), borderColor:'#26d9b0', backgroundColor:'rgba(38,217,176,0.1)', tension:0.4, pointRadius:4, fill:true },
-        ]
-      },
-      options:{ ...chartDefaults, scales:{ ...chartDefaults.scales, y:{ ...chartDefaults.scales.y, min:0, max:150 } } }
-    });
-  }
-}
-
-function renderCompare() {
-  const recs2025_R = getRecord('rutchapon', 2025);
-  const recs2025_K = getRecord('kanokpai', 2025);
-  
-  function compareVal(rVal, kVal, min, max) {
-    function cls(v, mn, mx) {
-      if (!v && v!==0) return 'var(--text-muted)';
-      if (mn && v<mn) return 'var(--yellow)';
-      if (mx && v>mx) return 'var(--red)';
-      return 'var(--green)';
-    }
-    return `
-      <div class="compare-row">
-        <div class="compare-val" style="color:${cls(rVal,min,max)}">${rVal||'—'}</div>
-        <div style="text-align:center;"></div>
-        <div class="compare-val" style="color:${cls(kVal,min,max)}">${kVal||'—'}</div>
-      </div>
-    `;
-  }
-
-  const rows = [
-    { label:'Weight (kg)', r:recs2025_R?.weight, k:recs2025_K?.weight },
-    { label:'BMI', r:recs2025_R?.bmi||getBMI(recs2025_R?.weight, recs2025_R?.height), k:recs2025_K?.bmi||getBMI(recs2025_K?.weight, recs2025_K?.height), min:18.5, max:22.9 },
-    { label:'Blood Pressure', r:recs2025_R?.bp, k:recs2025_K?.bp },
-    { label:'Cholesterol', r:recs2025_R?.cholesterol, k:recs2025_K?.cholesterol, max:200 },
-    { label:'LDL', r:recs2025_R?.ldl, k:recs2025_K?.ldl, max:130 },
-    { label:'HDL', r:recs2025_R?.hdl, k:recs2025_K?.hdl, min:50 },
-    { label:'Triglycerides', r:recs2025_R?.triglyceride, k:recs2025_K?.triglyceride, max:150 },
-    { label:'Blood Sugar', r:recs2025_R?.bloodSugar, k:recs2025_K?.bloodSugar, min:70, max:99 },
-    { label:'HbA1c %', r:recs2025_R?.hba1c, k:recs2025_K?.hba1c, max:5.7 },
-    { label:'eGFR', r:recs2025_R?.egfr, k:recs2025_K?.egfr, min:60 },
-    { label:'Creatinine', r:recs2025_R?.creatinine, k:recs2025_K?.creatinine, max:1.02 },
-    { label:'SGOT', r:recs2025_R?.sgot, k:recs2025_K?.sgot, max:40 },
-    { label:'SGPT', r:recs2025_R?.sgpt, k:recs2025_K?.sgpt, max:40 },
-    { label:'Uric Acid', r:recs2025_R?.uricAcid, k:recs2025_K?.uricAcid },
-  ];
-
-  return `
-    <p class="section-title">Side-by-Side Comparison</p>
-    <p class="section-subtitle">Latest results (2025) — <span style="color:var(--accent-blue);">R</span> vs <span style="color:var(--accent-rose);">K</span></p>
-    
-    <div class="card">
-      <div class="compare-header">
-        <div class="compare-profile r">
-          <div class="compare-name" style="color:var(--accent-blue);">Rutchapon</div>
-          <div class="compare-age">Age 55 · Blood O</div>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:center;width:30px;color:var(--text-muted);font-size:18px;">⚖️</div>
-        <div class="compare-profile k">
-          <div class="compare-name" style="color:var(--accent-rose);">Kanokpai</div>
-          <div class="compare-age">Age 52 · Blood B</div>
-        </div>
-      </div>
-
-      ${rows.map(row => `
-        <div class="compare-row">
-          <div class="compare-val" style="color:${getValColor(row.r, row.min, row.max)}">${row.r||'—'}</div>
-          <div class="compare-label">${row.label}</div>
-          <div class="compare-val" style="color:${getValColor(row.k, row.min, row.max)}">${row.k||'—'}</div>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="card" style="background:rgba(156,127,224,0.06);border-color:rgba(156,127,224,0.2);">
-      <div style="font-size:14px;font-weight:600;color:var(--accent-violet);margin-bottom:10px;">🤖 Family Health Insights</div>
-      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">
-        🔴 <strong>Rutchapon's LDL (171)</strong> is significantly elevated vs Kanokpai's (130). Immediate dietary changes recommended for Rutchapon.<br><br>
-        🟡 <strong>Kanokpai's blood pressure</strong> (89/59) is trending low — monitor for hypotension symptoms (dizziness, fatigue).<br><br>
-        🟢 <strong>Both have excellent kidney function</strong> (eGFR &gt;85). Keep hydrated.<br><br>
-        💡 <strong>Both profiles show stable HbA1c</strong> below 5.7% — no diabetes risk currently. Maintain low sugar diet.
-      </div>
-    </div>
-  `;
-}
-
-function getValColor(v, min, max) {
-  if (!v && v!==0) return 'var(--text-muted)';
-  if (min && parseFloat(v)<min) return 'var(--yellow)';
-  if (max && parseFloat(v)>max) return 'var(--red)';
+function getValColor(v,min,max){
+  if(v==null) return 'var(--t3)';
+  var n=parseFloat(v);
+  if(min&&n<min) return 'var(--yellow)';
+  if(max&&n>max) return 'var(--red)';
   return 'var(--green)';
 }
 
-// ═══════════════════════════════════════════════════════
-// INSURANCE PAGE
-// ═══════════════════════════════════════════════════════
-function renderInsurance() {
-  const insuranceIcons = { Health:'🏥', Life:'🛡️', Accident:'⚡' };
-
-  const html = `
-    <div class="fade-in">
-      <p class="section-title" style="margin-top:12px;">Insurance Coverage</p>
-      <p class="section-subtitle">All active policies across family members</p>
-
-      <!-- Filter chips -->
-      <div class="chips">
-        <div class="chip active">All</div>
-        <div class="chip">Health</div>
-        <div class="chip">Life</div>
-        <div class="chip">Rutchapon</div>
-        <div class="chip">Kanokpai</div>
-      </div>
-
-      ${DEMO_DATA.insurance.map(ins => `
-        <div class="insurance-card">
-          <div class="insurance-logo">${insuranceIcons[ins.type]||'📋'}</div>
-          <div class="insurance-type">${ins.type} Insurance</div>
-          <div class="insurance-name">${ins.name}</div>
-          <div class="insurance-policy">Policy: ${ins.policyNo}</div>
-          <div style="display:flex;gap:6px;margin-bottom:14px;">
-            <span class="badge badge-violet">👤 ${ins.holder}</span>
-            <span class="badge badge-info">${ins.insurer}</span>
-            ${ins.paid ? '<span class="badge badge-ok">✓ Paid</span>' : '<span class="badge badge-alert">⚠ Due</span>'}
-          </div>
-          <div class="coverage-grid">
-            ${Object.entries(ins.coverage).map(([k,v]) => `
-              <div class="coverage-item">
-                <div class="coverage-label">${k.replace(/([A-Z])/g,' $1').trim()}</div>
-                <div class="coverage-value">${v}</div>
-              </div>
-            `).join('')}
-          </div>
-          <hr class="divider" style="margin:14px 0 10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <div>
-              <div style="font-size:12px;color:var(--text-muted);">Annual Premium</div>
-              <div style="font-size:18px;font-weight:700;color:var(--accent-amber);">${fmtTHB(ins.premium)}</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:12px;color:var(--text-muted);">Due Date</div>
-              <div style="font-size:14px;font-weight:600;">Month ${ins.dueMonth} / ${ins.dueYear}</div>
-            </div>
-          </div>
-          ${ins.notes ? `<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">${ins.notes}</div>` : ''}
-        </div>
-      `).join('')}
-
-      <!-- Total Summary -->
-      <div class="card" style="background:rgba(79,195,247,0.06);border-color:rgba(79,195,247,0.2);">
-        <div style="font-size:14px;font-weight:600;margin-bottom:12px;">💰 Total Annual Premiums</div>
-        ${[...new Set(DEMO_DATA.insurance.map(i=>i.holder))].map(holder => {
-          const total = DEMO_DATA.insurance.filter(i=>i.holder===holder).reduce((s,i)=>s+i.premium,0);
-          return `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-            <span style="color:var(--text-secondary);">${holder}</span>
-            <span style="font-weight:600;">${fmtTHB(total)}</span>
-          </div>`;
-        }).join('')}
-        <hr class="divider" style="margin:10px 0;">
-        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
-          <span>Total Family</span>
-          <span style="color:var(--accent-teal);">${fmtTHB(DEMO_DATA.insurance.reduce((s,i)=>s+i.premium,0))}</span>
-        </div>
-      </div>
-
-      <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="openAddInsurance()">+ Add Insurance Policy</button>
-      <div style="height:20px;"></div>
-    </div>
-  `;
-
-  document.getElementById('insurance-content').innerHTML = html;
+// ── AUTH FUNCTIONS ────────────────────────────────────
+function showAuthTab(tab){
+  document.getElementById('tab-signin').className = 'tab-btn'+(tab==='signin'?' on':'');
+  document.getElementById('tab-register').className = 'tab-btn'+(tab==='register'?' on':'');
+  document.getElementById('pane-signin').style.display = tab==='signin'?'block':'none';
+  document.getElementById('pane-register').style.display = tab==='register'?'block':'none';
 }
 
-// ═══════════════════════════════════════════════════════
-// SETTINGS
-// ═══════════════════════════════════════════════════════
-function renderSettings() {
-  const html = `
-    <div class="fade-in">
-      <p class="section-title" style="margin-top:12px;">Settings & Admin</p>
-
-      <!-- Profile Management -->
-      <div class="card" style="margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Profiles</div>
-        ${DEMO_DATA.profiles.map(p => `
-          <div class="list-item" onclick="showToast('Edit profile — coming soon')">
-            <div class="list-item-icon ${p.avatarClass}" style="color:#000;font-weight:700;">${p.avatar}</div>
-            <div class="list-item-text">
-              <div class="list-item-title">${p.name} (${p.nickname})</div>
-              <div class="list-item-sub">Blood ${p.bloodGroup} · ${p.gender} · ${p.hospital}</div>
-            </div>
-            <span class="list-arrow">›</span>
-          </div>
-        `).join('')}
-        <button class="btn btn-secondary btn-full btn-sm" style="margin-top:8px;" onclick="openAddProfile()">+ Add Family Member</button>
-      </div>
-
-      <!-- Access Control -->
-      <div class="card" style="margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Access Control</div>
-        <div class="list-item">
-          <div class="list-item-icon" style="background:rgba(79,195,247,0.15);">👑</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Rutchapon (Admin)</div>
-            <div class="list-item-sub">Full access to all profiles</div>
-          </div>
-          <span class="badge badge-ok">Admin</span>
-        </div>
-        <div class="list-item">
-          <div class="list-item-icon" style="background:rgba(240,98,146,0.15);">👤</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Kanokpai</div>
-            <div class="list-item-sub">Access to own profile only</div>
-          </div>
-          <span class="badge badge-violet">Member</span>
-        </div>
-        <button class="btn btn-secondary btn-full btn-sm" style="margin-top:8px;" onclick="showToast('Invite user — connect Supabase to enable')">+ Invite User</button>
-      </div>
-
-      <!-- Data Management -->
-      <div class="card" style="margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Data & Export</div>
-        <div class="list-item" onclick="openUploadPhoto()">
-          <div class="list-item-icon" style="background:rgba(38,217,176,0.15);">📷</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Upload Health Report (Photo)</div>
-            <div class="list-item-sub">AI auto-extracts health data from photo</div>
-          </div>
-          <span class="list-arrow">›</span>
-        </div>
-        <div class="list-item" onclick="openManualEntry()">
-          <div class="list-item-icon" style="background:rgba(255,183,77,0.15);">✏️</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Manual Data Entry</div>
-            <div class="list-item-sub">Add or edit health records</div>
-          </div>
-          <span class="list-arrow">›</span>
-        </div>
-        <div class="list-item" onclick="showToast('Export started — CSV file prepared')">
-          <div class="list-item-icon" style="background:rgba(156,127,224,0.15);">📤</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Export All Data</div>
-            <div class="list-item-sub">Download CSV for all profiles</div>
-          </div>
-          <span class="list-arrow">›</span>
-        </div>
-      </div>
-
-      <!-- Supabase Config -->
-      <div class="card" style="margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Supabase Configuration</div>
-        <div class="notice" style="margin-bottom:12px;">
-          Connect your Supabase project to enable cloud sync, real-time updates, and user authentication. Edit the SUPABASE_URL and SUPABASE_KEY constants at the top of index.html.
-        </div>
-        <div class="data-row">
-          <div class="data-name">Connection Status</div>
-          <div>${supabase ? '<span class="badge badge-ok">✓ Connected</span>' : '<span class="badge badge-warn">Demo Mode</span>'}</div>
-        </div>
-        <div class="data-row">
-          <div class="data-name">Auth Provider</div>
-          <div class="data-value" style="font-size:13px;">Supabase Auth + RLS</div>
-        </div>
-        <div class="data-row">
-          <div class="data-name">Database</div>
-          <div class="data-value" style="font-size:13px;">PostgreSQL (Supabase)</div>
-        </div>
-      </div>
-
-      <!-- Reminders -->
-      <div class="card">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px;">Reminders</div>
-        <div class="list-item">
-          <div class="list-item-icon" style="background:rgba(255,82,82,0.15);">📅</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Annual Checkup Reminder</div>
-            <div class="list-item-sub">September each year</div>
-          </div>
-          <span class="badge badge-ok">On</span>
-        </div>
-        <div class="list-item">
-          <div class="list-item-icon" style="background:rgba(255,183,77,0.15);">💰</div>
-          <div class="list-item-text">
-            <div class="list-item-title">Insurance Premium Reminder</div>
-            <div class="list-item-sub">30 days before due date</div>
-          </div>
-          <span class="badge badge-ok">On</span>
-        </div>
-      </div>
-
-      <!-- Version -->
-      <div style="text-align:center;padding:20px 0;color:var(--text-muted);font-size:12px;">
-        HealthVault v1.0 · Built for Rutchapon & Kanokpai<br>
-        Data hosted on Supabase · Frontend on GitHub Pages
-      </div>
-    </div>
-  `;
-
-  document.getElementById('settings-content').innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════
-// MODAL ACTIONS
-// ═══════════════════════════════════════════════════════
-function openModal(title, body) {
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = body;
-  document.getElementById('modal-overlay').classList.add('open');
-}
-
-function closeModal(e) {
-  if (!e || e.target === document.getElementById('modal-overlay')) {
-    document.getElementById('modal-overlay').classList.remove('open');
+function doSignIn(){
+  var email = document.getElementById('si-email').value.trim();
+  var pass  = document.getElementById('si-pass').value;
+  if(!email||!pass){ toast('Please enter email and password'); return; }
+  var btn = document.getElementById('si-btn');
+  btn.textContent = 'Signing in...'; btn.disabled = true;
+  if(sbAuth){
+    sbAuth.auth.signInWithPassword({email:email, password:pass}).then(function(res){
+      btn.textContent='Sign In'; btn.disabled=false;
+      if(res.error){ toast('Error: '+res.error.message); return; }
+      S.demo = false;
+      enterApp(email);
+    }).catch(function(e){
+      btn.textContent='Sign In'; btn.disabled=false;
+      toast('Error: '+e.message);
+    });
+  } else {
+    toast('Supabase unavailable - entering demo mode');
+    btn.textContent='Sign In'; btn.disabled=false;
+    enterDemo();
   }
 }
 
-function openUploadPhoto() {
-  openModal('📷 Upload Health Report', `
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">
-      Take a photo or upload your annual health checkup report. Our AI will automatically extract all health indicators.
-    </p>
-    <div class="upload-zone" onclick="triggerFileInput()">
-      <div class="upload-icon">📋</div>
-      <div class="upload-title">Tap to take photo or upload</div>
-      <div class="upload-sub">Supports JPG, PNG, PDF · Multiple pages</div>
-      <input type="file" id="file-input" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleFileUpload(event)">
-    </div>
-
-    <div class="form-group" style="margin-top:16px;">
-      <label class="form-label">Profile</label>
-      <select class="form-select">
-        ${DEMO_DATA.profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Year</label>
-      <input class="form-input" type="number" value="2025" min="2010" max="2030">
-    </div>
-
-    <div id="ai-result" style="display:none;">
-      <div class="ai-processing">
-        <span class="pulse">🤖</span>
-        <span>AI is reading your health report…</span>
-      </div>
-    </div>
-
-    <button class="btn btn-primary btn-full" style="margin-top:12px;" onclick="simulateAIExtraction()">
-      🤖 Process with AI
-    </button>
-    <div style="height:16px;"></div>
-  `);
-}
-
-function triggerFileInput() {
-  document.getElementById('file-input')?.click();
-}
-
-function handleFileUpload(e) {
-  const files = e.target.files;
-  if (files.length > 0) {
-    showToast(`${files.length} file(s) selected — click "Process with AI"`);
+function doRegister(){
+  var name  = document.getElementById('rg-name').value.trim();
+  var email = document.getElementById('rg-email').value.trim();
+  var pass  = document.getElementById('rg-pass').value;
+  if(!name||!email||!pass){ toast('Please fill all fields'); return; }
+  var btn = document.getElementById('rg-btn');
+  btn.textContent='Creating...'; btn.disabled=true;
+  if(sbAuth){
+    sbAuth.auth.signUp({email:email,password:pass,options:{data:{full_name:name}}}).then(function(res){
+      btn.textContent='Create Account'; btn.disabled=false;
+      if(res.error){ toast('Error: '+res.error.message); return; }
+      toast('Account created! Check your email to verify, then sign in.');
+      showAuthTab('signin');
+    }).catch(function(e){
+      btn.textContent='Create Account'; btn.disabled=false;
+      toast('Error: '+e.message);
+    });
+  } else {
+    toast('Supabase unavailable - entering demo mode');
+    btn.textContent='Create Account'; btn.disabled=false;
+    enterDemo();
   }
 }
 
-function simulateAIExtraction() {
-  const box = document.getElementById('ai-result');
-  if (box) {
-    box.style.display = 'block';
-    setTimeout(() => {
-      box.innerHTML = `
-        <div class="alert-banner ok" style="margin-top:8px;">
-          <span>✅</span>
-          <div>
-            <strong>AI extracted 28 health indicators</strong><br>
-            <span style="font-size:12px;">Date: Sep 7, 2025 · Hospital: Praram 9 · Review before saving</span>
-          </div>
-        </div>
-        <button class="btn btn-primary btn-full" style="margin-top:10px;" onclick="showToast('Data saved! ✓');closeModal();">Save Extracted Data</button>
-      `;
-    }, 2000);
+function doLogout(){
+  if(sbAuth) sbAuth.auth.signOut();
+  document.getElementById('app').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+  toast('Signed out');
+}
+
+function enterDemo(){
+  S.demo = true;
+  enterApp('demo');
+}
+
+function enterApp(user){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  updateHeader();
+  renderTab('dashboard');
+}
+
+function updateHeader(){
+  var p = prof(S.pid);
+  var av = document.getElementById('hdr-av');
+  av.className = 'av '+p.avCls;
+  av.textContent = p.av;
+  document.getElementById('hdr-name').textContent = p.name;
+}
+
+// ── TABS ─────────────────────────────────────────────
+function switchTab(tab){
+  S.tab = tab;
+  document.querySelectorAll('.tb').forEach(function(el){
+    el.className = 'tb'+(el.dataset.pg===tab?' on':'');
+  });
+  document.querySelectorAll('.page').forEach(function(el){
+    el.className = 'page'+(el.id==='pg-'+tab?' on':'');
+  });
+  renderTab(tab);
+}
+
+function renderTab(tab){
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='health') renderHealth();
+  else if(tab==='trends') renderTrends();
+  else if(tab==='insurance') renderInsurance();
+  else if(tab==='settings') renderSettings();
+}
+
+// ── PROFILE SWITCHER HTML ─────────────────────────────
+function pswHtml(){
+  return '<div class="psw">'+PROFILES.map(function(p){
+    var on = p.id===S.pid ? (p.id==='kanokpai'?' on-k':' on-r') : '';
+    return '<div class="pp'+on+'" onclick="switchProfile(\''+p.id+'\')">'+
+      '<div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;">'+p.av+'</div>'+
+      p.name+'</div>';
+  }).join('')+'</div>';
+}
+
+function switchProfile(pid){
+  S.pid=pid; updateHeader();
+  renderTab(S.tab);
+}
+
+// ── DASHBOARD ─────────────────────────────────────────
+function renderDashboard(){
+  var p=prof(S.pid), r=latestRec(S.pid);
+  var prevR = r ? rec(S.pid, r ? Object.keys(HR[S.pid]).map(Number).sort(function(a,b){return b-a;})[1] : null) : null;
+  var bmiVal = r ? (r.bmi||bmi(r.weight,r.height)) : null;
+  var bmiI = bmiLbl(bmiVal);
+
+  var alerts=[];
+  if(r){
+    if(r.ldl>160) alerts.push({t:'danger',i:'&#x26A0;&#xFE0F;',m:'LDL '+r.ldl+' mg/dL - High. Consult cardiologist.'});
+    else if(r.ldl>130) alerts.push({t:'warn',i:'&#x1F4A1;',m:'LDL '+r.ldl+' mg/dL - Borderline. Reduce saturated fat.'});
+    if(r.hdl&&r.hdl<50) alerts.push({t:'warn',i:'&#x1F4A1;',m:'HDL '+r.hdl+' mg/dL - Low. Risk of arterial stenosis.'});
+    if(bmiVal&&parseFloat(bmiVal)>23) alerts.push({t:'warn',i:'&#x2696;&#xFE0F;',m:'BMI '+bmiVal+' - Above Asian healthy range (18.5-22.9).'});
+    if(r.hba1c&&parseFloat(r.hba1c)>=5.7) alerts.push({t:'warn',i:'&#x1FA78;',m:'HbA1c '+r.hba1c+'% - Prediabetes range. Monitor closely.'});
+    if(alerts.length===0) alerts.push({t:'ok',i:'&#x2705;',m:'Overall health indicators look stable. Good work!'});
   }
+
+  var due = INSURANCE.filter(function(ins){return ins.holder===p.name&&!ins.paid;});
+  var visits = VISITS.filter(function(v){return v.pid===S.pid;}).slice(-3).reverse();
+
+  var html = '<div class="fade">';
+  html += pswHtml();
+
+  // Hero
+  html += '<div class="hero">';
+  html += '<div class="hero-name">'+p.name+'</div>';
+  html += '<div class="hero-meta">';
+  html += '<span>&#x1FA78; Blood '+p.blood+'</span>';
+  html += '<span>&#x1F3E5; '+p.hospital+'</span>';
+  if(r) html += '<span>&#x1F4C5; Last check '+fmtDate(r.date)+'</span>';
+  html += '</div>';
+  if(r){
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px;">';
+    html += '<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Weight</div><div style="font-size:20px;font-weight:700">'+(r.weight||'-')+'<span style="font-size:10px;color:var(--t3)"> kg</span></div></div>';
+    html += '<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">BMI</div><div style="font-size:20px;font-weight:700">'+(bmiVal||'-')+'</div>'+(bmiVal?'<span class="badge '+bmiI.c+'" style="font-size:9px">'+bmiI.t+'</span>':'')+'</div>';
+    html += '<div><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Blood Pressure</div><div style="font-size:18px;font-weight:700">'+(r.bp||'-')+'</div></div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Alerts
+  alerts.forEach(function(a){ html += '<div class="alert '+a.t+'"><span style="flex-shrink:0">'+a.i+'</span><span>'+a.m+'</span></div>'; });
+
+  // Key Metrics
+  if(r){
+    html += '<div class="sec">Key Results '+(Object.keys(HR[S.pid]).map(Number).sort(function(a,b){return b-a;})[0])+'</div>';
+    html += '<div class="mgrid">';
+    html += metricCard('Cholesterol',r.chol,'mg/dL',r.chol>200?'var(--yellow)':'var(--green)',delta(r.chol,prevR&&prevR.chol,true));
+    html += metricCard('LDL',r.ldl,'mg/dL',r.ldl>160?'var(--red)':r.ldl>130?'var(--yellow)':'var(--green)',delta(r.ldl,prevR&&prevR.ldl,true));
+    html += metricCard('HDL',r.hdl,'mg/dL',r.hdl&&r.hdl<50?'var(--yellow)':'var(--green)',delta(r.hdl,prevR&&prevR.hdl,false));
+    html += metricCard('Blood Sugar',r.sugar,'mg/dL',r.sugar>99?'var(--yellow)':'var(--green)',delta(r.sugar,prevR&&prevR.sugar,true));
+    html += '</div>';
+  }
+
+  // Insurance due
+  if(due.length){
+    html += '<div class="sec">&#x26A0;&#xFE0F; Premium Due</div>';
+    due.forEach(function(ins){
+      html += '<div class="prem-row"><div><div style="font-size:13px;font-weight:500">'+ins.name+'</div><div style="font-size:11px;color:var(--t3)">Due month '+ins.dueM+' &middot; '+ins.type+'</div></div><div class="prem-amt">'+fmtTHB(ins.prem)+'</div></div>';
+    });
+  }
+
+  // Visits
+  html += '<div class="sec">Recent Visits</div>';
+  if(visits.length){
+    visits.forEach(function(v){
+      var ico = v.type==='Surgery'?'&#x1F52A;':v.type==='Endoscopy'?'&#x1F52C;':v.type==='Cardiac'?'&#x2764;&#xFE0F;':'&#x1F3E5;';
+      html += '<div class="tl"><div class="tl-dot">'+ico+'</div><div class="tl-body"><div class="tl-title">'+v.proc+'</div><div class="tl-date">'+fmtDate(v.date)+' &middot; '+v.hospital+'</div><div class="tl-desc">'+v.notes+'</div>'+(v.fu?'<div style="margin-top:4px"><span class="badge b-v">Follow-up: '+v.fu+'</span></div>':'')+'</div></div>';
+    });
+  } else {
+    html += '<div style="color:var(--t3);font-size:13px;padding:10px 0">No visits recorded yet</div>';
+  }
+
+  html += '<div style="height:10px"></div></div>';
+  document.getElementById('pg-dashboard').innerHTML = html;
 }
 
-function openManualEntry() {
-  openModal('✏️ Manual Health Entry', `
-    <div class="form-group">
-      <label class="form-label">Profile</label>
-      <select class="form-select">
-        ${DEMO_DATA.profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Year</label>
-        <input class="form-input" type="number" value="2025">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" type="date" value="2025-09-07">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Weight (kg)</label>
-        <input class="form-input" type="number" step="0.1" placeholder="60.0">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Height (cm)</label>
-        <input class="form-input" type="number" step="0.1" placeholder="162">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Blood Pressure</label>
-        <input class="form-input" type="text" placeholder="120/80">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Cholesterol (mg/dL)</label>
-        <input class="form-input" type="number" placeholder="200">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">LDL (mg/dL)</label>
-        <input class="form-input" type="number" placeholder="130">
-      </div>
-      <div class="form-group">
-        <label class="form-label">HDL (mg/dL)</label>
-        <input class="form-input" type="number" placeholder="50">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Blood Sugar (mg/dL)</label>
-        <input class="form-input" type="number" placeholder="90">
-      </div>
-      <div class="form-group">
-        <label class="form-label">HbA1c (%)</label>
-        <input class="form-input" type="number" step="0.1" placeholder="5.2">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Hospital</label>
-      <input class="form-input" type="text" placeholder="Praram 9">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Doctor Notes</label>
-      <textarea class="form-input" rows="3" placeholder="Doctor's recommendations, observations…"></textarea>
-    </div>
-    <button class="btn btn-primary btn-full" onclick="showToast('Record saved! ✓');closeModal();">Save Record</button>
-    <div style="height:16px;"></div>
-  `);
+function metricCard(lbl,val,unit,color,dlt){
+  return '<div class="mc"><div class="mc-lbl">'+lbl+'</div><div class="mc-val" style="color:'+color+'">'+(val||'-')+'</div><div class="mc-unit">'+unit+'</div><div class="mc-delta">'+(dlt||'')+'</div></div>';
 }
 
-function openAddInsurance() {
-  openModal('🛡️ Add Insurance Policy', `
-    <div class="form-group">
-      <label class="form-label">Policy Holder</label>
-      <select class="form-select">
-        ${DEMO_DATA.profiles.map(p => `<option>${p.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Type</label>
-        <select class="form-select">
-          <option>Health</option>
-          <option>Life</option>
-          <option>Accident</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Insurer</label>
-        <input class="form-input" type="text" placeholder="AIA, Muang Thai…">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Policy Name</label>
-      <input class="form-input" type="text" placeholder="e.g. AIA Health Plan">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Policy Number</label>
-      <input class="form-input" type="text" placeholder="TH-AIA-001-2024">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Annual Premium (THB)</label>
-        <input class="form-input" type="number" placeholder="50000">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Due Month</label>
-        <input class="form-input" type="number" min="1" max="12" placeholder="3">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">IPD Coverage (THB)</label>
-      <input class="form-input" type="text" placeholder="2,000,000">
-    </div>
-    <div class="form-group">
-      <label class="form-label">OPD Coverage (THB)</label>
-      <input class="form-input" type="text" placeholder="50,000">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <input class="form-input" type="text" placeholder="Annual renewal, beneficiary info…">
-    </div>
-    <button class="btn btn-primary btn-full" onclick="showToast('Policy saved! ✓');closeModal();">Save Policy</button>
-    <div style="height:16px;"></div>
-  `);
-}
+// ── HEALTH RECORDS ────────────────────────────────────
+function renderHealth(){
+  var yrs = years(S.pid);
+  if(!yrs.includes(S.year)) S.year = yrs[yrs.length-1];
+  var r = rec(S.pid, S.year);
+  var p = prof(S.pid);
+  var male = p.gender==='Male';
 
-function openAddProfile() {
-  openModal('👤 Add Family Member', `
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Full Name</label>
-        <input class="form-input" type="text" placeholder="Full name">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nickname</label>
-        <input class="form-input" type="text" placeholder="Nickname">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Gender</label>
-        <select class="form-select">
-          <option>Male</option>
-          <option>Female</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Blood Group</label>
-        <select class="form-select">
-          <option>A</option><option>B</option><option>O</option><option>AB</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Date of Birth</label>
-      <input class="form-input" type="date">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Primary Hospital</label>
-      <input class="form-input" type="text" placeholder="Praram 9, Bumrungrad…">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Relationship</label>
-      <select class="form-select">
-        <option>Self</option><option>Spouse</option><option>Child</option><option>Parent</option>
-      </select>
-    </div>
-    <button class="btn btn-primary btn-full" onclick="showToast('Profile created! ✓');closeModal();">Create Profile</button>
-    <div style="height:16px;"></div>
-  `);
-}
+  var html = '<div class="fade">';
+  html += pswHtml();
 
-function openNotifications() {
-  openModal('🔔 Notifications', `
-    <div class="alert-banner alert" style="margin-bottom:10px;">
-      <span>⚠️</span>
-      <div><strong>Rutchapon — LDL High</strong><br><span style="font-size:12px;">LDL 171 mg/dL exceeds 130 target. See cardiologist.</span></div>
-    </div>
-    <div class="alert-banner warn" style="margin-bottom:10px;">
-      <span>💰</span>
-      <div><strong>Kanokpai — Premium Due</strong><br><span style="font-size:12px;">Muang Thai Life · Due Jan 2025 · 55,000 THB</span></div>
-    </div>
-    <div class="alert-banner info" style="margin-bottom:10px;">
-      <span>📅</span>
-      <div><strong>Annual Checkup Reminder</strong><br><span style="font-size:12px;">Both profiles due for annual checkup — September 2026</span></div>
-    </div>
-    <div class="alert-banner ok">
-      <span>✅</span>
-      <div><strong>Kanokpai — EST Treadmill</strong><br><span style="font-size:12px;">Excellent result! Heart strong. Follow-up in 2-3 years.</span></div>
-    </div>
-    <div style="height:16px;"></div>
-  `);
-}
+  // Year pills
+  html += '<div class="ypills">';
+  yrs.forEach(function(y){ html += '<div class="yp'+(y===S.year?' on':'')+'" onclick="selYear('+y+')">'+y+'</div>'; });
+  html += '</div>';
 
-// ═══════════════════════════════════════════════════════
-// TOAST
-// ═══════════════════════════════════════════════════════
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2800);
-}
+  if(!r){
+    html += '<div style="text-align:center;padding:60px 0;color:var(--t3)"><div style="font-size:40px;margin-bottom:12px">&#x1F4C2;</div><div style="font-size:15px;font-weight:600;color:var(--t2)">No data for '+S.year+'</div></div>';
+  } else {
+    var bv = r.bmi||bmi(r.weight,r.height);
+    var bi = bmiLbl(bv);
+    var prev = rec(S.pid, S.year-1);
 
-// ═══════════════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-  state.selectedYear = 2025;
-  // Always show auth screen first
-  document.getElementById('auth-screen').style.display = 'flex';
+    // Summary
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div><div style="font-size:16px;font-weight:700">'+S.year+' Annual Checkup</div><div style="font-size:11px;color:var(--t3)">'+fmtDate(r.date)+' &middot; '+(r.hospital||'-')+' &middot; Age '+r.age+'</div></div></div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center">';
+    html += '<div><div style="font-size:22px;font-weight:700">'+(r.weight||'-')+'</div><div style="font-size:10px;color:var(--t3)">kg</div></div>';
+    html += '<div><div style="font-size:22px;font-weight:700">'+(bv||'-')+'</div><div style="font-size:10px;color:var(--t3)">BMI</div>'+(bv?'<span class="badge '+bi.c+'" style="font-size:9px">'+bi.t+'</span>':'')+'</div>';
+    html += '<div><div style="font-size:22px;font-weight:700">'+(r.bp||'-')+'</div><div style="font-size:10px;color:var(--t3)">mmHg</div></div>';
+    html += '</div></div>';
 
-  if (supabaseAuth) {
-    try {
-      const result = await Promise.race([
-        supabaseAuth.auth.getSession(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-      ]);
-      const session = result.data?.session;
-      if (session) {
-        state.user = session.user;
-        state.demoMode = false;
-        enterApp();
-      }
-    } catch(e) {
-      console.log('Session check failed or timed out:', e.message);
-      // Stay on auth screen - user can log in manually
+    // Lipids
+    html += catSection('&#x1FA78; Lipid Profile', [
+      dataRow('Total Cholesterol',r.chol,'mg/dL',null,200,null,prev&&prev.chol),
+      dataRow('LDL Cholesterol',r.ldl,'mg/dL',null,130,null,prev&&prev.ldl),
+      dataRow('HDL Cholesterol',r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true),
+      dataRow('Triglycerides',r.trig,'mg/dL',null,150,null,prev&&prev.trig),
+      dataRow('Blood Sugar',r.sugar,'mg/dL',70,99,null,prev&&prev.sugar),
+      r.hba1c?dataRow('HbA1c',r.hba1c,'%',null,5.7,null,prev&&prev.hba1c):''
+    ]);
+
+    // CBC
+    html += catSection('&#x1F52C; Blood Count', [
+      dataRow('Hemoglobin',r.hb,'g/dL',male?13.4:12.5,male?16.2:14.9,null,prev&&prev.hb),
+      dataRow('Hematocrit',r.hct,'%',male?40:38,male?48:44,null,prev&&prev.hct),
+      dataRow('WBC',r.wbc,'cells/mm3',4500,10500,null,prev&&prev.wbc),
+      dataRow('Neutrophil',r.neut,'%',41,70,null,prev&&prev.neut),
+      dataRow('Lymphocyte',r.lymph,'%',19,47,null,prev&&prev.lymph),
+      dataRow('Eosinophil',r.eos,'%',0,5,null,prev&&prev.eos),
+      r.plat?dataRow('Platelet',(r.plat/1000).toFixed(0)+'K','cells/mm3',null,null,'150K-450K',null):''
+    ]);
+
+    // Kidney
+    html += catSection('&#x1FAD8; Kidney Function', [
+      dataRow('Creatinine',r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat),
+      dataRow('eGFR',r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true),
+      dataRow('BUN',r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
+      dataRow('Uric Acid',r.uric,'mg/dL',male?3.7:2.5,male?7.7:6.2,null,prev&&prev.uric)
+    ]);
+
+    // Liver
+    html += catSection('&#x1FAC0; Liver Function', [
+      dataRow('SGOT (AST)',r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot),
+      dataRow('SGPT (ALT)',r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt),
+      dataRow('ALP',r.alp,'U/L',40,150,null,prev&&prev.alp),
+      r.afp?dataRow('AFP (Liver marker)',r.afp,'ng/mL',0,13.6,null,prev&&prev.afp):'',
+      r.cea?dataRow('CEA (Colon marker)',r.cea,'ng/mL',0,4.3,null,prev&&prev.cea):'',
+      (r.psa&&male)?dataRow('PSA (Prostate)',r.psa,'ng/mL',0,4,null,prev&&prev.psa):''
+    ]);
+
+    // EKG
+    html += catSection('&#x1F9B4; Imaging & Other', [
+      '<div class="dr"><div class="dr-name">EKG</div><div>'+(r.ekg!==undefined?(r.ekg?'<span class="badge b-ok">Normal</span>':'<span class="badge b-alert">Abnormal</span>'):'')+'</div></div>',
+      r.pulse?'<div class="dr"><div class="dr-name">Pulse</div><div class="dr-val">'+r.pulse+' <span style="font-size:10px;color:var(--t3)">bpm</span></div></div>':''
+    ]);
+
+    // Notes
+    if(r.notes){
+      html += '<div class="sec" style="font-size:15px">Doctor Notes</div>';
+      html += '<div class="card" style="font-size:13px;color:var(--t2);line-height:1.7">'+r.notes+'</div>';
     }
   }
-});
+
+  // Add buttons
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px">';
+  html += '<button class="btn btn-primary" onclick="openModal(\'Upload Report\',uploadHTML())">&#x1F4F7; Upload</button>';
+  html += '<button class="btn btn-secondary" onclick="openModal(\'Manual Entry\',manualEntryHTML())">&#x270F;&#xFE0F; Manual</button>';
+  html += '</div>';
+
+  // Visits this year
+  var vis = VISITS.filter(function(v){ return v.pid===S.pid && new Date(v.date).getFullYear()===S.year; });
+  html += '<div class="sec">Doctor Visits '+S.year+'</div>';
+  if(vis.length){
+    vis.forEach(function(v){
+      html += '<div class="card" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-size:15px">'+(v.type==='Surgery'?'&#x1F52A;':v.type==='Endoscopy'?'&#x1F52C;':v.type==='Cardiac'?'&#x2764;&#xFE0F;':'&#x1F3E5;')+'</div><div><div style="font-size:14px;font-weight:600">'+v.proc+'</div><div style="font-size:11px;color:var(--t3)">'+fmtDate(v.date)+' &middot; '+v.hospital+'</div></div></div><div style="font-size:12px;color:var(--t2)">'+v.notes+'</div>'+(v.fu?'<div style="margin-top:6px"><span class="badge b-v">Follow-up: '+v.fu+'</span></div>':'')+'</div>';
+    });
+  } else {
+    html += '<div class="notice">No major visits in '+S.year+'.</div>';
+  }
+
+  html += '<div style="height:10px"></div></div>';
+  document.getElementById('pg-health').innerHTML = html;
+}
+
+function catSection(title, rows){
+  var content = rows.filter(Boolean).join('');
+  if(!content) return '';
+  return '<div style="margin-bottom:14px"><div class="cat-hdr"><span style="font-size:15px">'+title.split(' ')[0]+'</span><span class="cat-title">'+title.substring(title.indexOf(' ')+1)+'</span></div><div class="card" style="padding:8px 14px">'+content+'</div></div>';
+}
+
+function dataRow(name,val,unit,min,max,normalTxt,prevVal,hiBetter){
+  if(val==null||val===undefined||val==='') return '';
+  var badge=statusBadge(val,min,max,hiBetter);
+  var dlt=prevVal!=null?delta(val,prevVal,!hiBetter):'';
+  var nr=normalTxt||(min!==null&&min!==undefined&&max!==999&&max!==null&&max!==undefined?min+'-'+max:'');
+  return '<div class="dr"><div><div class="dr-name">'+name+'</div><div class="dr-normal">'+(nr?nr+' '+unit:'')+'</div></div><div class="dr-right"><div class="dr-val">'+val+' <span style="font-size:10px;color:var(--t3)">'+unit+'</span></div><div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px">'+badge+dlt+'</div></div></div>';
+}
+
+function selYear(y){ S.year=y; renderHealth(); }
+
+// ── TRENDS ────────────────────────────────────────────
+function renderTrends(){
+  var html = '<div class="fade">';
+  html += '<div class="psw">';
+  PROFILES.forEach(function(p){
+    var on = p.id===S.pid?(p.id==='kanokpai'?' on-k':' on-r'):'';
+    html += '<div class="pp'+on+'" onclick="switchProfile(\''+p.id+'\');renderTrends()"><div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;">'+p.av+'</div>'+p.name+'</div>';
+  });
+  html += '<div class="pp'+(S.pid==='compare'?' on-r':'')+'" onclick="S.pid=\'compare\';renderTrends()">&#x2696;&#xFE0F; Compare</div></div>';
+
+  if(S.pid==='compare'){
+    html += renderCompare();
+  } else {
+    var recs = years(S.pid).map(function(y){ return Object.assign({year:y},HR[S.pid][y]); });
+    var latest = recs[recs.length-1];
+    var ldls = recs.map(function(r){return r.ldl;}).filter(Boolean);
+    var ldlTrend = ldls.length>1 ? (ldls[ldls.length-1]-ldls[0]>10?'rising':ldls[ldls.length-1]-ldls[0]<-10?'improving':'stable') : 'stable';
+
+    html += '<div class="sec">Trends &mdash; '+prof(S.pid).name+'</div>';
+
+    html += '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:14px;font-weight:600">Cholesterol & Lipids</span>'+
+      (ldlTrend==='rising'?'<span class="badge b-alert">&#8593; Rising LDL</span>':ldlTrend==='improving'?'<span class="badge b-ok">&#8595; Improving</span>':'<span class="badge b-info">&#8594; Stable</span>')+'</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--t2)"><span style="color:#ff5252">&#9679;</span> LDL</span><span style="font-size:11px;color:var(--t2)"><span style="color:var(--green)">&#9679;</span> HDL</span><span style="font-size:11px;color:var(--t2)"><span style="color:var(--blue)">&#9679;</span> Total</span></div>'+
+      '<div class="chart-wrap"><canvas id="c-lipids"></canvas></div>'+
+      (ldlTrend==='rising'?'<div class="alert warn" style="margin-top:10px">&#x1F4A1; LDL trending upward. Reduce saturated fats (butter, cheese, fried foods), exercise 150+ min/week.</div>':'')+
+      '</div>';
+
+    html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Weight (kg)</div><div class="chart-wrap"><canvas id="c-weight"></canvas></div></div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Blood Sugar (mg/dL)</div><div class="chart-wrap"><canvas id="c-sugar"></canvas></div></div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Kidney Function &mdash; eGFR</div><div class="chart-wrap"><canvas id="c-egfr"></canvas></div></div>';
+
+    // AI Insight
+    html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; AI Health Insight</div>'+aiInsight(S.pid, recs)+'</div>';
+  }
+
+  html += '<div style="height:10px"></div></div>';
+  document.getElementById('pg-trends').innerHTML = html;
+
+  if(S.pid!=='compare'){
+    setTimeout(function(){ drawCharts(S.pid); }, 80);
+  }
+}
+
+function aiInsight(pid, recs){
+  var latest = recs[recs.length-1];
+  var first  = recs[0];
+  var insights = [];
+  if(latest.ldl>160) insights.push('<b>&#x1F534; LDL '+latest.ldl+' mg/dL is significantly elevated</b> (target &lt;130). Increase in '+( latest.ldl-first.ldl>0 ? (latest.ldl-first.ldl).toFixed(0)+' mg/dL since '+first.year+'.' : 'recent years.') +' Recommend dietary changes and cardiologist review.');
+  else if(latest.ldl>130) insights.push('<b>&#x1F7E1; LDL '+latest.ldl+' mg/dL is borderline</b>. Reduce saturated fats and trans fats. Increase soluble fibre (oats, beans, fruits).');
+  if(latest.hdl&&latest.hdl<50) insights.push('<b>&#x1F7E1; HDL '+latest.hdl+' mg/dL is low</b>. Aerobic exercise, healthy fats (olive oil, nuts, avocado) can help raise HDL.');
+  if(latest.sugar>99) insights.push('<b>&#x1F7E1; Blood sugar '+latest.sugar+' mg/dL is borderline</b> (normal 70-99). Reduce refined sugars, increase physical activity.');
+  if(latest.creat&&latest.creat>1.0) insights.push('<b>&#x1F7E1; Creatinine slightly elevated</b> ('+latest.creat+'). Stay well hydrated (2L+ water/day). Monitor annually.');
+  if(latest.egfr&&latest.egfr>=60) insights.push('<b>&#x1F7E2; Kidney function stable</b> - eGFR '+latest.egfr+'. Continue adequate hydration.');
+  var bv=latest.bmi||bmi(latest.weight,latest.height);
+  if(bv&&parseFloat(bv)>23) insights.push('<b>&#x1F7E1; BMI '+bv+' above Asian healthy range</b> (18.5-22.9). 5-10% weight reduction improves lipids and reduces diabetes risk significantly.');
+  if(!insights.length) insights.push('<b>&#x1F7E2; Overall health markers within acceptable ranges.</b> Continue annual checkups and current lifestyle.');
+  return insights.join('<br><br>');
+}
+
+function renderCompare(){
+  var r2025R = rec('rutchapon',2025), r2025K = rec('kanokpai',2025);
+  if(!r2025R||!r2025K) return '<div class="notice">Need data for both profiles to compare.</div>';
+
+  var rows = [
+    {l:'Weight (kg)',r:r2025R.weight,k:r2025K.weight},
+    {l:'BMI',r:r2025R.bmi||bmi(r2025R.weight,r2025R.height),k:r2025K.bmi||bmi(r2025K.weight,r2025K.height),min:18.5,max:22.9},
+    {l:'Blood Pressure',r:r2025R.bp,k:r2025K.bp},
+    {l:'Cholesterol',r:r2025R.chol,k:r2025K.chol,max:200},
+    {l:'LDL',r:r2025R.ldl,k:r2025K.ldl,max:130},
+    {l:'HDL',r:r2025R.hdl,k:r2025K.hdl,min:50},
+    {l:'Triglycerides',r:r2025R.trig,k:r2025K.trig,max:150},
+    {l:'Blood Sugar',r:r2025R.sugar,k:r2025K.sugar,min:70,max:99},
+    {l:'HbA1c %',r:r2025R.hba1c,k:r2025K.hba1c,max:5.7},
+    {l:'eGFR',r:r2025R.egfr,k:r2025K.egfr,min:60},
+    {l:'Creatinine',r:r2025R.creat,k:r2025K.creat,max:1.02},
+    {l:'SGOT',r:r2025R.sgot,k:r2025K.sgot,max:40},
+    {l:'Uric Acid',r:r2025R.uric,k:r2025K.uric}
+  ];
+
+  var html = '<div class="sec">Side-by-Side 2025</div><div class="card">';
+  html += '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;margin-bottom:14px">';
+  html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--blue)">Rutchapon</div><div style="font-size:11px;color:var(--t3)">Age 55 &middot; Blood O</div></div>';
+  html += '<div style="display:flex;align-items:center;font-size:18px">&#x2696;&#xFE0F;</div>';
+  html += '<div style="background:rgba(240,98,146,.08);border:1px solid rgba(240,98,146,.2);border-radius:13px;padding:12px;text-align:center"><div style="font-weight:700;color:var(--rose)">Kanokpai</div><div style="font-size:11px;color:var(--t3)">Age 52 &middot; Blood B</div></div>';
+  html += '</div>';
+
+  rows.forEach(function(row){
+    html += '<div class="cmp-row">';
+    html += '<div class="cmp-v" style="color:'+getValColor(row.r,row.min,row.max)+'">'+(row.r||'-')+'</div>';
+    html += '<div class="cmp-lbl">'+row.l+'</div>';
+    html += '<div class="cmp-v" style="color:'+getValColor(row.k,row.min,row.max)+'">'+(row.k||'-')+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; Family Health Insights</div>';
+  html += '&#x1F534; <b>Rutchapon LDL 171</b> significantly higher than Kanokpai (130). Immediate dietary action needed for Rutchapon.<br><br>';
+  html += '&#x1F7E1; <b>Kanokpai BP 89/59</b> is trending low - monitor for dizziness and fatigue.<br><br>';
+  html += '&#x1F7E2; <b>Both have excellent kidney function</b> (eGFR &gt;85). Keep hydrated.<br><br>';
+  html += '&#x1F7E2; <b>HbA1c normal for both</b> - no diabetes risk currently.';
+  html += '</div>';
+  return html;
+}
+
+function drawCharts(pid){
+  var recs = years(pid).map(function(y){ return Object.assign({year:y},HR[pid][y]); });
+  var labels = recs.map(function(r){return r.year.toString();});
+  var cfg = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1}},
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}}}
+  };
+  Object.values(S.charts).forEach(function(c){try{c.destroy();}catch(e){}});
+  S.charts={};
+
+  var el;
+  el=document.getElementById('c-lipids');
+  if(el) S.charts.lipids=new Chart(el,{type:'line',data:{labels:labels,datasets:[
+    {label:'LDL',data:recs.map(function(r){return r.ldl;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:4,fill:false},
+    {label:'HDL',data:recs.map(function(r){return r.hdl;}),borderColor:'#69f0ae',backgroundColor:'rgba(105,240,174,.1)',tension:.4,pointRadius:4,fill:false},
+    {label:'Total',data:recs.map(function(r){return r.chol;}),borderColor:'#4fc3f7',tension:.4,pointRadius:4,fill:false,borderDash:[4,4]}
+  ]},options:cfg});
+
+  el=document.getElementById('c-weight');
+  var wr=recs.filter(function(r){return r.weight;});
+  if(el&&wr.length) S.charts.weight=new Chart(el,{type:'bar',data:{labels:wr.map(function(r){return r.year.toString();}),datasets:[{data:wr.map(function(r){return r.weight;}),backgroundColor:'rgba(79,195,247,.4)',borderColor:'#4fc3f7',borderWidth:2,borderRadius:6}]},options:cfg});
+
+  el=document.getElementById('c-sugar');
+  if(el) S.charts.sugar=new Chart(el,{type:'line',data:{labels:labels,datasets:[{label:'Sugar',data:recs.map(function(r){return r.sugar;}),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,.12)',tension:.4,pointRadius:4,fill:true}]},options:cfg});
+
+  el=document.getElementById('c-egfr');
+  var er=recs.filter(function(r){return r.egfr;});
+  if(el&&er.length) S.charts.egfr=new Chart(el,{type:'line',data:{labels:er.map(function(r){return r.year.toString();}),datasets:[{data:er.map(function(r){return r.egfr;}),borderColor:'#26d9b0',backgroundColor:'rgba(38,217,176,.12)',tension:.4,pointRadius:4,fill:true}]},options:Object.assign({},cfg,{scales:Object.assign({},cfg.scales,{y:Object.assign({},cfg.scales.y,{min:0,max:150})})})});
+}
+
+// ── INSURANCE ─────────────────────────────────────────
+function renderInsurance(){
+  var html = '<div class="fade"><div class="sec" style="margin-top:12px">Insurance Coverage</div>';
+
+  INSURANCE.forEach(function(ins){
+    html += '<div class="ins-card">';
+    html += '<div style="position:absolute;right:14px;top:14px;font-size:24px;opacity:.35">'+(ins.type==='Health'?'&#x1F3E5;':'&#x1F6E1;&#xFE0F;')+'</div>';
+    html += '<div class="ins-type">'+ins.type+' Insurance</div>';
+    html += '<div class="ins-name">'+ins.name+'</div>';
+    html += '<div class="ins-policy">'+ins.policy+'</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:12px"><span class="badge b-v">&#x1F464; '+ins.holder+'</span><span class="badge b-info">'+ins.insurer+'</span>'+(ins.paid?'<span class="badge b-ok">&#x2713; Paid</span>':'<span class="badge b-alert">&#x26A0; Due</span>')+'</div>';
+    html += '<div class="cov-grid">';
+    Object.entries(ins.cov).forEach(function(e){ html += '<div class="cov-item"><div class="cov-lbl">'+e[0]+'</div><div class="cov-val">'+e[1]+'</div></div>'; });
+    html += '</div>';
+    html += '<hr class="div" style="margin:12px 0 10px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:11px;color:var(--t3)">Annual Premium</div><div style="font-size:17px;font-weight:700;color:var(--amber)">'+fmtTHB(ins.prem)+'</div></div><div style="text-align:right"><div style="font-size:11px;color:var(--t3)">Due</div><div style="font-size:13px;font-weight:600">Month '+ins.dueM+'</div></div></div>';
+    html += '</div>';
+  });
+
+  var total = INSURANCE.reduce(function(s,i){return s+i.prem;},0);
+  html += '<div class="card" style="background:rgba(79,195,247,.06);border-color:rgba(79,195,247,.2)">';
+  html += '<div style="font-size:14px;font-weight:600;margin-bottom:10px">&#x1F4B0; Total Annual Premiums</div>';
+  ['Rutchapon','Kanokpai'].forEach(function(n){
+    var t=INSURANCE.filter(function(i){return i.holder===n;}).reduce(function(s,i){return s+i.prem;},0);
+    html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--t2)">'+n+'</span><span style="font-weight:600">'+fmtTHB(t)+'</span></div>';
+  });
+  html += '<hr class="div" style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700"><span>Family Total</span><span style="color:var(--teal)">'+fmtTHB(total)+'</span></div></div>';
+  html += '<button class="btn btn-primary" onclick="openModal(\'Add Insurance Policy\',addInsuranceHTML())" style="margin-top:8px">+ Add Policy</button>';
+  html += '<div style="height:10px"></div></div>';
+  document.getElementById('pg-insurance').innerHTML = html;
+}
+
+// ── SETTINGS ──────────────────────────────────────────
+function renderSettings(){
+  var html = '<div class="fade"><div class="sec" style="margin-top:12px">Settings &amp; Admin</div>';
+
+  html += '<div class="card" style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:10px">Profiles</div>';
+  PROFILES.forEach(function(p){
+    html += '<div class="li"><div class="li-ic '+p.avCls+'" style="color:#000;font-weight:700">'+p.av+'</div><div class="li-body"><div class="li-title">'+p.name+' ('+p.nick+')</div><div class="li-sub">Blood '+p.blood+' &middot; '+p.gender+' &middot; '+p.hospital+'</div></div><span style="color:var(--t3);font-size:12px">&rsaquo;</span></div>';
+  });
+  html += '<button class="btn btn-secondary" onclick="openModal(\'Add Family Member\',addProfileHTML())" style="margin-top:8px;font-size:13px;padding:9px">+ Add Family Member</button></div>';
+
+  html += '<div class="card" style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:10px">Access Control</div>';
+  html += '<div class="li"><div class="li-ic" style="background:rgba(79,195,247,.15)">&#x1F451;</div><div class="li-body"><div class="li-title">Rutchapon (Admin)</div><div class="li-sub">Full access to all profiles</div></div><span class="badge b-ok">Admin</span></div>';
+  html += '<div class="li"><div class="li-ic" style="background:rgba(240,98,146,.15)">&#x1F464;</div><div class="li-body"><div class="li-title">Kanokpai</div><div class="li-sub">Own profile only</div></div><span class="badge b-v">Member</span></div>';
+  html += '<button class="btn btn-secondary" onclick="toast(\'Invite user - connect Supabase to enable\')" style="margin-top:8px;font-size:13px;padding:9px">+ Invite User</button></div>';
+
+  html += '<div class="card" style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:10px">Data</div>';
+  html += '<div class="li" onclick="openModal(\'Upload Report\',uploadHTML())"><div class="li-ic" style="background:rgba(38,217,176,.15)">&#x1F4F7;</div><div class="li-body"><div class="li-title">Upload Health Report</div><div class="li-sub">AI reads photo and extracts data</div></div><span style="color:var(--t3)">&rsaquo;</span></div>';
+  html += '<div class="li" onclick="openModal(\'Manual Entry\',manualEntryHTML())"><div class="li-ic" style="background:rgba(255,183,77,.15)">&#x270F;&#xFE0F;</div><div class="li-body"><div class="li-title">Manual Entry</div><div class="li-sub">Add or update health records</div></div><span style="color:var(--t3)">&rsaquo;</span></div>';
+  html += '<div class="li" onclick="toast(\'Export started - CSV prepared\')"><div class="li-ic" style="background:rgba(156,127,224,.15)">&#x1F4E4;</div><div class="li-body"><div class="li-title">Export All Data</div><div class="li-sub">Download CSV for all profiles</div></div><span style="color:var(--t3)">&rsaquo;</span></div>';
+  html += '</div>';
+
+  html += '<div class="card"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:10px">Supabase</div>';
+  html += '<div class="notice" style="margin-bottom:10px">Mode: '+(S.demo?'<b>Demo</b> (no live sync)':'<b>Live</b> - connected to Supabase')+'<br>Project: svuiphbzceatqodluvxl &middot; Schema: healthvault</div>';
+  html += '<div class="li"><div class="li-body"><div class="li-title">Connection</div></div>'+(sbAuth?'<span class="badge b-ok">Connected</span>':'<span class="badge b-warn">Demo mode</span>')+'</div>';
+  html += '</div>';
+
+  html += '<div style="text-align:center;padding:20px 0;color:var(--t3);font-size:11px">HealthVault v1.0 &middot; Rutchapon &amp; Kanokpai<br>GitHub Pages + Supabase (healthvault schema)</div>';
+  html += '<div style="height:10px"></div></div>';
+  document.getElementById('pg-settings').innerHTML = html;
+}
+
+// ── MODAL BODIES ──────────────────────────────────────
+function uploadHTML(){
+  return '<p style="font-size:13px;color:var(--t2);margin-bottom:14px">Take a photo or upload your annual health report. AI will auto-extract all indicators.</p>'+
+    '<div class="upload-zone" onclick="document.getElementById(\'fu\').click()"><div style="font-size:36px;margin-bottom:10px">&#x1F4CB;</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">Tap to upload photo or PDF</div><div style="font-size:12px;color:var(--t2)">JPG, PNG, PDF supported &middot; Multiple pages</div><input type="file" id="fu" accept="image/*,application/pdf" multiple style="display:none"></div>'+
+    '<div class="fg" style="margin-top:14px"><label class="lbl">Profile</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div>'+
+    '<div class="fg"><label class="lbl">Year</label><input class="inp" type="number" value="2025" min="2010" max="2030"></div>'+
+    '<button class="btn btn-primary" onclick="toast(\'AI processing... (connect Anthropic API to enable)\');closeModal()">&#x1F916; Process with AI</button><div style="height:10px"></div>';
+}
+
+function manualEntryHTML(){
+  return '<div class="frow"><div class="fg"><label class="lbl">Profile</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div><div class="fg"><label class="lbl">Year</label><input class="inp" type="number" value="2025"></div></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">Date</label><input class="inp" type="date" value="2025-09-07"></div><div class="fg"><label class="lbl">Weight (kg)</label><input class="inp" type="number" step=".1" placeholder="61.0"></div></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">Blood Pressure</label><input class="inp" placeholder="120/80"></div><div class="fg"><label class="lbl">Cholesterol</label><input class="inp" type="number" placeholder="200"></div></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">LDL</label><input class="inp" type="number" placeholder="130"></div><div class="fg"><label class="lbl">HDL</label><input class="inp" type="number" placeholder="50"></div></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">Blood Sugar</label><input class="inp" type="number" placeholder="90"></div><div class="fg"><label class="lbl">HbA1c %</label><input class="inp" type="number" step=".1" placeholder="5.2"></div></div>'+
+    '<div class="fg"><label class="lbl">Hospital</label><input class="inp" placeholder="Praram 9"></div>'+
+    '<div class="fg"><label class="lbl">Notes</label><textarea class="inp" rows="3" placeholder="Doctor notes..."></textarea></div>'+
+    '<button class="btn btn-primary" onclick="toast(\'Record saved!\');closeModal()">Save Record</button><div style="height:10px"></div>';
+}
+
+function addInsuranceHTML(){
+  return '<div class="frow"><div class="fg"><label class="lbl">Holder</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div><div class="fg"><label class="lbl">Type</label><select class="inp"><option>Health</option><option>Life</option><option>Accident</option></select></div></div>'+
+    '<div class="fg"><label class="lbl">Policy Name</label><input class="inp" placeholder="AIA Health Plan"></div>'+
+    '<div class="fg"><label class="lbl">Policy Number</label><input class="inp" placeholder="TH-AIA-001-2024"></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">Annual Premium (THB)</label><input class="inp" type="number" placeholder="50000"></div><div class="fg"><label class="lbl">Due Month</label><input class="inp" type="number" min="1" max="12" placeholder="3"></div></div>'+
+    '<button class="btn btn-primary" onclick="toast(\'Policy saved!\');closeModal()">Save Policy</button><div style="height:10px"></div>';
+}
+
+function addProfileHTML(){
+  return '<div class="frow"><div class="fg"><label class="lbl">Full Name</label><input class="inp" placeholder="Full name"></div><div class="fg"><label class="lbl">Gender</label><select class="inp"><option>Male</option><option>Female</option></select></div></div>'+
+    '<div class="frow"><div class="fg"><label class="lbl">Blood Group</label><select class="inp"><option>A</option><option>B</option><option>O</option><option>AB</option></select></div><div class="fg"><label class="lbl">Date of Birth</label><input class="inp" type="date"></div></div>'+
+    '<div class="fg"><label class="lbl">Hospital</label><input class="inp" placeholder="Praram 9"></div>'+
+    '<button class="btn btn-primary" onclick="toast(\'Profile created!\');closeModal()">Create Profile</button><div style="height:10px"></div>';
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────
+function openNotif(){
+  openModal('Notifications',
+    '<div class="alert danger" style="margin-bottom:8px">&#x26A0;&#xFE0F; <div><b>Rutchapon - LDL High</b><br><span style="font-size:11px">LDL 171 mg/dL exceeds 130 target. See cardiologist.</span></div></div>'+
+    '<div class="alert warn" style="margin-bottom:8px">&#x1F4B0; <div><b>Kanokpai - Premium Due</b><br><span style="font-size:11px">Muang Thai Life - Due Jan - 55,000 THB</span></div></div>'+
+    '<div class="alert info" style="margin-bottom:8px">&#x1F4C5; <div><b>Annual Checkup Reminder</b><br><span style="font-size:11px">Both profiles due September 2026</span></div></div>'+
+    '<div class="alert ok">&#x2705; <div><b>Kanokpai - EST Treadmill</b><br><span style="font-size:11px">Excellent result 2024! Follow-up in 2-3 years.</span></div></div>'+
+    '<div style="height:10px"></div>'
+  );
+}
+
+// ── MODAL ─────────────────────────────────────────────
+function openModal(title, body){
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal').className = 'on';
+}
+function closeModal(e){
+  if(!e||e.target===document.getElementById('modal'))
+    document.getElementById('modal').className = '';
+}
+
+// ── TOAST ─────────────────────────────────────────────
+function toast(msg){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.className='on';
+  setTimeout(function(){ el.className=''; },2800);
+}
+
+// ── INIT ─────────────────────────────────────────────
+window.onload = function(){
+  // Always show auth screen first - no async, no hanging
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+};
 </script>
 </body>
 </html>
-
