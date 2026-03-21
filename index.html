@@ -983,9 +983,18 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // Initialize Supabase (gracefully handle missing config)
 let supabase = null;
+let supabaseAuth = null;
 try {
   if (SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' }, auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true } });
+    // Auth client uses default public schema (required for auth to work)
+    supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
+    });
+    // Data client uses healthvault schema
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      db: { schema: 'healthvault' },
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
   }
 } catch(e) { console.log('Supabase not configured — demo mode'); }
 
@@ -1088,7 +1097,7 @@ async function doLogin() {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
       if (error) throw error;
       state.user = data.user;
       state.demoMode = false;
@@ -1111,7 +1120,7 @@ async function doRegister() {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password, options:{ data: { full_name: name } } });
+      const { data, error } = await supabaseAuth.auth.signUp({ email, password, options:{ data: { full_name: name } } });
       if (error) throw error;
       showToast('Account created! Please check email to verify.');
     } catch(e) {
@@ -1137,7 +1146,7 @@ function enterApp() {
 }
 
 function logout() {
-  if (supabase) supabase.auth.signOut();
+  if (supabaseAuth) supabaseAuth.auth.signOut();
   state.user = null;
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
@@ -2461,19 +2470,28 @@ function showToast(msg) {
 // INIT
 // ═══════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
-  // Set default selected year to latest available
   state.selectedYear = 2025;
+  // Always show auth screen first
+  document.getElementById('auth-screen').style.display = 'flex';
 
-  if (supabase) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      state.user = session.user;
-      state.demoMode = false;
-      enterApp();
+  if (supabaseAuth) {
+    try {
+      const result = await Promise.race([
+        supabaseAuth.auth.getSession(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]);
+      const session = result.data?.session;
+      if (session) {
+        state.user = session.user;
+        state.demoMode = false;
+        enterApp();
+      }
+    } catch(e) {
+      console.log('Session check failed or timed out:', e.message);
+      // Stay on auth screen - user can log in manually
     }
   }
 });
 </script>
 </body>
 </html>
-
