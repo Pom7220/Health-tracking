@@ -978,14 +978,14 @@
 // ═══════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
 
 // Initialize Supabase (gracefully handle missing config)
 let supabase = null;
 try {
   if (SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' } });
   }
 } catch(e) { console.log('Supabase not configured — demo mode'); }
 
