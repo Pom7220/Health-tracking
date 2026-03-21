@@ -64,7 +64,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 /* ── CARDS ── */
 .card{background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:10px}
-.sec{font-family:'DM Serif Display',serif;font-size:20px;margin:20px 0 12px}
+.sec{font-family:'DM Serif Display',serif;font-size:22px;margin:20px 0 12px}
 .sec-sub{font-size:12px;color:var(--t2);margin-top:-8px;margin-bottom:14px}
 
 /* ── METRICS ── */
@@ -113,7 +113,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 /* ── DATA ROWS ── */
 .dr{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);gap:8px}
 .dr:last-child{border-bottom:none}
-.dr-name{font-size:12px;color:var(--t2);flex:1;line-height:1.3}
+.dr-name{font-size:13px;color:var(--t2);flex:1;line-height:1.4}
 .dr-normal{font-size:10px;color:var(--t3)}
 .dr-val{font-size:14px;font-weight:600;text-align:right}
 .dr-right{text-align:right;flex-shrink:0}
@@ -184,8 +184,8 @@ select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.
 .li-sub{font-size:11px;color:var(--t3)}
 
 hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
-.notice{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.15);border-radius:13px;padding:13px 15px;font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:10px}
-.ai-box{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.2);border-radius:14px;padding:14px;margin-top:10px;font-size:13px;color:var(--t2);line-height:1.7}
+.notice{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.15);border-radius:13px;padding:13px 15px;font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:10px}
+.ai-box{background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.2);border-radius:14px;padding:16px;margin-top:10px;font-size:14px;color:var(--t2);line-height:1.8}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .fade{animation:fadeIn .35s ease both}
 .prem-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.2);border-radius:13px;margin-bottom:8px}
@@ -235,7 +235,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
       <div class="hdr-name" id="hdr-name">HealthVault</div>
     </div>
     <div class="hdr-right">
-      <div class="ico-btn" onclick="toggleLang()" id="lang-btn" title="Switch language">TH</div>
+      <div class="ico-btn" onclick="toggleLang()" id="lang-btn" title="Switch language" style="width:auto;padding:0 8px;font-size:12px;font-weight:600">TH</div>
       <div class="ico-btn" onclick="openNotif()">&#x1F514;</div>
       <div class="ico-btn" onclick="doLogout()">&#x23CE;</div>
     </div>
@@ -278,14 +278,39 @@ var SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
 var sbAuth = null;
 
-function initSupabase() {
-  try {
+// Wait up to 5 seconds for Supabase script to load
+function waitForSupabase(callback) {
+  var attempts = 0;
+  var maxAttempts = 25; // 25 x 200ms = 5 seconds
+  function check() {
+    attempts++;
     if (typeof window.supabase !== 'undefined') {
+      try {
+        sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        callback(true);
+      } catch(e) {
+        console.warn('Supabase client error:', e);
+        callback(false);
+      }
+    } else if (attempts < maxAttempts) {
+      setTimeout(check, 200);
+    } else {
+      console.warn('Supabase not loaded after 5s');
+      callback(false);
+    }
+  }
+  if (sbAuth) { callback(true); return; }
+  check();
+}
+
+function initSupabase() {
+  if (typeof window.supabase !== 'undefined' && !sbAuth) {
+    try {
       sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       return true;
-    }
-  } catch(e) { console.warn('Supabase init error:', e); }
-  return false;
+    } catch(e) {}
+  }
+  return !!sbAuth;
 }
 
 // ── STATE ────────────────────────────────────────────
@@ -296,9 +321,17 @@ var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmp
 // ── LANGUAGE SYSTEM ─────────────────────────────────────────────────────
 function toggleLang(){
   S.lang = S.lang==='en' ? 'th' : 'en';
-  var btn = document.getElementById('lang-btn');
-  if(btn) btn.textContent = S.lang==='en' ? 'TH' : 'EN';
+  updateLangBtn();
   renderTab(S.tab);
+}
+
+function updateLangBtn(){
+  var btn = document.getElementById('lang-btn');
+  if(btn){
+    // Show current language with flag
+    btn.textContent = S.lang==='en' ? '&#x1F1F9;&#x1F1ED;' : 'EN';
+    btn.innerHTML = S.lang==='en' ? '&#x1F1F9;&#x1F1ED; TH' : '&#x1F1EC;&#x1F1E7; EN';
+  }
 }
 
 function t(en, th){
@@ -591,23 +624,15 @@ function doSignIn(){
   var pass  = document.getElementById('si-pass').value;
   if(!email||!pass){ toast('Please enter email and password'); return; }
   var btn = document.getElementById('si-btn');
-  btn.textContent = 'Signing in...'; btn.disabled = true;
-  // Try init, if still not ready wait 1 second then retry
-  if(!sbAuth) initSupabase();
-  if(!sbAuth){
-    setTimeout(function(){
-      initSupabase();
-      if(!sbAuth){
-        btn.textContent='Sign In'; btn.disabled=false;
-        toast('Server unavailable. Using demo mode.');
-        enterDemo();
-        return;
-      }
-      performSignIn(email, pass, btn);
-    }, 1200);
-    return;
-  }
-  performSignIn(email, pass, btn);
+  btn.textContent = 'Connecting...'; btn.disabled = true;
+  waitForSupabase(function(ready){
+    if(!ready){
+      btn.textContent='Sign In'; btn.disabled=false;
+      toast('Cannot reach server. Check your connection.');
+      return;
+    }
+    performSignIn(email, pass, btn);
+  });
 }
 
 function performSignIn(email, pass, btn){
@@ -630,8 +655,9 @@ function doRegister(){
   if(!name||!email||!pass){ toast('Please fill all fields'); return; }
   var btn = document.getElementById('rg-btn');
   btn.textContent='Creating...'; btn.disabled=true;
-  if(!sbAuth) initSupabase();
-  if(sbAuth){
+  waitForSupabase(function(ready){
+  if(!ready){ btn.textContent='Create Account'; btn.disabled=false; toast('Cannot reach server.'); return; }
+  if(true){
     sbAuth.auth.signUp({email:email,password:pass,options:{data:{full_name:name}}}).then(function(res){
       btn.textContent='Create Account'; btn.disabled=false;
       if(res.error){ toast('Error: '+res.error.message); return; }
@@ -645,6 +671,7 @@ function doRegister(){
     btn.textContent='Create Account'; btn.disabled=false;
     toast('Could not reach server. Try again in a moment.');
   }
+  }); // end waitForSupabase
 }
 
 function doLogout(){
@@ -663,6 +690,7 @@ function enterApp(user){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   updateHeader();
+  updateLangBtn();
   renderTab('dashboard');
 }
 
@@ -764,7 +792,7 @@ function renderDashboard(){
   alerts.forEach(function(a){
     html += '<div class="alert '+a.t+'" style="flex-direction:column;gap:6px">';
     html += '<div style="display:flex;gap:10px;align-items:flex-start"><span style="flex-shrink:0">'+a.i+'</span><span style="font-weight:500">'+a.m+'</span></div>';
-    if(a.rec) html += '<div style="font-size:12px;opacity:.85;padding-left:26px;line-height:1.5">'+a.rec+'</div>';
+    if(a.rec) html += '<div style="font-size:14px;opacity:.9;padding-left:26px;line-height:1.7;margin-top:4px">'+a.rec+'</div>';
     html += '</div>';
   });
 
@@ -1077,33 +1105,33 @@ function healthAdvisor(pid, r, p, age, compact) {
   }
 
   var html = '<div class="ai-box" style="margin-top:10px">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--violet);margin-bottom:12px">&#x1FA7A; '+advisorText('healthAdvisor')+' &mdash; '+p.name+' ('+(S.lang==='th'?'อายุ ':'')+age+(S.lang==='en'?' yrs':' ปี')+')</div>';
+  html += '<div style="font-size:15px;font-weight:700;color:var(--violet);margin-bottom:14px">&#x1FA7A; '+advisorText('healthAdvisor')+' &mdash; '+p.name+' ('+(S.lang==='th'?'อายุ ':'')+age+(S.lang==='en'?' yrs':' ปี')+')</div>';
 
   if(actions.length){
     html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x2705; '+advisorText('doThis')+'</div>';
-    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
-    actions.forEach(function(a){ html += '<li>'+a+'</li>'; });
+    html += '<ul style="font-size:15px;color:var(--t1);line-height:2.0;padding-left:18px;margin-bottom:14px">';
+    actions.forEach(function(a){ html += '<li style="margin-bottom:2px">'+a+'</li>'; });
     html += '</ul>';
   }
 
   if(avoid.length){
     html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x274C; '+advisorText('avoid')+'</div>';
-    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
-    avoid.forEach(function(a){ html += '<li>'+a+'</li>'; });
+    html += '<ul style="font-size:15px;color:var(--t1);line-height:2.0;padding-left:18px;margin-bottom:14px">';
+    avoid.forEach(function(a){ html += '<li style="margin-bottom:2px">'+a+'</li>'; });
     html += '</ul>';
   }
 
   if(monitor.length){
     html += '<div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">&#x1F4CB; '+advisorText('monitor')+'</div>';
-    html += '<ul style="font-size:13px;color:var(--t2);line-height:1.8;padding-left:16px;margin-bottom:12px">';
-    monitor.forEach(function(m){ html += '<li>'+m+'</li>'; });
+    html += '<ul style="font-size:15px;color:var(--t1);line-height:2.0;padding-left:18px;margin-bottom:14px">';
+    monitor.forEach(function(m){ html += '<li style="margin-bottom:2px">'+m+'</li>'; });
     html += '</ul>';
   }
 
   html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:10px;padding:10px;margin-top:4px">';
   html += '<div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">&#x1F4C5; '+advisorText('nextRecheck')+'</div>';
-  html += '<div style="font-size:13px;font-weight:600;color:var(--t1)">'+recheck+'</div>';
-  if(ageNote) html += '<div style="font-size:12px;color:var(--t2);margin-top:4px">'+ageNote+'</div>';
+  html += '<div style="font-size:16px;font-weight:700;color:var(--t1)">'+recheck+'</div>';
+  if(ageNote) html += '<div style="font-size:14px;color:var(--t2);margin-top:6px">'+ageNote+'</div>';
   html += '</div>';
   html += '</div>';
   return html;
