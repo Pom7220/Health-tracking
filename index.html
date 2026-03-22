@@ -161,6 +161,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .chart-wrap{position:relative;height:180px;width:100%}
 
 /* ── MODAL ── */
+/* Image Editor Overlay */
+#img-editor{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.96);display:none;flex-direction:column;align-items:center;justify-content:center}
+#img-editor.on{display:flex}
+#editor-canvas{max-width:100vw;max-height:55vh;border-radius:10px;touch-action:none;cursor:crosshair}
+.editor-toolbar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:12px 16px;background:rgba(255,255,255,.06);border-radius:16px;margin:10px 0}
+.ed-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;transition:background .15s}
+.ed-btn:active{background:rgba(255,255,255,.25)}
+.ed-btn.primary{background:rgba(38,217,176,.25);border-color:rgba(38,217,176,.5);color:var(--teal)}
+.crop-hint{font-size:11px;color:rgba(255,255,255,.4);text-align:center;margin-top:4px}
+
 #modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);display:flex;align-items:flex-end;padding-bottom:env(safe-area-inset-bottom,0px);opacity:0;pointer-events:none;transition:opacity .3s}
 #modal.on{opacity:1;pointer-events:all}
 .modal-sheet{width:100%;max-height:88vh;background:#15151e;border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--border);overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);padding-bottom:20px}
@@ -269,7 +279,31 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
 </div>
 
 <!-- MODAL -->
-<input type="file" id="upload-cam" accept="image/*" capture="environment" style="display:none" onchange="handleCardUpload(event)">
+<!-- Image Editor Overlay -->
+<div id="img-editor">
+  <div style="width:100%;max-width:500px;padding:16px;display:flex;flex-direction:column;align-items:center">
+    <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:10px;width:100%;text-align:center" id="editor-title">แก้ไขรูปภาพ</div>
+    <canvas id="editor-canvas"></canvas>
+    <div class="crop-hint" id="editor-hint">ลากเพื่อครอป • หมุน • พลิก</div>
+    <div class="editor-toolbar">
+      <button class="ed-btn" onclick="editorRotate(-90)">↺ หมุนซ้าย</button>
+      <button class="ed-btn" onclick="editorRotate(90)">↻ หมุนขวา</button>
+      <button class="ed-btn" onclick="editorFlip('h')">⇔ พลิกซ้ายขวา</button>
+      <button class="ed-btn" onclick="editorFlip('v')">⇕ พลิกบนล่าง</button>
+    </div>
+    <div class="editor-toolbar" style="margin-top:0">
+      <button class="ed-btn" onclick="editorZoom(1.1)">🔍+ ขยาย</button>
+      <button class="ed-btn" onclick="editorZoom(0.9)">🔍− ย่อ</button>
+      <button class="ed-btn" onclick="editorReset()">↺ รีเซ็ต</button>
+    </div>
+    <div style="display:flex;gap:12px;width:100%;margin-top:8px">
+      <button class="ed-btn" onclick="editorCancel()" style="flex:1;padding:12px">✕ ยกเลิก</button>
+      <button class="ed-btn primary" onclick="editorConfirm()" style="flex:2;padding:12px;font-weight:700">✓ ใช้รูปนี้</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="upload-cam"  accept="image/*" capture="environment" style="display:none" onchange="handleCardUpload(event)">
 <input type="file" id="upload-gal" accept="image/*" style="display:none" onchange="handleCardUpload(event)">
 <div id="modal" onclick="closeModal(event)">
   <div class="modal-sheet" onclick="event.stopPropagation()">
@@ -326,7 +360,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.3.3';
+var APP_VERSION = '2.4.1';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
@@ -977,10 +1011,16 @@ function enterApp(user){
 
 // ── DB HELPERS ────────────────────────────────────────
 function getDbClient(){
-  // Use healthvault schema
+  // Reuse the authenticated sbAuth client with schema override
+  // Creating a new client loses the auth session → RLS blocks writes
+  if(!sbAuth) return null;
   try {
-    return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'healthvault' } });
-  } catch(e) { return null; }
+    // Switch to healthvault schema on the existing authenticated client
+    return sbAuth.schema ? sbAuth.schema('healthvault') : sbAuth;
+  } catch(e) {
+    // Fallback: use sbAuth directly (public schema policies should still work)
+    return sbAuth;
+  }
 }
 
 async function loadProfilesFromDB() {
@@ -1104,7 +1144,7 @@ async function loadInsuranceFromDB(){
   try {
     var db = getDbClient();
     if(!db) return;
-    var { data, error } = await db.from('insurance_policies')
+    var { data, error } = await sbAuth.schema('healthvault').from('insurance_policies')
       .select('*, policy_riders(*), premium_payments(*)')
       .eq('owner_id','05e2165e-a9e0-4bcd-b0a7-bb1858bd86de')
       .order('sort_order');
@@ -2651,32 +2691,168 @@ function uploadCardImage(policyNo){
   openModal(th?'อัพโหลดรูปบัตรประกัน':'Upload Card Photo', html);
 }
 
+
+// ── IMAGE EDITOR ─────────────────────────────────────────────
+var ED = { img:null, canvas:null, ctx:null, rotation:0, flipH:false, flipV:false,
+           scale:1.0, offsetX:0, offsetY:0, dragging:false, lastX:0, lastY:0, onConfirm:null };
+
+function openImageEditor(dataURL, policyNo, callback){
+  ED.onConfirm = callback;
+  ED.rotation=0; ED.flipH=false; ED.flipV=false; ED.scale=1.0; ED.offsetX=0; ED.offsetY=0;
+  var ed = document.getElementById('img-editor');
+  if(!ed) return; // fallback if editor not in DOM
+  ED.canvas = document.getElementById('editor-canvas');
+  ED.ctx = ED.canvas.getContext('2d');
+  ed.className='on';
+  ED.img = new Image();
+  ED.img.onload = function(){ editorFitCanvas(); editorDraw(); };
+  ED.img.src = dataURL;
+  ED.canvas.ontouchstart = function(e){ e.preventDefault(); var t=e.touches[0]; ED.dragging=true; var r=ED.canvas.getBoundingClientRect(); ED.lastX=t.clientX-r.left; ED.lastY=t.clientY-r.top; };
+  ED.canvas.ontouchmove = function(e){ e.preventDefault(); if(!ED.dragging) return; var t=e.touches[0]; var r=ED.canvas.getBoundingClientRect(); var x=t.clientX-r.left,y=t.clientY-r.top; ED.offsetX+=x-ED.lastX; ED.offsetY+=y-ED.lastY; ED.lastX=x; ED.lastY=y; editorDraw(); };
+  ED.canvas.ontouchend = function(){ ED.dragging=false; };
+  ED.canvas.onmousedown = function(e){ ED.dragging=true; var r=ED.canvas.getBoundingClientRect(); ED.lastX=e.clientX-r.left; ED.lastY=e.clientY-r.top; };
+  ED.canvas.onmousemove = function(e){ if(!ED.dragging) return; var r=ED.canvas.getBoundingClientRect(); var x=e.clientX-r.left,y=e.clientY-r.top; ED.offsetX+=x-ED.lastX; ED.offsetY+=y-ED.lastY; ED.lastX=x; ED.lastY=y; editorDraw(); };
+  ED.canvas.onmouseup = function(){ ED.dragging=false; };
+}
+
+function editorFitCanvas(){
+  var maxW=Math.min(window.innerWidth-32,480), maxH=Math.floor(window.innerHeight*0.52);
+  var iw=(ED.rotation%180===0)?ED.img.naturalWidth:ED.img.naturalHeight;
+  var ih=(ED.rotation%180===0)?ED.img.naturalHeight:ED.img.naturalWidth;
+  var ratio=Math.min(maxW/iw, maxH/ih, 1);
+  ED.canvas.width=Math.round(iw*ratio); ED.canvas.height=Math.round(ih*ratio);
+  ED.scale=ratio; ED.offsetX=0; ED.offsetY=0;
+}
+
+function editorDraw(){
+  var c=ED.canvas,ctx=ED.ctx,iw=ED.img.naturalWidth,ih=ED.img.naturalHeight;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.save();
+  ctx.translate(c.width/2+ED.offsetX, c.height/2+ED.offsetY);
+  ctx.rotate(ED.rotation*Math.PI/180);
+  ctx.scale(ED.flipH?-ED.scale:ED.scale, ED.flipV?-ED.scale:ED.scale);
+  ctx.drawImage(ED.img,-iw/2,-ih/2,iw,ih);
+  ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=0.5;
+  for(var i=1;i<3;i++){
+    ctx.beginPath();ctx.moveTo(c.width*i/3,0);ctx.lineTo(c.width*i/3,c.height);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,c.height*i/3);ctx.lineTo(c.width,c.height*i/3);ctx.stroke();
+  }
+}
+
+function editorRotate(deg){ ED.rotation=((ED.rotation+deg)%360+360)%360; editorFitCanvas(); editorDraw(); }
+function editorFlip(ax){ if(ax==='h') ED.flipH=!ED.flipH; else ED.flipV=!ED.flipV; editorDraw(); }
+function editorZoom(f){ ED.scale=Math.max(0.15,Math.min(6,ED.scale*f)); editorDraw(); }
+function editorReset(){ ED.rotation=0;ED.flipH=false;ED.flipV=false;ED.offsetX=0;ED.offsetY=0; editorFitCanvas(); editorDraw(); }
+
+function editorCancel(){
+  document.getElementById('img-editor').className='';
+  if(window._returnToEdit && window._uploadPolicyNo){
+    var pno=window._uploadPolicyNo;
+    window._returnToEdit=false;
+    window._uploadPolicyNo=null;
+    setTimeout(function(){ editPolicy(pno); },200);
+  }
+}
+
+// Compress any image dataURL to max 480px / JPEG 0.72
+function compressImage(dataURL, maxPx, quality, callback){
+  maxPx = maxPx || 480;
+  quality = quality || 0.72;
+  var img = new Image();
+  img.onload = function(){
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var longest = Math.max(w, h);
+    if(longest > maxPx){ var r=maxPx/longest; w=Math.round(w*r); h=Math.round(h*r); }
+    var c = document.createElement('canvas');
+    c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    callback(c.toDataURL('image/jpeg', quality));
+  };
+  img.src = dataURL;
+}
+
+
+function editorConfirm(){
+  // Compress to small size before saving to DB
+  // Max 480px on longest side, JPEG 0.72 quality → ~40-80KB per image
+  var MAX_PX = 480;
+  var QUALITY = 0.72;
+
+  var out = document.createElement('canvas');
+  var iw = ED.img.naturalWidth, ih = ED.img.naturalHeight;
+  var cw = ED.canvas.width, ch = ED.canvas.height;
+
+  // Determine output dimensions: cap at MAX_PX
+  var outW = cw, outH = ch;
+  var longest = Math.max(cw, ch);
+  if(longest > MAX_PX){
+    var ratio = MAX_PX / longest;
+    outW = Math.round(cw * ratio);
+    outH = Math.round(ch * ratio);
+  }
+  out.width = outW;
+  out.height = outH;
+
+  var octx = out.getContext('2d');
+  // Scale the drawing to fit output canvas
+  var drawScale = outW / cw;  // how much smaller we're drawing
+  octx.translate(outW/2 + ED.offsetX*drawScale, outH/2 + ED.offsetY*drawScale);
+  octx.rotate(ED.rotation * Math.PI / 180);
+  octx.scale(
+    (ED.flipH ? -ED.scale : ED.scale) * drawScale,
+    (ED.flipV ? -ED.scale : ED.scale) * drawScale
+  );
+  octx.drawImage(ED.img, -iw/2, -ih/2, iw, ih);
+
+  var dataURL = out.toDataURL('image/jpeg', QUALITY);
+
+  // Log approximate size for debugging
+  var sizeKB = Math.round(dataURL.length * 0.75 / 1024);
+  console.log('Card image saved: ' + outW + 'x' + outH + 'px, ~' + sizeKB + 'KB');
+
+  document.getElementById('img-editor').className = '';
+  if(ED.onConfirm) ED.onConfirm(dataURL);
+}
+
+
 function handleCardUpload(event){
   var policyNo = window._uploadPolicyNo;
   if(!policyNo) return;
   var file = event.target.files[0];
-  event.target.value = ''; // reset so same file can be picked again
+  event.target.value = '';
   if(!file) return;
   var reader = new FileReader();
   reader.onload = function(ev){
-    CARD_IMAGES[policyNo] = ev.target.result;
-    var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
-    if(pol) pol.cardImage = ev.target.result;
-    window._uploadPolicyNo = null;
+    var raw = ev.target.result;
+    var pno = policyNo;
+    var retEdit = window._returnToEdit;
     closeModal();
-    toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
-    renderInsurance();
+    setTimeout(function(){
+      openImageEditor(raw, pno, function(finalURL){
+        CARD_IMAGES[pno] = finalURL;
+        var pol = POLICIES_DEMO.find(function(p){return p.no===pno;});
+        if(pol) pol.cardImage = finalURL;
+        window._uploadPolicyNo = null;
+        window._returnToEdit = false;
+        toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
+        renderInsurance();
+        if(retEdit && pno) setTimeout(function(){ editPolicy(pno); }, 300);
+      });
+    }, 150);
   };
   reader.readAsDataURL(file);
 }
+
 
 
 // ── SAVE INSURANCE POLICY TO DB ─────────────────────────────
 async function saveInsurancePolicyToDB(pol){
   if(!sbAuth||S.demo) return false;
   try {
-    var db = getDbClient();
-    if(!db) return false;
+    // Use sbAuth directly with explicit schema for insurance policies
+    if(!sbAuth) return false;
+    var db = sbAuth;
     var pr = PROFILES.find(function(x){return x.name===pol.holder||x.dbId===pol.holderId;});
     var profileId = pr ? pr.dbId : null;
     var payload = {
@@ -2698,11 +2874,12 @@ async function saveInsurancePolicyToDB(pol){
       paid_year: pol.paidYear || null,
       holder_name: pol.holder || null,
       notes: pol.note || pol.notes || null,
+      card_image_url: pol.cardImage || CARD_IMAGES[pol.no] || null,
       updated_at: new Date().toISOString()
     };
     if(profileId) payload.profile_id = profileId;
     payload.owner_id = '05e2165e-a9e0-4bcd-b0a7-bb1858bd86de';
-    var { error } = await db.from('insurance_policies')
+    var { error } = await sbAuth.schema('healthvault').from('insurance_policies')
       .upsert(payload, { onConflict: 'policy_number' });
     if(error){ console.error('Save insurance error:', error); return false; }
     console.log('Policy saved to DB:', pol.no);
@@ -2714,19 +2891,18 @@ async function saveInsurancePolicyToDB(pol){
 async function savePaymentToDB(policyNo, year, paid){
   if(!sbAuth||S.demo) return false;
   try {
-    var db = getDbClient();
-    if(!db) return false;
+    if(!sbAuth) return false;
     var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
     var policyId = null;
-    // Get DB id for this policy
-    var { data } = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
+    // Get DB id for this policy using healthvault schema
+    var { data } = await sbAuth.schema('healthvault').from('insurance_policies').select('id').eq('policy_number',policyNo).single();
     if(data) policyId = data.id;
     if(!policyId) return false;
     // Update paid_year on main policy
-    await db.from('insurance_policies').update({paid_year: paid?year:year-1}).eq('id',policyId);
+    await sbAuth.schema('healthvault').from('insurance_policies').update({paid_year: paid?year:year-1}).eq('id',policyId);
     // Upsert premium_payments record
     if(paid){
-      await db.from('premium_payments').upsert({
+      await sbAuth.schema('healthvault').from('premium_payments').upsert({
         policy_id: policyId,
         payment_year: year,
         status: 'paid',
@@ -2734,7 +2910,7 @@ async function savePaymentToDB(policyNo, year, paid){
         amount_paid: pol ? pol.premium : null
       }, {onConflict:'policy_id,payment_year'});
     } else {
-      await db.from('premium_payments').upsert({
+      await sbAuth.schema('healthvault').from('premium_payments').upsert({
         policy_id: policyId,
         payment_year: year,
         status: 'pending'
@@ -2904,10 +3080,10 @@ function renderInsurance(){
     if(pol.note) html += '<div style="margin-top:8px;font-size:11px;color:var(--t3)">'+pol.note+'</div>';
 
     // Edit button
-    html += '<div style="display:flex;gap:6px;margin-top:10px">';
-    html += '<button class="btn btn-secondary btn-sm" onclick="editPolicy(&quot;'+pol.no+'&quot;)" style="flex:1;font-size:11px;padding:6px">&#x270F;&#xFE0F; '+(S.lang==='th'?'\u0E41\u0E01\u0E49\u0E44\u0E02':'Edit')+'</button>';
-    html += '<button class="btn btn-secondary btn-sm" onclick="uploadCardImage(&quot;'+pol.no+'&quot;)" style="font-size:14px;padding:6px 12px" title="'+(S.lang==='th'?'\u0E2D\u0E31\u0E1E\u0E42\u0E2B\u0E25\u0E14\u0E23\u0E39\u0E1B\u0E1A\u0E31\u0E15\u0E23':'Upload card photo')+'">&#x1F4F7;</button>';
-    if(pol.cardImage || CARD_IMAGES[pol.no]) html += '<button class="btn btn-secondary btn-sm" onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="font-size:14px;padding:6px 12px" title="'+(S.lang==='th'?'\u0E14\u0E39\u0E1A\u0E31\u0E15\u0E23':'View card')+'">&#x1F4B3;</button>';
+    html += '<div style="display:flex;gap:8px;margin-top:12px">';
+    html += '<button class="btn btn-secondary" onclick="editPolicy(&quot;'+pol.no+'&quot;)" style="flex:1;font-size:13px;padding:10px;font-weight:600">&#x270F;&#xFE0F; '+(S.lang==='th'?'\u0E41\u0E01\u0E49\u0E44\u0E02':'Edit')+'</button>';
+    html += '<button class="btn btn-secondary" onclick="uploadCardImage(&quot;'+pol.no+'&quot;)" style="font-size:16px;padding:10px 16px" title="'+(S.lang==='th'?'\u0E2D\u0E31\u0E1E\u0E42\u0E2B\u0E25\u0E14\u0E23\u0E39\u0E1B\u0E1A\u0E31\u0E15\u0E23':'Upload card photo')+'">&#x1F4F7;</button>';
+    if(pol.cardImage || CARD_IMAGES[pol.no]) html += '<button class="btn btn-secondary" onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="font-size:16px;padding:10px 14px">&#x1F4B3;</button>';
     html += '</div>';
     html += '</div>';
   });
@@ -3214,7 +3390,7 @@ function saveEditPolicyFull(policyNo){
   // Save to DB
   if(!S.demo && sbAuth){
     saveInsurancePolicyToDB(pol).then(function(ok){
-      toast(ok ? (S.lang==='th'?'บันทึกลง DB แล้ว ✓':'Saved to DB ✓') : (S.lang==='th'?'บันทึกในเครื่อง (ไม่ได้ sync)':'Saved locally only'));
+      toast(ok ? (S.lang==='th'?'บันทึกลง DB แล้ว ✓':'Saved to DB ✓') : (S.lang==='th'?'บันทึกไม่สำเร็จ กรุณาลองใหม่':'Save failed — please retry'));
       renderInsurance();
     });
   } else {
