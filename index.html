@@ -361,7 +361,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.5.0';
+var APP_VERSION = '2.5.1';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
@@ -886,8 +886,25 @@ var INSURANCE = [
 function prof(id){ return PROFILES.find(function(p){ return p.id===id; }); }
 function rec(id, yr){ return (HR[id]||{})[yr]; }
 function latestRec(id){
+  // Return latest year with MEANINGFUL health data (has weight OR cholesterol)
+  // Skip partial records (e.g. 2026 PSA-only recheck)
   var yrs = Object.keys(HR[id]||{}).map(Number).sort(function(a,b){return b-a;});
-  return yrs.length ? HR[id][yrs[0]] : null;
+  for(var i=0;i<yrs.length;i++){
+    var yr = yrs[i];
+    var r = HR[id][yr];
+    if(r && (r.weight||r.chol||r.ldl||r.hdl||r.sugar||r.hb)){
+      return Object.assign({year:yr}, r);  // attach year as property
+    }
+  }
+  if(yrs.length){ var y=yrs[0]; return Object.assign({year:y}, HR[id][y]); }
+  return null;
+}
+
+// Latest record of any kind including partial - for recent updates
+function latestRecAny(id){
+  var yrs = Object.keys(HR[id]||{}).map(Number).sort(function(a,b){return b-a;});
+  if(!yrs.length) return null;
+  return Object.assign({year:yrs[0]}, HR[id][yrs[0]]);
 }
 function years(id){ return Object.keys(HR[id]||{}).map(Number).sort(function(a,b){return a-b;}); }
 function bmi(w,h){ return (w&&h) ? (w/((h/100)*(h/100))).toFixed(1) : null; }
@@ -1373,7 +1390,12 @@ function renderDashboard(){
   html += '<div class="hero-meta">';
   html += '<span>&#x1FA78; Blood '+p.blood+'</span>';
   html += '<span>&#x1F3E5; '+p.hospital+'</span>';
-  if(r) html += '<span>&#x1F4C5; Last check '+fmtDate(r.date)+'</span>';
+  if(r) html += '<span>&#x1F4C5; '+(S.lang==='th'?'ตรวจล่าสุด':'Last check')+' '+fmtDate(r.date)+'</span>';
+  // Check for more recent partial updates (e.g. PSA recheck)
+  var rAny = latestRecAny(S.pid);
+  if(rAny && r && rAny.date !== r.date){
+    html += '<span style="color:var(--teal)">&#x1F4C5; '+(S.lang==='th'?'อัพเดทล่าสุด':'Latest update')+' '+fmtDate(rAny.date)+'</span>';
+  }
   html += '</div>';
   if(r){
     html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px;">';
@@ -1414,7 +1436,7 @@ function renderDashboard(){
 
   // Key Metrics
   if(r){
-    html += '<div class="sec">Key Results '+(Object.keys(HR[S.pid]).map(Number).sort(function(a,b){return b-a;})[0])+'</div>';
+    html += '<div class="sec">'+(S.lang==='th'?'ผลตรวจสำคัญ':'Key Results')+' '+r.year+'</div>';
     html += '<div class="mgrid">';
     html += metricCard('Cholesterol',r.chol,'mg/dL',r.chol>200?'var(--yellow)':'var(--green)',delta(r.chol,prevR&&prevR.chol,true));
     html += metricCard('LDL',r.ldl,'mg/dL',r.ldl>160?'var(--red)':r.ldl>130?'var(--yellow)':'var(--green)',delta(r.ldl,prevR&&prevR.ldl,true));
@@ -3133,14 +3155,8 @@ function renderInsurance(){
     
     // Header
     html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">';
-    // Policy card image thumbnail (if any)
-    if(pol.cardImage){
-      html += '<div onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="width:36px;height:36px;border-radius:10px;overflow:hidden;flex-shrink:0;cursor:pointer;border:2px solid rgba(255,255,255,.15)">';
-      html += '<img src="'+pol.cardImage+'" style="width:100%;height:100%;object-fit:cover">';
-      html += '</div>';
-    } else {
-      html += '<div style="width:36px;height:36px;border-radius:10px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
-    }
+    // Always show insurer badge (never replace with thumbnail)
+    html += '<div style="width:36px;height:36px;border-radius:10px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
     html += '<div style="flex:1">';
     html += '<div style="font-size:15px;font-weight:700;line-height:1.3">'+pol.name+'</div>';
     html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+pol.no+'</div>';
@@ -3178,13 +3194,20 @@ function renderInsurance(){
     // Riders
     if(pol.riders && pol.riders.length){
       html += '<div style="border-top:1px solid rgba(255,255,255,.07);padding-top:10px">';
+      // Card image strip — full width, shown ABOVE riders
+      var _cardImg = pol.cardImage || CARD_IMAGES[pol.no];
+      if(_cardImg){
+        html += '<div onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="width:100%;height:100px;border-radius:12px;overflow:hidden;cursor:pointer;margin-bottom:10px;border:1px solid rgba(255,255,255,.15);background:#0d0d1a">';
+        html += '<img src="'+_cardImg+'" style="width:100%;height:100%;object-fit:contain">';
+        html += '</div>';
+      }
       html += '<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">&#x1F4CB; '+(S.lang==='th'?'สัญญาเพิ่มเติม':'Riders / Benefits')+'</div>';
       pol.riders.forEach(function(r){
         var rColor = r.fromFirst&&!r.hasDeductible ? 'var(--green)' : 'var(--yellow)';
         html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">';
         html += '<div style="width:6px;height:6px;border-radius:50%;background:'+rColor+';flex-shrink:0"></div>';
         html += '<div style="flex:1"><div style="font-size:12px;color:var(--t1)">'+r.name+'</div>';
-        if(r.note) html += '<div style="font-size:10px;color:var(--red);margin-top:1px">&#x26A0;&#xFE0F; '+r.note+'</div>';
+        if(r.note){ var _n=(typeof r.note==='object')?(S.lang==='th'?(r.note.th||r.note.en):(r.note.en||r.note.th)):r.note; html += '<div style="font-size:10px;color:var(--red);margin-top:1px">&#x26A0;&#xFE0F; '+_n+'</div>'; }
         html += '</div>';
         var valStr = r.perDay ? r.perDay.toLocaleString()+'/วัน' : 
           (r.amount ? (r.amount>=10000 ? Math.round(r.amount/1000)+'K' : r.amount.toLocaleString()) : '');
