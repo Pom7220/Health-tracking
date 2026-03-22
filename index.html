@@ -321,7 +321,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.0.1';
+var APP_VERSION = '2.0.2';
 var APP_DATE = '22 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
@@ -860,13 +860,11 @@ function bmiLbl(b){
   return {t:'Obese (Thai)',c:'b-alert'};
 }
 function fmtDate(d){ try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }catch(e){return d;} }
-function fmtTHB(n){ return n ? n.toLocaleString()+' THB' : '-'; }
-function delta(cur, prev, lowerBetter){
-  if(cur==null||prev==null) return '';
-  var d=parseFloat(cur)-parseFloat(prev);
-  if(Math.abs(d)<0.01) return '<span class="same">&#8594; no change</span>';
-  var up=d>0, good=lowerBetter?!up:up;
-  return '<span class="'+(good?'dn':'up')+'">'+(up?'&#8593;':'&#8595;')+' '+Math.abs(d).toFixed(1)+'</span>';
+function fmtTHB(n){
+  if(!n) return '0';
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=10000) return (n/1000).toFixed(0)+'K';
+  return n.toLocaleString();  // < 10,000: show full number
 }
 function statusBadge(v, min, max, hiBetter){
   if(v==null||v===undefined||v==='') return '';
@@ -2030,7 +2028,7 @@ var POLICIES_DEMO = [
   { no:'AXA-CR-JG21', name:'AXA Group Health (Central Retail)', insurer:'AXA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'health', status:'active', startDate:'2025-06-01', endDate:'2026-05-31',
-    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:false,
     note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (Central Retail PCL)',
     riders:[
       {code:'AXA-ROOM', name:'IPD ค่าห้อง/วัน (Non-ICU)', cat:'ipd_room_board', perDay:10000, fromFirst:true, copay:0, note:'สูงสุด 365 วัน/ครั้ง'},
@@ -2047,7 +2045,7 @@ var POLICIES_DEMO = [
   { no:'87175879', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90', insurer:'TLI',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'active', startDate:'2025-06-03', endDate:'2060-06-03',
-    sumAssured:500000, premium:120492, dueMonth:6, paidYear:2025,
+    sumAssured:500000, premium:120492, selfPaid:true, dueMonth:6, paidYear:2025,
     riders:[
       {code:'HFD', name:'Health FitDD - ค่าห้อง/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
        hasDeductible:true, deductible:50000, copay:0,
@@ -2070,7 +2068,7 @@ var POLICIES_DEMO = [
   { no:'38006728', name:'ธนวี 25/15', insurer:'TLI',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'active', startDate:'2020-12-09', endDate:'2045-12-09',
-    sumAssured:300000, premium:31310, dueMonth:12, paidYear:2025,
+    sumAssured:300000, premium:31310, selfPaid:true, dueMonth:12, paidYear:2025,
     riders:[
       {code:'ทพ.', name:'ยกเว้นเบี้ยทุพพลภาพ', cat:'premium_waiver', amount:300000, fromFirst:true, copay:0},
       {code:'วพ.5', name:'สุขภาพ วีไอพี - ค่าห้อง/วัน (4,000)', cat:'ipd_room_board', perDay:4000, fromFirst:false,
@@ -2081,7 +2079,7 @@ var POLICIES_DEMO = [
   { no:'T222347172', name:'AIA Endowment 15/25', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'active', startDate:'2020-12-05', endDate:'2045-12-05',
-    sumAssured:450000, premium:null, dueMonth:12, paidYear:2025,
+    sumAssured:450000, premium:null, selfPaid:true, selfPaidNote:'ดูเพิ่มเติมใน AIA app', dueMonth:12, paidYear:2025,
     riders:[
       {code:'HB Extra', name:'Daily Hospital Cash 1,000/วัน', cat:'daily_hospital_cash', perDay:1000, fromFirst:true, copay:0},
       {code:'CI Plus', name:'โรคร้ายแรงระยะสุดท้าย', cat:'critical_illness_severe', amount:150000, fromFirst:true, copay:0},
@@ -2091,7 +2089,7 @@ var POLICIES_DEMO = [
   { no:'T211760692', name:'AIA CI SuperCare (10PAY)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'critical_illness', status:'active', startDate:'2018-08-11', endDate:'2069-08-11',
-    sumAssured:270000, premium:null, dueMonth:8, paidYear:2025,
+    sumAssured:270000, premium:null, selfPaid:true, selfPaidNote:'ดูเพิ่มเติมใน AIA app', dueMonth:8, paidYear:2025,
     riders:[
       {code:'10ACIEND', name:'โรคร้ายแรงระยะเริ่มต้น', cat:'critical_illness_early', amount:54000, fromFirst:true, copay:0},
     ]},
@@ -2099,7 +2097,7 @@ var POLICIES_DEMO = [
   { no:'T088858902', name:'20 Pay Life (Paid-up)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'paid_up', startDate:'2000-04-01', endDate:'2071-04-01',
-    sumAssured:300000, premium:0, dueMonth:null, paidYear:2025,
+    sumAssured:300000, premium:0, selfPaid:false, paidUp:true, dueMonth:null, paidYear:2025,
     note:'Paid-up — ชำระครบแล้ว ไม่ต้องจ่ายเบี้ยอีก',
     riders:[
       {code:'CI20PPN5', name:'โรคร้ายแรงระยะสุดท้าย', cat:'critical_illness_severe', amount:300000, fromFirst:true, copay:0},
@@ -2108,7 +2106,7 @@ var POLICIES_DEMO = [
   { no:'T081111701', name:'Paymaster 21 (Par)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'active', startDate:'1997-04-09', endDate:'2070-04-09',
-    sumAssured:420000, premium:null, dueMonth:4, paidYear:2025,
+    sumAssured:420000, premium:null, selfPaid:true, selfPaidNote:'ดูเพิ่มเติมใน AIA app', dueMonth:4, paidYear:2025,
     urgent:true, urgentMsg:'Payment due 9 Apr 2026',
     riders:[
       {code:'HSN5-ROOM', name:'HS1960 ค่าห้อง/วัน (1,200)', cat:'ipd_room_board', perDay:1200, fromFirst:true, copay:0},
@@ -2126,7 +2124,7 @@ var POLICIES_DEMO = [
   { no:'T198646567', name:'5PAY10 (Non-Par) — Matured', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'matured', startDate:'2010-12-19', endDate:'2020-12-19',
-    sumAssured:364000, premium:0, dueMonth:null, paidYear:null,
+    sumAssured:364000, premium:0, selfPaid:false, paidUp:false, dueMonth:null, paidYear:null,
     note:'ครบกำหนดแล้ว ธ.ค. 2020 — จ่ายเงินคืนแล้ว',
     riders:[]},
 
@@ -2134,7 +2132,7 @@ var POLICIES_DEMO = [
   { no:'0000135113-107', name:'AIA Group Health (LPP Property)', insurer:'AIA',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
     cat:'health', status:'active', startDate:'2025-04-01', endDate:'2026-03-31',
-    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:false,
     note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (LPP Property Management)',
     riders:[
       {code:'FCS', name:'IPD FCS ค่าห้อง/วัน (6,200)', cat:'ipd_room_board', perDay:6200, fromFirst:true, copay:0},
@@ -2146,7 +2144,7 @@ var POLICIES_DEMO = [
   { no:'87173691', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90 (Kate)', insurer:'TLI',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
     cat:'life', status:'active', startDate:'2025-06-03', endDate:'2063-06-03',
-    sumAssured:500000, premium:116675, dueMonth:6, paidYear:2025,
+    sumAssured:500000, premium:116675, selfPaid:true, dueMonth:6, paidYear:2025,
     note:'คุ้มครองสูงสุดตลอดกรมธรรม์ 5,000,000 บาท. เบี้ยเพิ่มขึ้นตามอายุทุกปี',
     riders:[
       {code:'HFD-K', name:'Health FitDD - ค่าห้องและอาหาร/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
@@ -2169,7 +2167,7 @@ var POLICIES_DEMO = [
   { no:'38006731', name:'ธนวี 25/15 (Kanokpai)', insurer:'TLI',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
     cat:'endowment', status:'active', startDate:'2020-12-09', endDate:'2045-12-09',
-    sumAssured:500000, premium:45978, dueMonth:12, paidYear:2025,
+    sumAssured:500000, premium:45978, selfPaid:true, dueMonth:12, paidYear:2025,
     riders:[
       {code:'ทพ.', name:'ยกเว้นเบี้ยทุพพลภาพ', cat:'premium_waiver', amount:500000, fromFirst:true, copay:0},
       {code:'วพ.5', name:'สุขภาพ วีไอพี - ค่าห้อง/วัน (4,000)', cat:'ipd_room_board', perDay:4000, fromFirst:false,
@@ -2180,7 +2178,7 @@ var POLICIES_DEMO = [
   { no:'T146163814', name:'AIA 9PAY18 (Par) — Kanokpai', insurer:'AIA',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
     cat:'endowment', status:'paid_up', startDate:'2008-12-26', endDate:'2026-12-26',
-    sumAssured:380000, premium:0, dueMonth:null, paidYear:2025,
+    sumAssured:380000, premium:0, selfPaid:false, paidUp:true, dueMonth:null, paidYear:2025,
     urgent:true, urgentMsg:'ครบกำหนด 26 ธ.ค. 2569 — ใกล้ครบกำหนด (Dec 2026)!',
     note:'Paid-up — ชำระครบแล้ว สิ้นสุด ธ.ค. 2569. Surrender value 461,773 THB.',
     riders:[]},
@@ -2189,7 +2187,7 @@ var POLICIES_DEMO = [
   { no:'GT000000407963088-D1', name:'ทิพยประกันชีวิต Plan 4 (Proud)', insurer:'DHIP',
     holder:'Pitchsinee', holderId:'cccccccc-0000-0000-0000-000000000003',
     cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
-    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:false,
     note:'Card No.6. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
     riders:[
       {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
@@ -2200,7 +2198,7 @@ var POLICIES_DEMO = [
   { no:'GT000000407963088-D2', name:'ทิพยประกันชีวิต Plan 4 (Peart)', insurer:'DHIP',
     holder:'Varannapas', holderId:'dddddddd-0000-0000-0000-000000000004',
     cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
-    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:false,
     note:'Card No.7. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
     riders:[
       {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
@@ -2307,7 +2305,7 @@ function renderInsurance(){
   POLICIES_DEMO.forEach(function(pol){
     if(S.insFilter!=='all'){var pr90=PROFILES.find(function(x){return x.id===S.insFilter;});if(!pr90||(pol.holder!==pr90.name&&pol.holderId!==pr90.dbId)) return;}
     if(pol.endDate&&(pol.status==='active'||pol.status==='paid_up')){var exp90=new Date(pol.endDate);if(exp90>=now90&&exp90<=in90d) premAlerts.push({t:'expire',pol:pol,days:Math.ceil((exp90-now90)/86400000)});}
-    if(pol.premium>0&&pol.dueMonth&&pol.status==='active'){var yr=now90.getFullYear(),due90=new Date(yr,pol.dueMonth-1,15);if(due90<now90)due90=new Date(yr+1,pol.dueMonth-1,15);if(due90<=in90d) premAlerts.push({t:'premium',pol:pol,days:Math.ceil((due90-now90)/86400000)});}
+    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'){var yr=now90.getFullYear(),due90=new Date(yr,pol.dueMonth-1,15);if(due90<now90)due90=new Date(yr+1,pol.dueMonth-1,15);if(due90<=in90d) premAlerts.push({t:'premium',pol:pol,days:Math.ceil((due90-now90)/86400000)});}
   });
   premAlerts.forEach(function(a){
     var c1=a.days<=30?'rgba(255,82,82,.1)':'rgba(255,183,77,.08)',c2=a.days<=30?'rgba(255,82,82,.3)':'rgba(255,183,77,.25)',c3=a.days<=30?'var(--red)':'var(--amber)';
@@ -2319,13 +2317,21 @@ function renderInsurance(){
   html+='<div class="card" style="background:rgba(156,127,224,.08);border-color:rgba(156,127,224,.2);margin-bottom:12px">';
   html+='<div style="font-size:12px;font-weight:700;color:var(--violet);margin-bottom:8px">&#x1F4B0; '+(S.lang==='th'?'เบี้ยประกันที่ต้องจ่ายเอง/ปี':'Annual Self-Pay Premiums')+'</div>';
   PROFILES.forEach(function(pr){
-    var pols=POLICIES_DEMO.filter(function(pol){return (pol.holder===pr.name||pol.holderId===pr.dbId)&&pol.premium>0&&pol.status==='active';});
+    var pols=POLICIES_DEMO.filter(function(pol){return (pol.holder===pr.name||pol.holderId===pr.dbId)&&pol.status==='active';});
     if(!pols.length) return;
-    var tot=pols.reduce(function(s,pol){return s+pol.premium;},0);
+    var selfPols=pols.filter(function(pol){return pol.selfPaid&&pol.premium>0;});
+    var freePols=pols.filter(function(pol){return pol.freePolicy||pol.selfPaid===false;});
+    var tot=selfPols.reduce(function(s,pol){return s+pol.premium;},0);
     html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
-    html+='<span style="font-size:12px;color:var(--t2)">'+pr.nick+'</span><span style="font-size:13px;font-weight:600">'+tot.toLocaleString()+' ฿</span></div>';
+    html+='<span style="font-size:12px;color:var(--t2)">'+pr.nick+'</span>';
+    if(tot>0){
+      html+='<span style="font-size:13px;font-weight:600">'+tot.toLocaleString()+' ฿</span>';
+    } else {
+      html+='<span style="font-size:12px;color:var(--green)">&#x1F3E2; '+(S.lang==='th'?'นายจ้างจ่าย':'Employer paid')+'</span>';
+    }
+    html+='</div>';
   });
-  var grandTot=POLICIES_DEMO.filter(function(pol){return pol.premium>0&&pol.status==='active';}).reduce(function(s,pol){return s+pol.premium;},0);
+  var grandTot=POLICIES_DEMO.filter(function(pol){return pol.selfPaid&&pol.premium>0&&pol.status==='active';}).reduce(function(s,pol){return s+pol.premium;},0);
   html+='<div style="display:flex;justify-content:space-between;padding-top:8px;font-size:15px;font-weight:700">';
   html+='<span>'+(S.lang==='th'?'รวมทั้งหมด':'Total')+'</span><span style="color:var(--teal)">'+grandTot.toLocaleString()+' ฿/ปี</span></div>';
   html+='</div>';
@@ -2360,6 +2366,7 @@ function renderInsurance(){
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
     if(pol.sumAssured) html += '<div style="background:rgba(0,0,0,.2);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">'+(S.lang==='th'?'ทุนประกัน':'Sum Assured')+'</div><div style="font-size:14px;font-weight:700;color:var(--blue)">'+(pol.sumAssured/1000).toFixed(0)+'K ฿</div></div>';
     if(pol.premium>0) html += '<div style="background:rgba(0,0,0,.2);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">'+(S.lang==='th'?'เบี้ยประกัน/ปี':'Annual Premium')+'</div><div style="font-size:14px;font-weight:700;color:var(--amber)">'+pol.premium.toLocaleString()+' ฿</div></div>';
+    else if(!pol.selfPaid&&pol.freePolicy) html += '<div style="background:rgba(105,240,174,.06);border-radius:9px;padding:9px"><div style="font-size:12px;color:var(--green)">&#x1F3E2; '+(S.lang==='th'?'นายจ้างจ่าย':'Employer pays')+'</div></div>';
     else if(pol.status==='paid_up') html += '<div style="background:rgba(79,195,247,.08);border-radius:9px;padding:9px"><div style="font-size:12px;color:var(--blue)">&#x2705; '+(S.lang==='th'?'ชำระครบแล้ว ไม่ต้องจ่ายเพิ่ม':'Paid-up, no more premium')+'</div></div>';
     if(pol.endDate) html += '<div style="background:rgba(0,0,0,.2);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">'+(S.lang==='th'?'สิ้นสุด':'Ends')+'</div><div style="font-size:13px;font-weight:600">'+pol.endDate.split('-')[0]+'</div></div>';
     if(pol.dueMonth) html += '<div style="background:rgba(0,0,0,.2);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">'+(S.lang==='th'?'ครบกำหนดชำระ':'Due')+'</div><div style="font-size:13px;font-weight:600">'+(S.lang==='th'?'เดือน':'Month ')+pol.dueMonth+'</div></div>';
@@ -2376,7 +2383,8 @@ function renderInsurance(){
         html += '<div style="flex:1"><div style="font-size:12px;color:var(--t1)">'+r.name+'</div>';
         if(r.note) html += '<div style="font-size:10px;color:var(--red);margin-top:1px">&#x26A0;&#xFE0F; '+r.note+'</div>';
         html += '</div>';
-        var valStr = r.perDay ? r.perDay.toLocaleString()+'/วัน' : (r.amount ? (r.amount/1000).toFixed(0)+'K' : '');
+        var valStr = r.perDay ? r.perDay.toLocaleString()+'/วัน' : 
+          (r.amount ? (r.amount>=10000 ? Math.round(r.amount/1000)+'K' : r.amount.toLocaleString()) : '');
         html += '<div style="font-size:13px;font-weight:700;color:'+rColor+'">'+valStr+'</div>';
         html += '</div>';
       });
