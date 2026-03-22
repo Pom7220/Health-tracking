@@ -321,7 +321,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '1.9.0';
+var APP_VERSION = '2.0.0';
 var APP_DATE = '22 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
@@ -1142,11 +1142,13 @@ function updateHeader(){
   var av = document.getElementById('hdr-av');
   av.className = 'av '+p.avCls;
   av.textContent = p.av;
-  document.getElementById('hdr-name').textContent = p.name;
+  document.getElementById('hdr-name').textContent = p.nick || p.name;
 }
 
 // ── TABS ─────────────────────────────────────────────
 function switchTab(tab){
+  // Reset insurance filter to 'all' when switching to insurance tab
+  if(tab==='insurance') S.insFilter='all';
   S.tab = tab;
   document.querySelectorAll('.tb').forEach(function(el){
     el.className = 'tb'+(el.dataset.pg===tab?' on':'');
@@ -1167,11 +1169,12 @@ function renderTab(tab){
 
 // ── PROFILE SWITCHER HTML ─────────────────────────────
 function pswHtml(){
-  // Health/Trends tabs: show only Pom (Rutchapon) and Kate (Kanokpai)
+  // Show Pom & Kate (main profiles with health data) for Health/Trends
+  var mainProfiles = PROFILES.slice(0,2);
   var html = '<div class="psw">';
-  PROFILES.slice(0,2).forEach(function(p){
+  mainProfiles.forEach(function(p){
     var on = p.id===S.pid ? (p.id==='kanokpai'?' on-k':' on-r') : '';
-    html += '<div class="pp'+on+'" onclick="selProfile(\''+p.id+'\')"><div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;display:flex;align-items:center;justify-content:center;margin-right:4px">'+p.av+'</div>'+p.nick+'</div>';
+    html += '<div class="pp'+on+'" onclick="switchProfile(\''+p.id+'\')"><div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;display:flex;align-items:center;justify-content:center;margin-right:4px">'+p.av+'</div>'+p.nick+'</div>';
   });
   html += '</div>';
   return html;
@@ -1225,7 +1228,7 @@ function renderDashboard(){
 
   // Hero
   html += '<div class="hero">';
-  html += '<div class="hero-name">'+p.name+'</div>';
+  html += '<div class="hero-name">'+(p.nick||p.name)+'</div>';
   html += '<div class="hero-meta">';
   html += '<span>&#x1FA78; Blood '+p.blood+'</span>';
   html += '<span>&#x1F3E5; '+p.hospital+'</span>';
@@ -1308,6 +1311,8 @@ function metricCard(lbl,val,unit,color,dlt){
 
 // ── HEALTH RECORDS ────────────────────────────────────
 function renderHealth(){
+  // Daughters don't have health records - fall back to Pom
+  if(S.pid==='phitchaya'||S.pid==='waranphas') S.pid='rutchapon';
   var yrs = years(S.pid);
   if(!yrs.includes(S.year)) S.year = yrs[yrs.length-1];
   var r = rec(S.pid, S.year);
@@ -1431,9 +1436,9 @@ function selYear(y){ S.year=y; renderHealth(); }
 function renderTrends(){
   var html = '<div class="fade">';
   html += '<div class="psw">';
-  PROFILES.forEach(function(p){
+  PROFILES.slice(0,2).forEach(function(p){
     var on = p.id===S.pid?(p.id==='kanokpai'?' on-k':' on-r'):'';
-    html += '<div class="pp'+on+'" onclick="switchProfile(\''+p.id+'\');renderTrends()"><div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;">'+p.av+'</div>'+p.name+'</div>';
+    html += '<div class="pp'+on+'" onclick="switchProfile(\''+p.id+'\');renderTrends()"><div class="av '+p.avCls+'" style="width:24px;height:24px;border-radius:8px;font-size:11px;">'+p.av+'</div>'+p.nick+'</div>';
   });
   html += '<div class="pp'+(S.pid==='compare'?' on-r':'')+'" onclick="S.pid=\'compare\';renderTrends()">&#x2696;&#xFE0F; Compare</div></div>';
 
@@ -1992,9 +1997,15 @@ var POLICIES_DEMO = [
       {code:'HFD', name:'Health FitDD - ค่าห้อง/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
        hasDeductible:true, deductible:50000, copay:0,
        note:'มีความรับผิดชอบส่วนแรก 50,000 บาท/ครั้ง (ต้องจ่ายเองก่อน)'},
-      {code:'HFD-MED', name:'Health FitDD - ค่ารักษาอื่นๆ', cat:'ipd_medical', amount:null, fromFirst:false,
-       hasDeductible:true, deductible:50000, note:'ตามจริง รวมใน deductible เดียวกัน'},
-      {code:'HFD-SURG', name:'Health FitDD - ค่าศัลยกรรม', cat:'ipd_surgery', amount:null, fromFirst:false,
+      {code:'HFD-MED', name:'ค่าบริการตรวจวินิจฉัย/บำบัดรักษา', cat:'ipd_medical', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง (รวมใน deductible เดียวกัน)'},
+      {code:'HFD-SURG', name:'ค่าศัลยกรรม/ห้องผ่าตัด/ยาสลบ', cat:'ipd_surgery', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง'},
+      {code:'HFD-DR', name:'แพทย์เยี่ยม/ปรึกษา 365 วัน/ครั้ง', cat:'opd_consult', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง'},
+      {code:'HFD-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'opd_general', amount:20000, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'20,000/ครั้ง สูงสุด 7 วัน'},
+      {code:'HFD-ER', name:'OPD ฉุกเฉิน ภายใน 24 ชม.', cat:'opd_accident', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
 
       {code:'อ.3', name:'ค่ารักษาอุบัติเหตุ', cat:'accident_medical', amount:10000, fromFirst:true, copay:0},
@@ -2077,17 +2088,27 @@ var POLICIES_DEMO = [
       {code:'WEC-DENTAL', name:'ทันตกรรม (X-ray/ถอน/ตรวจ)', cat:'ipd_medical', amount:20000, fromFirst:true, copay:0, note:'20,000/ปี/รายการ'},
     ]},
 
-  { no:'TLI-K-UWB', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90 (Kanokpai)', insurer:'TLI',
+  { no:'87173691', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90 (Kate)', insurer:'TLI',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
-    cat:'life', status:'active', startDate:'2025-06-03', endDate:'2060-06-03',
-    sumAssured:5000000, premium:null, dueMonth:6, paidYear:2025,
-    note:'5 ล้านบาท — ดูตารางเบี้ยรายปี (เพิ่มขึ้นตามอายุ)',
+    cat:'life', status:'active', startDate:'2025-06-03', endDate:'2063-06-03',
+    sumAssured:500000, premium:116675, dueMonth:6, paidYear:2025,
+    note:'คุ้มครองสูงสุดตลอดกรมธรรม์ 5,000,000 บาท. เบี้ยเพิ่มขึ้นตามอายุทุกปี',
     riders:[
-      {code:'HFD-K', name:'Health FitDD - ค่าห้อง/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
+      {code:'HFD-K', name:'Health FitDD - ค่าห้องและอาหาร/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
        hasDeductible:true, deductible:50000, copay:0,
-       note:'มีความรับผิดชอบส่วนแรก 50,000 บาท/ครั้ง (เหมือนของ Rutchapon)'},
-      {code:'HFD-K-MED', name:'Health FitDD - ค่ารักษาอื่นๆ', cat:'ipd_medical', amount:null, fromFirst:false,
+       note:'มีความรับผิดชอบส่วนแรก 50,000 บาท/ครั้ง — ต้องจ่ายก่อนถึงจะเบิกประกันได้'},
+      {code:'HFD-K-DIAG', name:'ค่าบริการตรวจวินิจฉัย/บำบัดรักษา', cat:'ipd_medical', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง (รวมใน deductible เดียวกัน)'},
+      {code:'HFD-K-SURG', name:'ค่าศัลยกรรม/ห้องผ่าตัด/ยาสลบ', cat:'ipd_surgery', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
+      {code:'HFD-K-DR', name:'แพทย์เยี่ยม/ปรึกษา', cat:'opd_consult', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง 365 วัน/ครั้ง'},
+      {code:'HFD-K-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'opd_general', amount:20000, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'20,000/ครั้ง สูงสุด 7 วัน'},
+      {code:'HFD-K-ER', name:'IPD ฉุกเฉิน OPD ภายใน 24 ชม.', cat:'opd_accident', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง'},
+      {code:'อ.1-K', name:'อุบัติเหตุเสียชีวิต/สูญเสียอวัยวะ', cat:'accident_death', amount:100000, fromFirst:true, copay:0},
+      {code:'อ.3-K', name:'ค่ารักษาอุบัติเหตุ', cat:'accident_medical', amount:10000, fromFirst:true, copay:0},
     ]},
 
   { no:'38006731', name:'ธนวี 25/15 (Kanokpai)', insurer:'TLI',
@@ -2187,7 +2208,9 @@ function getIPDAdvice(holderId){
 }
 
 function renderInsurance(){
-  var p = prof(S.pid);
+  // Sync filter: if coming from another tab, set filter to current person or 'all'
+  // Don't auto-sync to S.pid since insurance has its own filter logic
+  var p = prof(S.pid==='phitchaya'||S.pid==='waranphas' ? S.pid : S.pid);
   var myPolicies = POLICIES_DEMO.filter(function(pol){
     return S.insFilter==='all' ? true : (pol.holder===p.name || pol.holderId===p.dbId);
   });
@@ -2205,8 +2228,8 @@ function renderInsurance(){
   PROFILES.forEach(function(pr){
     html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
   });
-  html += '<div class="pp" onclick="openCoverageSummary()" style="padding:5px 12px;font-size:12px;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; '+( S.lang==='th'?'ภาพรวม ('+p.nick+')':'Summary ('+p.nick+')')+'</div>';
-  html += '<div class="pp" onclick="openIPDWorkflow()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,.1);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F3E5; '+(S.lang==='th'?'เข้าพักรักษา (IPD)':'Hospitalization')+'</div>';
+  html += '<div class="pp" onclick="openCoverageSummary()" style="padding:5px 12px;font-size:12px;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; ภาพรวม</div>';
+  html += '<div class="pp" onclick="openIPDWorkflow()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,.1);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F3E5; IPD</div>';
   html += '</div>';
 
   // ── 90-day alerts ─────────────────────────────────────────
@@ -2321,7 +2344,9 @@ function renderInsurance(){
 }
 
 function openCoverageSummary(){
-  var p = prof(S.pid);
+  // Use insFilter if set to specific person, else S.pid
+  var covProfileId = (S.insFilter!=='all') ? S.insFilter : S.pid;
+  var p = prof(covProfileId);
   var holderId = p.dbId;
   var sum = getCoverageSummary(holderId);
   
@@ -2391,7 +2416,8 @@ function openCoverageSummary(){
 }
 
 function openIPDWorkflow(){
-  var p = prof(S.pid);
+  var covProfileId2 = (S.insFilter!=='all') ? S.insFilter : S.pid;
+  var p = prof(covProfileId2);
   var advice = getIPDAdvice(p.dbId||'aaaaaaaa-0000-0000-0000-000000000001');
   
   var html = '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(S.lang==='th'?'บันทึกการเข้าพักรักษาตัว และรับคำแนะนำการใช้ประกัน':'Record hospitalization and get insurance utilization advice.')+'</div>';
