@@ -1,4 +1,9 @@
-<!DOCTYPE html>
+<!DOCTYP
+      HR['rutchapon'][2026] = {
+        date:'2026-01-24', age:55, hospital:'Praram 9',
+        psa:0.18, notes:'PSA recheck 24-Jan-2026: 0.18 ng/mL (prev 0.29 on 07-Sep-2025). DECREASED. Normal range 0-4.0. ดีมาก PSA ลดลง.'
+      };
+E html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -316,10 +321,10 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '1.7.0';
+var APP_VERSION = '1.8.0';
 var APP_DATE = '22 Mar 2026';
 
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'en' };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
 
 // ── DEMO DATA ────────────────────────────────────────
 
@@ -356,6 +361,14 @@ function updateLangBtn(){
 function t(en, th){
   return S.lang==='th' ? th : en;
 }
+
+// Return bilingual imaging text
+function imgText(val){
+  if(!val) return null;
+  if(typeof val === 'object') return S.lang==='th' ? (val.th||val.en) : (val.en||val.th);
+  return val; // plain string - same both langs
+}
+
 
 // UI string translations
 var UI = {
@@ -607,6 +620,13 @@ function advisorText(key){
 // ── IMAGING & CLINICAL NOTES ─────────────────────────────────
 var IMAGING = {
   rutchapon: {
+    2026: {
+      us_upper: null, us_lower: null, chest: null,
+      other: 'PSA recheck 24-Jan-2026 ที่ Praram 9',
+      flags: [
+        {icon:'OK', level:'ok', th:'PSA ลดลง: 0.18 (ลดจาก 0.29 เมื่อ ก.ย. 2568) — ดีมาก ต่อมลูกหมากปกติ', en:'PSA DECREASED: 0.18 (was 0.29 Sep 2025) — excellent, prostate normal'}
+      ]
+    },
     2021: {
       us_upper: 'Liver normal size and echo, no mass or bile duct dilatation. GB normal, no stone. Pancreas, spleen, both kidneys normal, no stone.',
       us_lower: null,
@@ -641,10 +661,10 @@ var IMAGING = {
       ]
     },
     2025: {
-      us_upper: 'Liver echo normal — fatty liver RESOLVED vs 2024. GB polyp 0.3cm — UNCHANGED, stable 2023-2025. Both kidneys, pancreas, spleen normal.',
+      us_upper: {th:'ตับ: เสียงสะท้อนปกติ — ไขมันพอกตับหายแล้ว (ดีขึ้นจากปี 2567). ติ่งเนื้อถุงน้ำดี 0.3 ซม. — คงเดิม 3 ปี. ไต ตับอ่อน ม้าม ปกติ', en:'Liver echo normal — fatty liver RESOLVED vs 2024. GB polyp 0.3cm — UNCHANGED, stable 2023-2025. Both kidneys, pancreas, spleen normal.'},
       us_lower: null,
-      chest: 'Normal. Compared 2024 — no change.',
-      other: 'LDL 171 high — see cardiologist. Eosinophil elevated allergy. GB polyp 0.3cm stable 3 years. Fatty liver improved.',
+      chest: {th:'ปกติ เทียบกับปี 2567 — ไม่เปลี่ยนแปลง', en:'Normal. Compared 2024 — no change.'},
+      other: {th:'LDL 171 สูง — แนะนำพบแพทย์โรคหัวใจ. อีโอซิโนฟิลสูง (ภูมิแพ้). ติ่งเนื้อถุงน้ำดี 0.3 ซม. คงเดิม 3 ปี. ไขมันพอกตับดีขึ้น.', en:'LDL 171 high — see cardiologist. Eosinophil elevated allergy. GB polyp 0.3cm stable 3 years. Fatty liver improved.'},
       flags: [
         {icon:'OK', level:'ok', th:'ไขมันพอกตับ หายแล้ว เทียบกับปี 2024 — ดีมาก', en:'Fatty liver RESOLVED vs 2024 — good improvement'},
         {icon:'WATCH', level:'watch', th:'ติ่งเนื้อถุงน้ำดี 0.3 ซม. — คงเดิม 3 ปี (2023-2025) ติดตามต่อ', en:'GB polyp 0.3cm — stable 3 years (2023-2025), continue monitoring'},
@@ -722,8 +742,10 @@ var IMAGING = {
 };
 
 var PROFILES = [
-  { id:'rutchapon', dbId:'aaaaaaaa-0000-0000-0000-000000000001', name:'Rutchapon', nick:'Pom', gender:'Male', blood:'O', dob:'1970-01-01', hospital:'Praram 9', avCls:'av-r', av:'R', color:'#4fc3f7' },
-  { id:'kanokpai',  dbId:'bbbbbbbb-0000-0000-0000-000000000002', name:'Kanokpai',  nick:'Nok', gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' }
+  { id:'rutchapon',   dbId:'aaaaaaaa-0000-0000-0000-000000000001', name:'Rutchapon',    nick:'Pom',   gender:'Male',   blood:'O', dob:'1970-01-01', hospital:'Praram 9',       avCls:'av-r', av:'R', color:'#4fc3f7' },
+  { id:'kanokpai',    dbId:'bbbbbbbb-0000-0000-0000-000000000002', name:'Kanokpai',     nick:'Nok',   gender:'Female', blood:'B', dob:'1973-01-01', hospital:'St. Louis / Rama 9', avCls:'av-k', av:'K', color:'#f06292' },
+  { id:'phitchaya',   dbId:'cccccccc-0000-0000-0000-000000000003', name:'Phitchayasinee', nick:'Petch', gender:'Female', blood:null, dob:'2000-01-01', hospital:'-',          avCls:'av-d1', av:'P', color:'#FFD700' },
+  { id:'waranphas',   dbId:'dddddddd-0000-0000-0000-000000000004', name:'Waranphas',    nick:'Nong',  gender:'Female', blood:null, dob:'2003-01-01', hospital:'-',          avCls:'av-d2', av:'W', color:'#FF69B4' }
 ];
 
 function calcAge(dob, atYear) {
@@ -1935,79 +1957,172 @@ function saveQuickVitals(){
 // ── INSURANCE DATA (loaded from DB or demo) ──────────────────
 // Extended structure with riders
 var INSURERS_DEMO = [
-  {code:'TLI', name:'ไทยประกันชีวิต', color:'#0066CC', hotline:'1124'},
-  {code:'AIA', name:'เอไอเอ ประเทศไทย', color:'#D4002B', hotline:'1581'},
+  {code:'TLI',  name:'ไทยประกันชีวิต', color:'#0066CC', hotline:'1124'},
+  {code:'AIA',  name:'เอไอเอ ประเทศไทย', color:'#D4002B', hotline:'1581'},
+  {code:'AXA',  name:'แอกซ่าประกันภัย', color:'#00008B', hotline:'1159'},
+  {code:'DHIP', name:'ทิพยประกันชีวิต', color:'#F5A623', hotline:'02-118-5555'},
 ];
 
 var POLICIES_DEMO = [
+  // ── RUTCHAPON ─────────────────────────────────────────────
+  { no:'AXA-CR-JG21', name:'AXA Group Health (Central Retail)', insurer:'AXA',
+    holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
+    cat:'health', status:'active', startDate:'2025-06-01', endDate:'2026-05-31',
+    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (Central Retail PCL)',
+    riders:[
+      {code:'AXA-ROOM', name:'IPD ค่าห้อง/วัน (Non-ICU)', cat:'ipd_room_board', perDay:10000, fromFirst:true, copay:0, note:'สูงสุด 365 วัน/ครั้ง'},
+      {code:'AXA-ICU',  name:'IPD ค่าห้อง ICU/วัน', cat:'ipd_room_board', perDay:20000, fromFirst:true, copay:0, note:'สูงสุด 21 วัน/ครั้ง'},
+      {code:'AXA-MISC', name:'ค่ารักษาพยาบาลอื่นๆ (Misc)', cat:'ipd_medical', amount:150000, fromFirst:true, copay:0},
+      {code:'AXA-SURG', name:'ค่าศัลยกรรม (No Schedule)', cat:'ipd_surgery', amount:150000, fromFirst:true, copay:0},
+      {code:'AXA-DR',   name:'แพทย์เยี่ยมในรพ./วัน', cat:'opd_consult', amount:4000, fromFirst:true, copay:0, note:'สูงสุด 365 วัน'},
+      {code:'AXA-SPEC', name:'ค่าปรึกษาผู้เชี่ยวชาญ', cat:'opd_consult', amount:8000, fromFirst:true, copay:0},
+      {code:'AXA-ER',   name:'OPD อุบัติเหตุฉุกเฉิน (72hr)', cat:'opd_accident', amount:10000, fromFirst:true, copay:0},
+      {code:'AXA-PA',   name:'อุบัติเหตุ ทุพพลภาพ เสียชีวิต', cat:'accident_death', amount:100000, fromFirst:true, copay:0},
+      {code:'AXA-FUNERAL', name:'ค่าเผา/ฝัง กรณีเสียชีวิต', cat:'accident_death', amount:50000, fromFirst:true, copay:0},
+    ]},
+
   { no:'87175879', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90', insurer:'TLI',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'active', startDate:'2025-06-03', endDate:'2060-06-03',
     sumAssured:500000, premium:120492, dueMonth:6, paidYear:2025,
     riders:[
+      {code:'HFD', name:'Health FitDD - ค่าห้อง/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
+       hasDeductible:true, deductible:50000, copay:0,
+       note:'มีความรับผิดชอบส่วนแรก 50,000 บาท/ครั้ง (ต้องจ่ายเองก่อน)'},
+      {code:'HFD-MED', name:'Health FitDD - ค่ารักษาอื่นๆ', cat:'ipd_medical', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง รวมใน deductible เดียวกัน'},
+      {code:'HFD-SURG', name:'Health FitDD - ค่าศัลยกรรม', cat:'ipd_surgery', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง'},
+      {code:'HFD-OPD', name:'Health FitDD - OPD สูงสุด 30 ครั้ง', cat:'opd_general', amount:null, fromFirst:false,
+       note:'5,000/8,000/10,000 ต่อปี เฉพาะอายุต่ำกว่า 8 ปี ไม่มีผลสำหรับผู้ใหญ่'},
       {code:'อ.3', name:'ค่ารักษาอุบัติเหตุ', cat:'accident_medical', amount:10000, fromFirst:true, copay:0},
       {code:'อ.1', name:'อุบัติเหตุเสียชีวิต/สูญเสียอวัยวะ', cat:'accident_death', amount:100000, fromFirst:true, copay:0},
-      {code:'HFD', name:'เฮลท์ ฟิต ดีดี - ค่าห้อง/วัน', cat:'ipd_room_board', perDay:3000, fromFirst:true, copay:0, copayPct:0,
-       note:'Copayment 0% รอบ 03 มิ.ย. 68-69'},
     ]},
+
   { no:'38006728', name:'ธนวี 25/15', insurer:'TLI',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'active', startDate:'2020-12-09', endDate:'2045-12-09',
     sumAssured:300000, premium:31310, dueMonth:12, paidYear:2025,
     riders:[
-      {code:'ทพ.', name:'ยกเว้นเบี้ยกรณีทุพพลภาพ', cat:'premium_waiver', amount:300000, fromFirst:true, copay:0},
-      {code:'วพ.5', name:'สุขภาพ วีไอพี - ค่าห้อง/วัน', cat:'ipd_room_board', perDay:4000, fromFirst:false,
+      {code:'ทพ.', name:'ยกเว้นเบี้ยทุพพลภาพ', cat:'premium_waiver', amount:300000, fromFirst:true, copay:0},
+      {code:'วพ.5', name:'สุขภาพ วีไอพี - ค่าห้อง/วัน (4,000)', cat:'ipd_room_board', perDay:4000, fromFirst:false,
        hasDeductible:true, deductible:20000, copay:0,
-       note:'มีความรับผิดชอบส่วนแรก 20,000 บาท (ผู้เอาประกันต้องจ่ายก่อน)'},
+       note:'มีความรับผิดชอบส่วนแรก 20,000 บาท/ครั้ง'},
     ]},
+
   { no:'T222347172', name:'AIA Endowment 15/25', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'active', startDate:'2020-12-05', endDate:'2045-12-05',
     sumAssured:450000, premium:null, dueMonth:12, paidYear:2025,
     riders:[
-      {code:'HB Extra', name:'Daily Hospital Cash', cat:'daily_hospital_cash', perDay:1000, fromFirst:true, copay:0},
-      {code:'CI Plus', name:'Severe Critical Illness', cat:'critical_illness_severe', amount:150000, fromFirst:true, copay:0},
-      {code:'CIPLUTUB', name:'Early Critical Illness', cat:'critical_illness_early', amount:60000, fromFirst:true, copay:0},
+      {code:'HB Extra', name:'Daily Hospital Cash 1,000/วัน', cat:'daily_hospital_cash', perDay:1000, fromFirst:true, copay:0},
+      {code:'CI Plus', name:'โรคร้ายแรงระยะสุดท้าย', cat:'critical_illness_severe', amount:150000, fromFirst:true, copay:0},
+      {code:'CIPLUTUB', name:'โรคร้ายแรงระยะเริ่มต้น', cat:'critical_illness_early', amount:60000, fromFirst:true, copay:0},
     ]},
+
   { no:'T211760692', name:'AIA CI SuperCare (10PAY)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'critical_illness', status:'active', startDate:'2018-08-11', endDate:'2069-08-11',
     sumAssured:270000, premium:null, dueMonth:8, paidYear:2025,
     riders:[
-      {code:'10ACIEND', name:'Early Critical Illness - โรคร้ายแรงระยะเริ่มต้น', cat:'critical_illness_early', amount:54000, fromFirst:true, copay:0},
+      {code:'10ACIEND', name:'โรคร้ายแรงระยะเริ่มต้น', cat:'critical_illness_early', amount:54000, fromFirst:true, copay:0},
     ]},
-  { no:'T088858902', name:'20 Pay Life (Par)', insurer:'AIA',
+
+  { no:'T088858902', name:'20 Pay Life (Paid-up)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'paid_up', startDate:'2000-04-01', endDate:'2071-04-01',
     sumAssured:300000, premium:0, dueMonth:null, paidYear:2025,
-    note:'Paid-up — ไม่ต้องชำระเบี้ยอีก',
+    note:'Paid-up — ชำระครบแล้ว ไม่ต้องจ่ายเบี้ยอีก',
     riders:[
-      {code:'CI20PPN5', name:'Severe Critical Illness - โรคร้ายแรง', cat:'critical_illness_severe', amount:300000, fromFirst:true, copay:0},
+      {code:'CI20PPN5', name:'โรคร้ายแรงระยะสุดท้าย', cat:'critical_illness_severe', amount:300000, fromFirst:true, copay:0},
     ]},
+
   { no:'T081111701', name:'Paymaster 21 (Par)', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'life', status:'active', startDate:'1997-04-09', endDate:'2070-04-09',
     sumAssured:420000, premium:null, dueMonth:4, paidYear:2025,
     urgent:true, urgentMsg:'Payment due 9 Apr 2026',
     riders:[
-      {code:'HSN5-ROOM', name:'HS1960 ค่าห้องและอาหาร/วัน', cat:'ipd_room_board', perDay:1200, fromFirst:true, copay:0},
-      {code:'HSN5-MED', name:'ค่ารักษาพยาบาลอื่นๆในรพ', cat:'ipd_medical', amount:18000, fromFirst:true, copay:0, note:'/admission'},
+      {code:'HSN5-ROOM', name:'HS1960 ค่าห้อง/วัน (1,200)', cat:'ipd_room_board', perDay:1200, fromFirst:true, copay:0},
+      {code:'HSN5-MED',  name:'ค่ารักษาพยาบาลอื่นๆในรพ', cat:'ipd_medical', amount:18000, fromFirst:true, copay:0, note:'/admission'},
       {code:'HSN5-SURG', name:'ค่าศัลยกรรม', cat:'ipd_surgery', amount:36000, fromFirst:true, copay:0},
-      {code:'HSN5-OR', name:'ค่าห้องผ่าตัด', cat:'ipd_surgery_room', amount:3500, fromFirst:true, copay:0},
-      {code:'HSN5-AN', name:'ค่ายาสลบ', cat:'ipd_anesthesia', amount:4500, fromFirst:true, copay:0},
-      {code:'HSN5-OPD', name:'OPD อุบัติเหตุ', cat:'opd_accident', amount:3000, fromFirst:true, copay:0},
-      {code:'HSN5-LAB', name:'Lab/X-ray OPD', cat:'opd_lab', amount:2500, fromFirst:true, copay:0},
-      {code:'HSN5-DR', name:'ค่าปรึกษาแพทย์', cat:'opd_consult', amount:600, fromFirst:true, copay:0},
-      {code:'HBN5', name:'ค่าชดเชยรายวัน Daily Cash', cat:'daily_hospital_cash', perDay:1200, fromFirst:true, copay:0},
+      {code:'HSN5-OR',   name:'ค่าห้องผ่าตัด', cat:'ipd_surgery_room', amount:3500, fromFirst:true, copay:0},
+      {code:'HSN5-AN',   name:'ค่ายาสลบ', cat:'ipd_anesthesia', amount:4500, fromFirst:true, copay:0},
+      {code:'HSN5-OPD',  name:'OPD อุบัติเหตุ', cat:'opd_accident', amount:3000, fromFirst:true, copay:0},
+      {code:'HSN5-LAB',  name:'Lab/X-ray OPD', cat:'opd_lab', amount:2500, fromFirst:true, copay:0},
+      {code:'HSN5-DR',   name:'ค่าปรึกษาแพทย์', cat:'opd_consult', amount:600, fromFirst:true, copay:0},
+      {code:'HBN5', name:'Daily Cash ค่าชดเชยรายวัน (1,200)', cat:'daily_hospital_cash', perDay:1200, fromFirst:true, copay:0},
       {code:'PCRIN7', name:'โรคมะเร็ง - Cancer CI', cat:'critical_illness_cancer', amount:500000, fromFirst:true, copay:0},
     ]},
-  { no:'T198646567', name:'5PAY10 (Non-Par)', insurer:'AIA',
+
+  { no:'T198646567', name:'5PAY10 (Non-Par) — Matured', insurer:'AIA',
     holder:'Rutchapon', holderId:'aaaaaaaa-0000-0000-0000-000000000001',
     cat:'endowment', status:'matured', startDate:'2010-12-19', endDate:'2020-12-19',
     sumAssured:364000, premium:0, dueMonth:null, paidYear:null,
-    note:'Matured Dec 2020 — กรมธรรม์ครบกำหนด จ่ายเงินคืนแล้ว',
+    note:'ครบกำหนดแล้ว ธ.ค. 2020 — จ่ายเงินคืนแล้ว',
     riders:[]},
+
+  // ── KANOKPAI ──────────────────────────────────────────────
+  { no:'0000135113-107', name:'AIA Group Health (LPP Property)', insurer:'AIA',
+    holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
+    cat:'health', status:'active', startDate:'2025-04-01', endDate:'2026-03-31',
+    sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (LPP Property Management)',
+    riders:[
+      {code:'FCS', name:'IPD FCS ค่าห้อง/วัน (6,200)', cat:'ipd_room_board', perDay:6200, fromFirst:true, copay:0},
+      {code:'WEC-ER', name:'ER อุบัติเหตุฉุกเฉิน', cat:'opd_accident', amount:7000, fromFirst:true, copay:0},
+      {code:'WEC-OPD', name:'OPD Credit', cat:'opd_general', amount:5000, fromFirst:true, copay:0},
+      {code:'WEC-DENTAL', name:'ทันตกรรม (X-ray/ถอน/ตรวจ)', cat:'ipd_medical', amount:20000, fromFirst:true, copay:0, note:'20,000/ปี/รายการ'},
+    ]},
+
+  { no:'TLI-K-UWB', name:'ทีแอล ยูนิเวอร์แซล ไลฟ์ 90/90 (Kanokpai)', insurer:'TLI',
+    holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
+    cat:'life', status:'active', startDate:'2025-06-03', endDate:'2060-06-03',
+    sumAssured:5000000, premium:null, dueMonth:6, paidYear:2025,
+    note:'5 ล้านบาท — ดูตารางเบี้ยรายปี (เพิ่มขึ้นตามอายุ)',
+    riders:[
+      {code:'HFD-K', name:'Health FitDD - ค่าห้อง/วัน (3,000)', cat:'ipd_room_board', perDay:3000, fromFirst:false,
+       hasDeductible:true, deductible:50000, copay:0,
+       note:'มีความรับผิดชอบส่วนแรก 50,000 บาท/ครั้ง (เหมือนของ Rutchapon)'},
+      {code:'HFD-K-MED', name:'Health FitDD - ค่ารักษาอื่นๆ', cat:'ipd_medical', amount:null, fromFirst:false,
+       hasDeductible:true, deductible:50000, note:'ตามจริง'},
+    ]},
+
+  { no:'38006731', name:'ธนวี 25/15 (Kanokpai)', insurer:'TLI',
+    holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
+    cat:'endowment', status:'active', startDate:'2020-12-09', endDate:'2045-12-09',
+    sumAssured:500000, premium:45978, dueMonth:12, paidYear:2025,
+    riders:[
+      {code:'ทพ.', name:'ยกเว้นเบี้ยทุพพลภาพ', cat:'premium_waiver', amount:500000, fromFirst:true, copay:0},
+      {code:'วพ.5', name:'สุขภาพ วีไอพี - ค่าห้อง/วัน (4,000)', cat:'ipd_room_board', perDay:4000, fromFirst:false,
+       hasDeductible:true, deductible:20000, copay:0,
+       note:'มีความรับผิดชอบส่วนแรก 20,000 บาท/ครั้ง'},
+    ]},
+
+  // ── DAUGHTER 1: Phitchayasinee ────────────────────────────
+  { no:'GT000000407963088-D1', name:'ทิพยประกันชีวิต Plan 4 (พิชญ์สินี)', insurer:'DHIP',
+    holder:'Phitchayasinee', holderId:'cccccccc-0000-0000-0000-000000000003',
+    cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
+    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    note:'Card No.6. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
+    riders:[
+      {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
+      {code:'DHIP-OPD', name:'OPD 1,500/ครั้ง สูงสุด 30 ครั้ง/ปี', cat:'opd_general', amount:1500, fromFirst:true, copay:0},
+    ]},
+
+  // ── DAUGHTER 2: Waranphas ─────────────────────────────────
+  { no:'GT000000407963088-D2', name:'ทิพยประกันชีวิต Plan 4 (วรัณภัส)', insurer:'DHIP',
+    holder:'Waranphas', holderId:'dddddddd-0000-0000-0000-000000000004',
+    cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
+    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true,
+    note:'Card No.7. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
+    riders:[
+      {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
+      {code:'DHIP-OPD', name:'OPD 1,500/ครั้ง สูงสุด 30 ครั้ง/ปี', cat:'opd_general', amount:1500, fromFirst:true, copay:0},
+    ]},
 ];
+
 
 // ── COVERAGE SUMMARY helper ───────────────────────────────────
 function getCoverageSummary(holderId){
@@ -2078,10 +2193,12 @@ function renderInsurance(){
   html += pswHtml();
 
   // Filter + Coverage Summary button
-  html += '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">';
-  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+tr('All Family')+'</div>';
-  html += '<div class="pp'+(S.insFilter==='own'?' on-r':'')+'" onclick="S.insFilter=\'own\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+p.av+' '+p.name+'</div>';
-  html += '<div class="pp" onclick="openCoverageSummary()" style="padding:5px 12px;font-size:12px;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; '+( S.lang==='th'?'ภาพรวมความคุ้มครอง':'Coverage Summary')+'</div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:4px 10px;font-size:11px">&#x1F46A; '+(S.lang==='th'?'ทั้งครอบครัว':'All Family')+'</div>';
+  PROFILES.forEach(function(pr){
+    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';renderInsurance()" style="padding:4px 10px;font-size:11px">'+pr.av+' '+pr.nick+'</div>';
+  });
+  html += '<div class="pp" onclick="openCoverageSummary()" style="padding:5px 12px;font-size:12px;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; '+( S.lang==='th'?'ภาพรวม ('+p.nick+')':'Summary ('+p.nick+')')+'</div>';
   html += '<div class="pp" onclick="openIPDWorkflow()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,.1);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F3E5; '+(S.lang==='th'?'เข้าพักรักษา (IPD)':'Hospitalization')+'</div>';
   html += '</div>';
 
