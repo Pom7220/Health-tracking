@@ -324,7 +324,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.3.0';
+var APP_VERSION = '2.3.1';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
@@ -1450,19 +1450,19 @@ function renderHealth(){
 
     // Lipids
     html += catSection('&#x1FA78; '+tr('Lipid Profile'), [
-      dataRow(tr('Total Cholesterol'),r.chol,'mg/dL',null,200,null,prev&&prev.chol,'chol'),
-      dataRow(tr('LDL Cholesterol'),r.ldl,'mg/dL',null,130,null,prev&&prev.ldl,'ldl'),
+      dataRow(tr('Total Cholesterol'),r.chol,'mg/dL',null,200,null,prev&&prev.chol,false,'chol'),
+      dataRow(tr('LDL Cholesterol'),r.ldl,'mg/dL',null,130,null,prev&&prev.ldl,false,'ldl'),
       dataRow(tr('HDL Cholesterol'),r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true,'hdl'),
-      dataRow(tr('Triglycerides'),r.trig,'mg/dL',null,150,null,prev&&prev.trig,'trig'),
-      dataRow(tr('Blood Sugar'),r.sugar,'mg/dL',70,99,null,prev&&prev.sugar,'sugar'),
+      dataRow(tr('Triglycerides'),r.trig,'mg/dL',null,150,null,prev&&prev.trig,false,'trig'),
+      dataRow(tr('Blood Sugar'),r.sugar,'mg/dL',70,99,null,prev&&prev.sugar,false,'sugar'),
       r.hba1c?dataRow('HbA1c',r.hba1c,'%',null,5.7,null,prev&&prev.hba1c):''
     ]);
 
     // CBC
     html += catSection('&#x1F52C; '+tr('Blood Count'), [
-      dataRow(tr('Hemoglobin'),r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb,'hb'),
-      dataRow(tr('Hematocrit'),r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct,'hct'),
-      dataRow(tr('WBC'),r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc,'wbc'),
+      dataRow(tr('Hemoglobin'),r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb,true,'hb'),
+      dataRow(tr('Hematocrit'),r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct,true,'hct'),
+      dataRow(tr('WBC'),r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc,false,'wbc'),
       dataRow(tr('Neutrophil'),r.neut,'%',41,70,null,prev&&prev.neut),
       dataRow(tr('Lymphocyte'),r.lymph,'%',19,47,null,prev&&prev.lymph),
       dataRow(tr('Eosinophil'),r.eos,'%',0,5,null,prev&&prev.eos),
@@ -1471,18 +1471,18 @@ function renderHealth(){
 
     // Kidney
     html += catSection('&#x1FAD8; '+tr('Kidney Function'), [
-      dataRow(tr('Creatinine'),r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat,'creat'),
+      dataRow(tr('Creatinine'),r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat,false,'creat'),
       dataRow(tr('eGFR'),r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true,'egfr'),
-      dataRow(tr('BUN'),r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
-      dataRow(tr('Uric Acid'),r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric,'uric')
+      dataRow(tr('BUN'),r.bun,'mg/dL',7,18.7,null,prev&&prev.bun,false,'bun'),
+      dataRow(tr('Uric Acid'),r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric,false,'uric')
     ]);
 
     // Liver
     html += catSection('&#x1FAC0; '+tr('Liver Function'), [
-      dataRow(tr('SGOT (AST)'),r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot,'sgot'),
-      dataRow(tr('SGPT (ALT)'),r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt,'sgpt'),
+      dataRow(tr('SGOT (AST)'),r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot,false,'sgot'),
+      dataRow(tr('SGPT (ALT)'),r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt,false,'sgpt'),
       dataRow(tr('ALP'),r.alp,'U/L',40,150,null,prev&&prev.alp),
-      r.afp?dataRow(tr('AFP (Liver marker)'),r.afp,'ng/mL',0,13.6,null,prev&&prev.afp):'',
+      r.afp?dataRow(tr('AFP (Liver marker)'),r.afp,'ng/mL',0,13.6,null,prev&&prev.afp,false,'afp'):'',
       r.cea?dataRow(tr('CEA (Colon marker)'),r.cea,'ng/mL',0,4.3,null,prev&&prev.cea):'',
       (r.psa&&male)?dataRow(tr('PSA (Prostate)'),r.psa,'ng/mL',0,4,null,prev&&prev.psa):''
     ]);
@@ -2469,38 +2469,40 @@ function showCardImage(policyNo){
 
 function uploadCardImage(policyNo){
   var th = S.lang==='th';
-  // Show choice: camera or gallery
-  var html = '<div style="text-align:center;padding:10px 0">';
-  html += '<div style="font-size:14px;color:var(--t2);margin-bottom:20px">'+(th?'เลือกวิธีอัพโหลดรูปบัตรประกัน':'Choose how to upload the insurance card')+'</div>';
-  html += '<div style="display:flex;gap:12px;justify-content:center">';
-  html += '<button class="btn btn-primary" onclick="doUploadCard(\''+policyNo+'\',\'camera\')" style="flex:1;padding:20px 10px;font-size:16px;border-radius:16px">';
-  html += '&#x1F4F7;<br><span style="font-size:12px;margin-top:6px;display:block">'+(th?'ถ่ายรูป':'Take Photo')+'</span></button>';
-  html += '<button class="btn btn-secondary" onclick="doUploadCard(\''+policyNo+'\',\'gallery\')" style="flex:1;padding:20px 10px;font-size:16px;border-radius:16px">';
-  html += '&#x1F5BC;&#xFE0F;<br><span style="font-size:12px;margin-top:6px;display:block">'+(th?'เลือกจากรูปภาพ':'Photo Library')+'</span></button>';
-  html += '</div><div style="height:10px"></div></div>';
+  // Use <label> wrapping <input> — preserves iOS user gesture, no JS click() needed
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:14px;color:var(--t2);margin-bottom:18px">'+(th?'เลือกวิธีอัพโหลดรูปบัตรประกัน':'Choose how to upload the insurance card')+'</div>';
+  html += '<div style="display:flex;gap:14px">';
+
+  // Take Photo (camera)
+  html += '<label style="flex:1;cursor:pointer;display:block">';
+  html += '<div class="btn btn-primary" style="padding:18px 8px;font-size:22px;border-radius:16px;text-align:center;pointer-events:none">';
+  html += '&#x1F4F7;<div style="font-size:13px;margin-top:8px;font-weight:600">'+(th?'ถ่ายรูป':'Take Photo')+'</div></div>';
+  html += '<input type="file" accept="image/*" capture="environment" style="position:absolute;opacity:0;width:0;height:0" onchange="handleCardUpload(event,\''+policyNo+'\')"></label>';
+
+  // Photo Library
+  html += '<label style="flex:1;cursor:pointer;display:block">';
+  html += '<div class="btn btn-secondary" style="padding:18px 8px;font-size:22px;border-radius:16px;text-align:center;pointer-events:none">';
+  html += '&#x1F5BC;&#xFE0F;<div style="font-size:13px;margin-top:8px;font-weight:600">'+(th?'คลังรูปภาพ':'Photo Library')+'</div></div>';
+  html += '<input type="file" accept="image/*" style="position:absolute;opacity:0;width:0;height:0" onchange="handleCardUpload(event,\''+policyNo+'\')"></label>';
+
+  html += '</div><div style="height:8px"></div></div>';
   openModal(th?'อัพโหลดรูปบัตรประกัน':'Upload Card Photo', html);
 }
 
-function doUploadCard(policyNo, mode){
-  closeModal();
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  if(mode==='camera') input.setAttribute('capture','environment');
-  input.onchange = function(e){
-    var file = e.target.files[0];
-    if(!file) return;
-    var reader = new FileReader();
-    reader.onload = function(ev){
-      CARD_IMAGES[policyNo] = ev.target.result;
-      var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
-      if(pol) pol.cardImage = ev.target.result;
-      toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
-      renderInsurance();
-    };
-    reader.readAsDataURL(file);
+function handleCardUpload(event, policyNo){
+  var file = event.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    CARD_IMAGES[policyNo] = ev.target.result;
+    var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+    if(pol) pol.cardImage = ev.target.result;
+    closeModal();
+    toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
+    renderInsurance();
   };
-  input.click();
+  reader.readAsDataURL(file);
 }
 
 
