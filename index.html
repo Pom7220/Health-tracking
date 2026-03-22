@@ -269,8 +269,10 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
 </div>
 
 <!-- MODAL -->
+<input type="file" id="upload-cam" accept="image/*" capture="environment" style="display:none" onchange="handleCardUpload(event)">
+<input type="file" id="upload-gal" accept="image/*" style="display:none" onchange="handleCardUpload(event)">
 <div id="modal" onclick="closeModal(event)">
-  <div class="modal-sheet">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title" id="modal-title"></span>
@@ -324,7 +326,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.3.1';
+var APP_VERSION = '2.3.3';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
@@ -1652,7 +1654,38 @@ function renderTrends(){
 
     html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Weight (kg)</div><div class="chart-wrap"><canvas id="c-weight"></canvas></div></div>';
     html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Blood Sugar (mg/dL)</div><div class="chart-wrap"><canvas id="c-sugar"></canvas></div></div>';
-    html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">Kidney Function &mdash; eGFR</div><div class="chart-wrap"><canvas id="c-egfr"></canvas></div></div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E44ตและเหมาะประยาจ &mdash; eGFR':'Kidney Function &mdash; eGFR')+'</div><div class="chart-wrap"><canvas id="c-egfr"></canvas></div></div>';
+
+    // Blood Pressure
+    if(recs.some(function(r){return r.sbp||r.bp_sys;}))
+      html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px" id="chart-bp">'+(S.lang==='th'?'\u0E04วามดันโลหิต':'Blood Pressure (mmHg)')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--t2)"><span style="color:#ff5252">&#9679;</span> Systolic</span><span style="font-size:11px;color:var(--t2)"><span style="color:#4fc3f7">&#9679;</span> Diastolic</span></div><div class="chart-wrap"><canvas id="c-bp"></canvas></div></div>';
+
+    // Triglycerides
+    html += '<div class="card" id="chart-trig"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E44ตรกลีเซอร์ไดด์':'Triglycerides (mg/dL)')+'</div><div class="chart-wrap"><canvas id="c-trig"></canvas></div></div>';
+
+    // Hemoglobin + Hematocrit (combined)
+    if(recs.some(function(r){return r.hb||r.hct;}))
+      html += '<div class="card" id="chart-hb"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E2Eีโมโกลบิน &amp; \u0E2Eีมาโตคริต':'Hemoglobin &amp; Hematocrit')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--t2)"><span style="color:#ef5350">&#9679;</span> Hb (g/dL)</span><span style="font-size:11px;color:var(--t2)"><span style="color:#ff8a65">&#9679;</span> Hct (%)</span></div><div class="chart-wrap"><canvas id="c-hb"></canvas></div></div>';
+
+    // WBC
+    if(recs.some(function(r){return r.wbc;}))
+      html += '<div class="card" id="chart-wbc"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E40ม็ดเลือดขาว':'WBC (cells/mm³)')+'</div><div class="chart-wrap"><canvas id="c-wbc"></canvas></div></div>';
+
+    // Creatinine
+    if(recs.some(function(r){return r.creat;}))
+      html += '<div class="card" id="chart-creat"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E04รีอะตินีน':'Creatinine (mg/dL)')+'</div><div class="chart-wrap"><canvas id="c-creat"></canvas></div></div>';
+
+    // Uric Acid
+    if(recs.some(function(r){return r.uric;}))
+      html += '<div class="card" id="chart-uric"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E22ูริกอาซิด':'Uric Acid (mg/dL)')+'</div><div class="chart-wrap"><canvas id="c-uric"></canvas></div></div>';
+
+    // Liver enzymes SGOT/SGPT
+    if(recs.some(function(r){return r.sgot||r.sgpt;}))
+      html += '<div class="card" id="chart-liver"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E15ับ &mdash; \u0E40อนไซม์':'Liver Enzymes SGOT / SGPT')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--t2)"><span style="color:#ffb74d">&#9679;</span> SGOT</span><span style="font-size:11px;color:var(--t2)"><span style="color:#ff7043">&#9679;</span> SGPT</span></div><div class="chart-wrap"><canvas id="c-liver"></canvas></div></div>';
+
+    // PSA (male only)
+    if(p.gender==='Male' && recs.some(function(r){return r.psa;}))
+      html += '<div class="card" id="chart-psa"><div style="font-size:14px;font-weight:600;margin-bottom:10px">PSA '+(S.lang==='th'?'(\u0E15่อมลูกหมาก)':'(Prostate)')+'</div><div class="chart-wrap"><canvas id="c-psa"></canvas></div></div>';
 
     // AI Insight
     html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; AI Health Insight</div>'+aiInsight(S.pid, recs)+'</div>';
@@ -2004,6 +2037,138 @@ function drawCharts(pid){
       }}
     },
     scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:150}}
+  }});
+
+  // BLOOD PRESSURE
+  el=document.getElementById('c-bp');
+  var bpr=recs.filter(function(r){return r.sbp||r.bp_sys;});
+  if(el&&bpr.length) S.charts.bp=new Chart(el,{type:'line',data:{
+    labels:bpr.map(function(r){return r.year.toString();}),
+    datasets:[
+      {label:'Systolic',data:bpr.map(function(r){return r.sbp||r.bp_sys;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:4,fill:false},
+      {label:'Diastolic',data:bpr.map(function(r){return r.dbp||r.bp_dia;}),borderColor:'#4fc3f7',backgroundColor:'rgba(79,195,247,.1)',tension:.4,pointRadius:4,fill:false}
+    ]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        bpSys:{type:'line',yMin:120,yMax:120,borderColor:'rgba(255,82,82,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <120',display:true,position:'end',color:'rgba(255,82,82,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        bpDia:{type:'line',yMin:80,yMax:80,borderColor:'rgba(79,195,247,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <80',display:true,position:'start',color:'rgba(79,195,247,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:50,max:180}}
+  }});
+
+  // TRIGLYCERIDES
+  el=document.getElementById('c-trig');
+  if(el) S.charts.trig=new Chart(el,{type:'line',data:{
+    labels:labels,datasets:[{data:recs.map(function(r){return r.trig;}),borderColor:'#ce93d8',backgroundColor:'rgba(206,147,216,.12)',tension:.4,pointRadius:4,fill:true}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{trigRef:{type:'line',yMin:150,yMax:150,borderColor:'rgba(255,183,77,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'Max normal 150',display:true,position:'end',color:'rgba(255,183,77,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}}}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0}}
+  }});
+
+  // HEMOGLOBIN + HEMATOCRIT (dual Y-axis)
+  el=document.getElementById('c-hb');
+  var hbr=recs.filter(function(r){return r.hb||r.hct;});
+  if(el&&hbr.length) S.charts.hb=new Chart(el,{type:'line',data:{
+    labels:hbr.map(function(r){return r.year.toString();}),
+    datasets:[
+      {label:'Hb',data:hbr.map(function(r){return r.hb;}),borderColor:'#ef5350',backgroundColor:'rgba(239,83,80,.1)',tension:.4,pointRadius:4,fill:false,yAxisID:'y'},
+      {label:'Hct',data:hbr.map(function(r){return r.hct;}),borderColor:'#ff8a65',backgroundColor:'rgba(255,138,101,.1)',tension:.4,pointRadius:4,fill:false,borderDash:[4,4],yAxisID:'y1'}
+    ]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1}},
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},
+      y:{position:'left',title:{display:true,text:'Hb (g/dL)',color:'rgba(255,255,255,.4)',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(239,83,80,.7)',font:{size:10}},min:8,max:20},
+      y1:{position:'right',title:{display:true,text:'Hct (%)',color:'rgba(255,255,255,.4)',font:{size:9}},grid:{display:false},ticks:{color:'rgba(255,138,101,.7)',font:{size:10}},min:25,max:60}
+    }
+  }});
+
+  // WBC
+  el=document.getElementById('c-wbc');
+  var wr2=recs.filter(function(r){return r.wbc;});
+  if(el&&wr2.length) S.charts.wbc=new Chart(el,{type:'bar',data:{
+    labels:wr2.map(function(r){return r.year.toString();}),
+    datasets:[{data:wr2.map(function(r){return r.wbc;}),
+      backgroundColor:wr2.map(function(r){return r.wbc>=4000&&r.wbc<=10000?'rgba(105,240,174,.5)':'rgba(255,82,82,.5)';}),
+      borderColor:wr2.map(function(r){return r.wbc>=4000&&r.wbc<=10000?'#69f0ae':'#ff5252';}),
+      borderWidth:2,borderRadius:6}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        wbcMax:{type:'line',yMin:10000,yMax:10000,borderColor:'rgba(255,82,82,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Max 10,000',display:true,position:'end',color:'rgba(255,82,82,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        wbcMin:{type:'line',yMin:4000,yMax:4000,borderColor:'rgba(105,240,174,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Min 4,000',display:true,position:'start',color:'rgba(105,240,174,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0}}
+  }});
+
+  // CREATININE
+  el=document.getElementById('c-creat');
+  var cr=recs.filter(function(r){return r.creat;});
+  var male2=p.gender==='Male';
+  if(el&&cr.length) S.charts.creat=new Chart(el,{type:'line',data:{
+    labels:cr.map(function(r){return r.year.toString();}),
+    datasets:[{data:cr.map(function(r){return r.creat;}),borderColor:'#26d9b0',backgroundColor:'rgba(38,217,176,.12)',tension:.4,pointRadius:4,fill:true}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        crMax:{type:'line',yMin:male2?1.2:1.0,yMax:male2?1.2:1.0,borderColor:'rgba(255,183,77,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'Max '+(male2?'1.2':'1.0'),display:true,position:'end',color:'rgba(255,183,77,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:2.5}}
+  }});
+
+  // URIC ACID
+  el=document.getElementById('c-uric');
+  var ur=recs.filter(function(r){return r.uric;});
+  if(el&&ur.length) S.charts.uric=new Chart(el,{type:'line',data:{
+    labels:ur.map(function(r){return r.year.toString();}),
+    datasets:[{data:ur.map(function(r){return r.uric;}),borderColor:'#aed581',backgroundColor:'rgba(174,213,129,.12)',tension:.4,pointRadius:4,fill:true}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        uricMax:{type:'line',yMin:male2?7.0:6.0,yMax:male2?7.0:6.0,borderColor:'rgba(255,183,77,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'Max '+(male2?'7.0':'6.0')+' (Gout risk)',display:true,position:'end',color:'rgba(255,183,77,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:10}}
+  }});
+
+  // LIVER ENZYMES (SGOT/SGPT)
+  el=document.getElementById('c-liver');
+  var lr=recs.filter(function(r){return r.sgot||r.sgpt;});
+  if(el&&lr.length) S.charts.liver=new Chart(el,{type:'line',data:{
+    labels:lr.map(function(r){return r.year.toString();}),
+    datasets:[
+      {label:'SGOT',data:lr.map(function(r){return r.sgot;}),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,.1)',tension:.4,pointRadius:4,fill:false},
+      {label:'SGPT',data:lr.map(function(r){return r.sgpt;}),borderColor:'#ff7043',backgroundColor:'rgba(255,112,67,.1)',tension:.4,pointRadius:4,fill:false,borderDash:[4,4]}
+    ]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+      annotation:{annotations:{
+        sgotRef:{type:'line',yMin:male2?40:32,yMax:male2?40:32,borderColor:'rgba(255,183,77,.4)',borderWidth:1.5,borderDash:[6,4],label:{content:'SGOT max '+(male2?40:32),display:true,position:'start',color:'rgba(255,183,77,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+        sgptRef:{type:'line',yMin:male2?41:33,yMax:male2?41:33,borderColor:'rgba(255,112,67,.4)',borderWidth:1.5,borderDash:[6,4],label:{content:'SGPT max '+(male2?41:33),display:true,position:'end',color:'rgba(255,112,67,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0}}
+  }});
+
+  // PSA (male only)
+  el=document.getElementById('c-psa');
+  var pr=recs.filter(function(r){return r.psa;});
+  if(el&&pr.length) S.charts.psa=new Chart(el,{type:'line',data:{
+    labels:pr.map(function(r){return r.year.toString();}),
+    datasets:[{data:pr.map(function(r){return r.psa;}),borderColor:'#80cbc4',backgroundColor:'rgba(128,203,196,.12)',tension:.4,pointRadius:5,pointHoverRadius:7,fill:true}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,callbacks:{label:function(ctx){return 'PSA: '+ctx.raw+' ng/mL';}}},
+      annotation:{annotations:{
+        psaRef:{type:'line',yMin:4,yMax:4,borderColor:'rgba(255,82,82,.5)',borderWidth:1.5,borderDash:[6,4],label:{content:'Max normal 4.0',display:true,position:'end',color:'rgba(255,82,82,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+      }}
+    },
+    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:6}}
   }});
 }
 
@@ -2468,36 +2633,36 @@ function showCardImage(policyNo){
 }
 
 function uploadCardImage(policyNo){
+  // Store policyNo for the hidden inputs to use
+  window._uploadPolicyNo = policyNo;
   var th = S.lang==='th';
-  // Use <label> wrapping <input> — preserves iOS user gesture, no JS click() needed
-  var html = '<div style="text-align:center;padding:8px 0">';
-  html += '<div style="font-size:14px;color:var(--t2);margin-bottom:18px">'+(th?'เลือกวิธีอัพโหลดรูปบัตรประกัน':'Choose how to upload the insurance card')+'</div>';
+  var html = '<div style="text-align:center;padding:8px 0 16px">';
+  html += '<div style="font-size:14px;color:var(--t2);margin-bottom:20px">';
+  html += (th?'เลือกวิธีอัพโหลดรูปบัตรประกัน':'Choose how to upload')+'</div>';
   html += '<div style="display:flex;gap:14px">';
-
-  // Take Photo (camera)
-  html += '<label style="flex:1;cursor:pointer;display:block">';
-  html += '<div class="btn btn-primary" style="padding:18px 8px;font-size:22px;border-radius:16px;text-align:center;pointer-events:none">';
-  html += '&#x1F4F7;<div style="font-size:13px;margin-top:8px;font-weight:600">'+(th?'ถ่ายรูป':'Take Photo')+'</div></div>';
-  html += '<input type="file" accept="image/*" capture="environment" style="position:absolute;opacity:0;width:0;height:0" onchange="handleCardUpload(event,\''+policyNo+'\')"></label>';
-
-  // Photo Library
-  html += '<label style="flex:1;cursor:pointer;display:block">';
-  html += '<div class="btn btn-secondary" style="padding:18px 8px;font-size:22px;border-radius:16px;text-align:center;pointer-events:none">';
-  html += '&#x1F5BC;&#xFE0F;<div style="font-size:13px;margin-top:8px;font-weight:600">'+(th?'คลังรูปภาพ':'Photo Library')+'</div></div>';
-  html += '<input type="file" accept="image/*" style="position:absolute;opacity:0;width:0;height:0" onchange="handleCardUpload(event,\''+policyNo+'\')"></label>';
-
-  html += '</div><div style="height:8px"></div></div>';
+  // Use buttons that trigger the REAL hidden inputs on the page (not inside modal)
+  html += '<button class="btn btn-primary" style="flex:1;padding:18px 8px;font-size:22px;border-radius:16px" ';
+  html += 'onclick="event.stopPropagation();document.getElementById(\'upload-cam\').click()">';
+  html += '&#x1F4F7;<div style="font-size:13px;margin-top:8px">'+(th?'ถ่ายรูป':'Take Photo')+'</div></button>';
+  html += '<button class="btn btn-secondary" style="flex:1;padding:18px 8px;font-size:22px;border-radius:16px" ';
+  html += 'onclick="event.stopPropagation();document.getElementById(\'upload-gal\').click()">';
+  html += '&#x1F5BC;&#xFE0F;<div style="font-size:13px;margin-top:8px">'+(th?'คลังรูปภาพ':'Photo Library')+'</div></button>';
+  html += '</div></div>';
   openModal(th?'อัพโหลดรูปบัตรประกัน':'Upload Card Photo', html);
 }
 
-function handleCardUpload(event, policyNo){
+function handleCardUpload(event){
+  var policyNo = window._uploadPolicyNo;
+  if(!policyNo) return;
   var file = event.target.files[0];
+  event.target.value = ''; // reset so same file can be picked again
   if(!file) return;
   var reader = new FileReader();
   reader.onload = function(ev){
     CARD_IMAGES[policyNo] = ev.target.result;
     var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
     if(pol) pol.cardImage = ev.target.result;
+    window._uploadPolicyNo = null;
     closeModal();
     toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
     renderInsurance();
