@@ -321,7 +321,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.0.0';
+var APP_VERSION = '2.0.1';
 var APP_DATE = '22 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
@@ -1148,7 +1148,7 @@ function updateHeader(){
 // ── TABS ─────────────────────────────────────────────
 function switchTab(tab){
   // Reset insurance filter to 'all' when switching to insurance tab
-  if(tab==='insurance') S.insFilter='all';
+  if(tab==='insurance'){ S.insFilter='all'; setTimeout(function(){ updateInsHeader(); },50); }
   S.tab = tab;
   document.querySelectorAll('.tb').forEach(function(el){
     el.className = 'tb'+(el.dataset.pg===tab?' on':'');
@@ -1410,6 +1410,61 @@ function renderHealth(){
     });
   } else {
     html += '<div class="notice">No major visits in '+S.year+'.</div>';
+  }
+
+
+  // ── IMAGING, ULTRASOUND & CLINICAL NOTES ─────────────────
+  var img = (IMAGING[S.pid]||{})[S.year]||{};
+
+  if(img.flags && img.flags.length){
+    html += '<div style="margin-top:14px">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">&#x1F6A9; '+(S.lang==='th'?'สิ่งที่ต้องติดตาม':'Findings to Monitor')+'</div>';
+    img.flags.forEach(function(f){
+      var fbg=f.level==='urgent'?'rgba(255,82,82,.12)':f.level==='warn'?'rgba(255,183,77,.1)':f.level==='ok'?'rgba(105,240,174,.1)':'rgba(79,195,247,.08)';
+      var fbc=f.level==='urgent'?'rgba(255,82,82,.35)':f.level==='warn'?'rgba(255,183,77,.3)':f.level==='ok'?'rgba(105,240,174,.3)':'rgba(79,195,247,.25)';
+      var ffc=f.level==='urgent'?'var(--red)':f.level==='warn'?'var(--yellow)':f.level==='ok'?'var(--green)':'var(--blue)';
+      var ficon=f.level==='urgent'?'&#x1F534;':f.level==='warn'?'&#x26A0;&#xFE0F;':f.level==='ok'?'&#x2705;':'&#x1F535;';
+      html += '<div style="background:'+fbg+';border:1px solid '+fbc+';border-radius:12px;padding:10px 14px;margin-bottom:6px;display:flex;gap:10px;align-items:flex-start">';
+      html += '<div style="font-size:16px;flex-shrink:0">'+ficon+'</div>';
+      html += '<div style="font-size:14px;color:'+ffc+';line-height:1.6">'+(S.lang==='th'?f.th:f.en)+'</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Ultrasound findings
+  if(img.us_upper || img.us_lower){
+    html += '<div style="border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:14px;margin-top:10px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">&#x1F50D; '+(S.lang==='th'?'ผลอัลตราซาวด์':'Ultrasound Findings')+'</div>';
+    if(img.us_upper){
+      html += '<div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px">'+(S.lang==='th'?'ช่องท้องส่วนบน:':'Upper Abdomen:')+'</div>';
+      var usUpTxt = (typeof img.us_upper==='object') ? (S.lang==='th'?img.us_upper.th:img.us_upper.en) : img.us_upper;
+      html += '<div style="font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:10px">'+usUpTxt+'</div>';
+    }
+    if(img.us_lower){
+      html += '<div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px">'+(S.lang==='th'?'ช่องท้องส่วนล่าง:':'Lower Abdomen:')+'</div>';
+      var usLoTxt = (typeof img.us_lower==='object') ? (S.lang==='th'?img.us_lower.th:img.us_lower.en) : img.us_lower;
+      html += '<div style="font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:6px">'+usLoTxt+'</div>';
+    }
+    html += '</div>';
+  }
+
+  // Chest X-ray
+  if(img.chest){
+    html += '<div style="border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:12px 14px;margin-top:8px">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:4px">&#x1FAB8; '+(S.lang==='th'?'เอกซเรย์ทรวงอก:':'Chest X-ray:')+'</div>';
+    var chTxt = (typeof img.chest==='object') ? (S.lang==='th'?img.chest.th:img.chest.en) : img.chest;
+    html += '<div style="font-size:14px;color:var(--t2);line-height:1.6">'+chTxt+'</div>';
+    html += '</div>';
+  }
+
+  // Doctor notes / other observations
+  if(img.other){
+    html += '<div style="border-radius:14px;background:rgba(156,127,224,.06);border:1px solid rgba(156,127,224,.15);padding:12px 14px;margin-top:8px">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--violet);margin-bottom:4px">&#x1F4CB; '+(S.lang==='th'?'บันทึกแพทย์และข้อสังเกต:':'Doctor Notes & Observations:')+'</div>';
+    var otTxt = (typeof img.other==='object') ? (S.lang==='th'?img.other.th:img.other.en) : img.other;
+    html += '<div style="font-size:14px;color:var(--t2);line-height:1.7">'+otTxt+'</div>';
+    html += '</div>';
   }
 
   html += '<div style="height:10px"></div></div>';
@@ -2207,12 +2262,26 @@ function getIPDAdvice(holderId){
   return {useFirst:useFirst, useSecond:useSecond, dailyCash:dailyCash};
 }
 
+
+// Update top header when insurance filter changes
+function updateInsHeader(){
+  var ip = S.insFilter==='all' ? PROFILES[0] : (PROFILES.find(function(x){return x.id===S.insFilter;})||PROFILES[0]);
+  var av = document.getElementById('hdr-av');
+  if(av){ av.className='av '+ip.avCls; av.textContent=ip.av; }
+  var nm = document.getElementById('hdr-name');
+  if(nm) nm.textContent = S.insFilter==='all' ? (S.lang==='th'?'ทั้งครอบครัว':'All Family') : (ip.nick||ip.name);
+}
 function renderInsurance(){
   // Sync filter: if coming from another tab, set filter to current person or 'all'
   // Don't auto-sync to S.pid since insurance has its own filter logic
-  var p = prof(S.pid==='phitchaya'||S.pid==='waranphas' ? S.pid : S.pid);
+  // Derive display profile from S.insFilter (not S.pid which is for health tabs)
+  var insProfileId = S.insFilter==='all' ? 'rutchapon' : S.insFilter;
+  var p = prof(insProfileId);
   var myPolicies = POLICIES_DEMO.filter(function(pol){
-    return S.insFilter==='all' ? true : (pol.holder===p.name || pol.holderId===p.dbId);
+    if(S.insFilter==='all') return true;
+    var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
+    if(!fp) return true;
+    return pol.holder===fp.name || pol.holderId===fp.dbId;
   });
   
   // Sort: active first, paid_up second, matured last
@@ -2224,9 +2293,9 @@ function renderInsurance(){
   var html = '<div class="fade">';
   // Filter + Coverage Summary button
   html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
-  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(S.lang==='th'?'ทั้งหมด':'All')+'</div>';
+  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';updateInsHeader();renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(S.lang==='th'?'ทั้งหมด':'All')+'</div>';
   PROFILES.forEach(function(pr){
-    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
+    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';updateInsHeader();renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
   });
   html += '<div class="pp" onclick="openCoverageSummary()" style="padding:5px 12px;font-size:12px;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; ภาพรวม</div>';
   html += '<div class="pp" onclick="openIPDWorkflow()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,.1);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F3E5; IPD</div>';
