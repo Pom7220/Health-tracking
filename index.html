@@ -324,10 +324,10 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.2.2';
+var APP_VERSION = '2.3.0';
 var APP_DATE = '22 Mar 2026 fix';
 
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
 
 // ── DEMO DATA ────────────────────────────────────────
 
@@ -1429,7 +1429,7 @@ function renderHealth(){
 
   // Year pills
   html += '<div class="ypills">';
-  yrs.forEach(function(y){ html += '<div class="yp'+(y===S.year?' on':'')+'" onclick="selYear('+y+')">'+y+'</div>'; });
+  yrs.slice().reverse().forEach(function(y){ html += '<div class="yp'+(y===S.year?' on':'')+'" onclick="selYear('+y+')">'+y+'</div>'; });
   html += '</div>';
 
   if(!r){
@@ -1450,19 +1450,19 @@ function renderHealth(){
 
     // Lipids
     html += catSection('&#x1FA78; '+tr('Lipid Profile'), [
-      dataRow(tr('Total Cholesterol'),r.chol,'mg/dL',null,200,null,prev&&prev.chol),
-      dataRow(tr('LDL Cholesterol'),r.ldl,'mg/dL',null,130,null,prev&&prev.ldl),
-      dataRow(tr('HDL Cholesterol'),r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true),
-      dataRow(tr('Triglycerides'),r.trig,'mg/dL',null,150,null,prev&&prev.trig),
-      dataRow(tr('Blood Sugar'),r.sugar,'mg/dL',70,99,null,prev&&prev.sugar),
+      dataRow(tr('Total Cholesterol'),r.chol,'mg/dL',null,200,null,prev&&prev.chol,'chol'),
+      dataRow(tr('LDL Cholesterol'),r.ldl,'mg/dL',null,130,null,prev&&prev.ldl,'ldl'),
+      dataRow(tr('HDL Cholesterol'),r.hdl,'mg/dL',50,999,null,prev&&prev.hdl,true,'hdl'),
+      dataRow(tr('Triglycerides'),r.trig,'mg/dL',null,150,null,prev&&prev.trig,'trig'),
+      dataRow(tr('Blood Sugar'),r.sugar,'mg/dL',70,99,null,prev&&prev.sugar,'sugar'),
       r.hba1c?dataRow('HbA1c',r.hba1c,'%',null,5.7,null,prev&&prev.hba1c):''
     ]);
 
     // CBC
     html += catSection('&#x1F52C; '+tr('Blood Count'), [
-      dataRow(tr('Hemoglobin'),r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb),
-      dataRow(tr('Hematocrit'),r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct),
-      dataRow(tr('WBC'),r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc),
+      dataRow(tr('Hemoglobin'),r.hb,'g/dL',male?13.0:11.5,male?17.0:15.0,'Thai ref',prev&&prev.hb,'hb'),
+      dataRow(tr('Hematocrit'),r.hct,'%',male?38:35,male?50:45,'Thai ref',prev&&prev.hct,'hct'),
+      dataRow(tr('WBC'),r.wbc,'cells/mm3',4000,10000,'Thai ref',prev&&prev.wbc,'wbc'),
       dataRow(tr('Neutrophil'),r.neut,'%',41,70,null,prev&&prev.neut),
       dataRow(tr('Lymphocyte'),r.lymph,'%',19,47,null,prev&&prev.lymph),
       dataRow(tr('Eosinophil'),r.eos,'%',0,5,null,prev&&prev.eos),
@@ -1471,16 +1471,16 @@ function renderHealth(){
 
     // Kidney
     html += catSection('&#x1FAD8; '+tr('Kidney Function'), [
-      dataRow(tr('Creatinine'),r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat),
-      dataRow(tr('eGFR'),r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true),
+      dataRow(tr('Creatinine'),r.creat,'mg/dL',0.55,1.02,null,prev&&prev.creat,'creat'),
+      dataRow(tr('eGFR'),r.egfr,'ml/min',60,999,null,prev&&prev.egfr,true,'egfr'),
       dataRow(tr('BUN'),r.bun,'mg/dL',7,18.7,null,prev&&prev.bun),
-      dataRow(tr('Uric Acid'),r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric)
+      dataRow(tr('Uric Acid'),r.uric,'mg/dL',male?3.5:2.5,male?7.0:6.0,'Thai ref',prev&&prev.uric,'uric')
     ]);
 
     // Liver
     html += catSection('&#x1FAC0; '+tr('Liver Function'), [
-      dataRow(tr('SGOT (AST)'),r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot),
-      dataRow(tr('SGPT (ALT)'),r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt),
+      dataRow(tr('SGOT (AST)'),r.sgot,'U/L',0,male?40:32,null,prev&&prev.sgot,'sgot'),
+      dataRow(tr('SGPT (ALT)'),r.sgpt,'U/L',0,male?41:33,null,prev&&prev.sgpt,'sgpt'),
       dataRow(tr('ALP'),r.alp,'U/L',40,150,null,prev&&prev.alp),
       r.afp?dataRow(tr('AFP (Liver marker)'),r.afp,'ng/mL',0,13.6,null,prev&&prev.afp):'',
       r.cea?dataRow(tr('CEA (Colon marker)'),r.cea,'ng/mL',0,4.3,null,prev&&prev.cea):'',
@@ -1583,6 +1583,19 @@ function catSection(title, rows){
 }
 
 // Year-on-year delta arrow
+
+// Navigate from health row to Trends tab for that metric
+function drillToTrends(metric){
+  S.drillMetric = metric;
+  switchTab('trends');
+  renderTab('trends');
+  // Scroll to the chart after a brief delay
+  setTimeout(function(){
+    var el = document.getElementById('chart-'+metric);
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 300);
+}
+
 function delta(curr, prev, lowerIsBetter){
   if(curr==null||curr===undefined||prev==null||prev===undefined) return '';
   var diff = parseFloat(curr) - parseFloat(prev);
@@ -1596,12 +1609,14 @@ function delta(curr, prev, lowerIsBetter){
   return '<span style="color:'+color+';font-size:11px">'+arrow+' '+dispDiff+'</span>';
 }
 
-function dataRow(name,val,unit,min,max,normalTxt,prevVal,hiBetter){
+function dataRow(name,val,unit,min,max,normalTxt,prevVal,hiBetter,metric){
   if(val==null||val===undefined||val==='') return '';
   var badge=statusBadge(val,min,max,hiBetter);
   var dlt=prevVal!=null?delta(val,prevVal,!hiBetter):'';
   var nr=normalTxt||(min!==null&&min!==undefined&&max!==999&&max!==null&&max!==undefined?min+'-'+max:'');
-  return '<div class="dr"><div><div class="dr-name">'+name+'</div><div class="dr-normal">'+(nr?nr+' '+unit:'')+'</div></div><div class="dr-right"><div class="dr-val">'+val+' <span style="font-size:10px;color:var(--t3)">'+unit+'</span></div><div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px">'+badge+dlt+'</div></div></div>';
+  var clickable = metric ? ' onclick="drillToTrends(&quot;'+metric+'&quot;)" style="cursor:pointer" title="'+(S.lang==='th'?'\u0E41\u0E15\u0E30\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E41\u0E19\u0E27\u0E42\u0E19\u0E49\u0E21':'Tap to see trend')+'"' : '';
+  var trendIcon = metric ? ' <span style="font-size:9px;color:var(--blue);opacity:.6">&#x1F4C8;</span>' : '';
+  return '<div class="dr"'+clickable+'><div><div class="dr-name">'+name+trendIcon+'</div><div class="dr-normal">'+(nr?nr+' '+unit:'')+'</div></div><div class="dr-right"><div class="dr-val">'+val+' <span style="font-size:10px;color:var(--t3)">'+unit+'</span></div><div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px">'+badge+dlt+'</div></div></div>';
 }
 
 function selYear(y){ S.year=y; renderHealth(); }
@@ -2381,6 +2396,12 @@ function getIPDAdvice(holderId){
       if(r.cat==='daily_hospital_cash') dailyCash.push({pol:pol, rider:r});
     });
   });
+  // Sort step 2 by deductible amount ascending (use lowest deductible first)
+  useSecond.sort(function(a,b){
+    var da = (a.rider.deductible||999999);
+    var db = (b.rider.deductible||999999);
+    return da - db;
+  });
   return {useFirst:useFirst, useSecond:useSecond, dailyCash:dailyCash};
 }
 
@@ -2447,19 +2468,34 @@ function showCardImage(policyNo){
 }
 
 function uploadCardImage(policyNo){
+  var th = S.lang==='th';
+  // Show choice: camera or gallery
+  var html = '<div style="text-align:center;padding:10px 0">';
+  html += '<div style="font-size:14px;color:var(--t2);margin-bottom:20px">'+(th?'เลือกวิธีอัพโหลดรูปบัตรประกัน':'Choose how to upload the insurance card')+'</div>';
+  html += '<div style="display:flex;gap:12px;justify-content:center">';
+  html += '<button class="btn btn-primary" onclick="doUploadCard(\''+policyNo+'\',\'camera\')" style="flex:1;padding:20px 10px;font-size:16px;border-radius:16px">';
+  html += '&#x1F4F7;<br><span style="font-size:12px;margin-top:6px;display:block">'+(th?'ถ่ายรูป':'Take Photo')+'</span></button>';
+  html += '<button class="btn btn-secondary" onclick="doUploadCard(\''+policyNo+'\',\'gallery\')" style="flex:1;padding:20px 10px;font-size:16px;border-radius:16px">';
+  html += '&#x1F5BC;&#xFE0F;<br><span style="font-size:12px;margin-top:6px;display:block">'+(th?'เลือกจากรูปภาพ':'Photo Library')+'</span></button>';
+  html += '</div><div style="height:10px"></div></div>';
+  openModal(th?'อัพโหลดรูปบัตรประกัน':'Upload Card Photo', html);
+}
+
+function doUploadCard(policyNo, mode){
+  closeModal();
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
+  if(mode==='camera') input.setAttribute('capture','environment');
   input.onchange = function(e){
     var file = e.target.files[0];
     if(!file) return;
     var reader = new FileReader();
     reader.onload = function(ev){
       CARD_IMAGES[policyNo] = ev.target.result;
-      // Also update the policy object
       var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
       if(pol) pol.cardImage = ev.target.result;
-      toast(S.lang==='th'?'อัพโหลดรูปบัตรแล้ว ✓':'Card image uploaded ✓');
+      toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
       renderInsurance();
     };
     reader.readAsDataURL(file);
@@ -2825,13 +2861,24 @@ function openIPDWorkflow(){
   });
 
   if(advice.useSecond.length){
-    html += '<div style="font-size:12px;margin:10px 0 8px;color:var(--t1)"><b>'+(S.lang==='th'?'ขั้นตอนที่ 2 — ใช้ TLI หลังจากครบ Deductible':'Step 2 — Use TLI after deductible is met')+'</b></div>';
+    html += '<div style="font-size:12px;margin:10px 0 8px;color:var(--t1)"><b>'+(S.lang==='th'?'ขั้นตอนที่ 2 — ใช้ TLI หลังจากครบ Deductible':'Step 2 — Use TLI after deductible (lowest deductible first)')+'</b></div>';
+    // Group step2 by policy, sorted by lowest deductible first
+    var s2g={};
     advice.useSecond.forEach(function(x){
-      html += '<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px;color:var(--t2)">';
-      html += '<span style="color:var(--yellow)">&#x26A0;&#xFE0F;</span>';
-      html += '<div><b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name;
-      if(x.rider.deductible) html += '<div style="color:var(--red);font-size:11px">ต้องจ่ายส่วนแรก '+x.rider.deductible.toLocaleString()+' ฿ ก่อน จึงจะเบิกได้</div>';
-      html += '</div></div>';
+      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,riders:[],minDed:x.rider.deductible||999999};
+      s2g[x.pol.no].riders.push(x.rider);
+      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
+    });
+    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
+      var g=s2g[key],ded=g.minDed<999999?g.minDed:null,th2=S.lang==='th';
+      html+='<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.25);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">';
+      html+='<span>&#x26A0;&#xFE0F;</span><b style="font-size:13px">'+g.pol.insurer+' '+g.pol.no+'</b>';
+      if(ded) html+='<span style="font-size:10px;background:rgba(255,82,82,.25);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
+      html+='</div>';
+      g.riders.forEach(function(r){html+='<div style="font-size:12px;color:var(--t2);padding:2px 0 2px 22px">• '+r.name+'</div>';});
+      if(ded) html+='<div style="font-size:11px;color:var(--red);margin-top:5px;padding-left:22px">➡️ '+(th2?'ต้องจ่ายส่วนแรก '+ded.toLocaleString()+' ฿ ก่อน จึงจะเบิกได้':'Pay '+ded.toLocaleString()+' ฿ deductible first, then claim')+'</div>';
+      html+='</div>';
     });
   }
   html += '</div>';
