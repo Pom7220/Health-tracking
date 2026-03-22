@@ -324,7 +324,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.1.0';
+var APP_VERSION = '2.1.1';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
@@ -2040,10 +2040,13 @@ function saveQuickVitals(){
 // ── INSURANCE DATA (loaded from DB or demo) ──────────────────
 // Extended structure with riders
 var INSURERS_DEMO = [
-  {code:'TLI',  name:'ไทยประกันชีวิต', color:'#0066CC', hotline:'1124'},
-  {code:'AIA',  name:'เอไอเอ ประเทศไทย', color:'#D4002B', hotline:'1581'},
-  {code:'AXA',  name:'แอกซ่าประกันภัย', color:'#00008B', hotline:'1159'},
-  {code:'DHIP', name:'ทิพยประกันชีวิต', color:'#F5A623', hotline:'02-118-5555'},
+  {code:'TLI',   name:'ไทยประกันชีวิต', color:'#0066CC', hotline:'1124'},
+  {code:'AIA',   name:'เอไอเอ ประเทศไทย', color:'#D4002B', hotline:'1581'},
+  {code:'AXA',   name:'แอกซ่าประกันภัย', color:'#00008B', hotline:'1159'},
+  {code:'DHIP',  name:'ทิพยประกันชีวิต', color:'#F5A623', hotline:'02-118-5555'},
+  {code:'ALLIANZ', name:'Allianz Ayudhya', color:'#003781', hotline:'1726'},
+  {code:'MTL',   name:'เมืองไทยประกันชีวิต', color:'#E30613', hotline:'1766'},
+  {code:'FWD',   name:'FWD Thailand', color:'#FF6200', hotline:'1351'},
 ];
 
 var POLICIES_DEMO = [
@@ -2152,11 +2155,11 @@ var POLICIES_DEMO = [
     riders:[]},
 
   // ── KANOKPAI ──────────────────────────────────────────────
-  { no:'0000135113-107', name:'AIA Group Health (LPP Property)', insurer:'AIA',
+  { no:'GTL-06112-08851-005', name:'Allianz Ayudhya Group (LPP) Plan 07', insurer:'ALLIANZ',
     holder:'Kanokpai', holderId:'bbbbbbbb-0000-0000-0000-000000000002',
-    cat:'health', status:'active', startDate:'2025-04-01', endDate:'2026-03-31',
+    cat:'health', status:'active', startDate:'2025-06-01', endDate:'2026-05-31',
     sumAssured:null, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:false,
-    note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (LPP Property Management)',
+    note:'บริษัทจ่ายให้ — ไม่เสียค่าเบี้ย (LPP Property Management). Member: 000001-00',
     riders:[
       {code:'FCS', name:'IPD FCS ค่าห้อง/วัน (6,200)', cat:'ipd_room_board', perDay:6200, fromFirst:true, copay:0},
       {code:'WEC-ER', name:'ER อุบัติเหตุฉุกเฉิน', cat:'opd_accident', amount:7000, fromFirst:true, copay:0},
@@ -2319,6 +2322,49 @@ function togglePaid(policyNo) {
     : (!currentlyPaid ? 'Marked as paid ✓' : 'Marked as unpaid'));
 }
 
+
+// ── POLICY CARD IMAGES ───────────────────────────────────────
+var CARD_IMAGES = {}; // {policyNo: base64DataURL}
+
+function showCardImage(policyNo){
+  var img = CARD_IMAGES[policyNo] || (POLICIES_DEMO.find(function(p){return p.no===policyNo;})||{}).cardImage;
+  if(!img){ toast(S.lang==='th'?'ยังไม่มีรูปบัตร':'No card image yet'); return; }
+  // Show fullscreen
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.onclick = function(){ document.body.removeChild(overlay); };
+  var imgEl = document.createElement('img');
+  imgEl.src = img;
+  imgEl.style.cssText = 'max-width:100%;max-height:85vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
+  var hint = document.createElement('div');
+  hint.textContent = S.lang==='th'?'แตะเพื่อปิด':'Tap to close';
+  hint.style.cssText = 'position:fixed;bottom:30px;left:0;right:0;text-align:center;color:rgba(255,255,255,.5);font-size:13px';
+  overlay.appendChild(imgEl);
+  overlay.appendChild(hint);
+  document.body.appendChild(overlay);
+}
+
+function uploadCardImage(policyNo){
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      CARD_IMAGES[policyNo] = ev.target.result;
+      // Also update the policy object
+      var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+      if(pol) pol.cardImage = ev.target.result;
+      toast(S.lang==='th'?'อัพโหลดรูปบัตรแล้ว ✓':'Card image uploaded ✓');
+      renderInsurance();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
 // Update top header when insurance filter changes
 function updateInsHeader(){
   var ip = S.insFilter==='all' ? PROFILES[0] : (PROFILES.find(function(x){return x.id===S.insFilter;})||PROFILES[0]);
@@ -2363,7 +2409,7 @@ function renderInsurance(){
   POLICIES_DEMO.forEach(function(pol){
     if(S.insFilter!=='all'){var pr90=PROFILES.find(function(x){return x.id===S.insFilter;});if(!pr90||(pol.holder!==pr90.name&&pol.holderId!==pr90.dbId)) return;}
     if(pol.endDate&&(pol.status==='active'||pol.status==='paid_up')){var exp90=new Date(pol.endDate);if(exp90>=now90&&exp90<=in90d) premAlerts.push({t:'expire',pol:pol,days:Math.ceil((exp90-now90)/86400000)});}
-    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'){var yr=now90.getFullYear(),due90=new Date(yr,pol.dueMonth-1,15);if(due90<now90)due90=new Date(yr+1,pol.dueMonth-1,15);if(due90<=in90d) premAlerts.push({t:'premium',pol:pol,days:Math.ceil((due90-now90)/86400000)});}
+    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'&&!isPaid(pol.no,now90.getFullYear())){var yr=now90.getFullYear(),due90=new Date(yr,pol.dueMonth-1,15);if(due90<now90)due90=new Date(yr+1,pol.dueMonth-1,15);if(due90<=in90d) premAlerts.push({t:'premium',pol:pol,days:Math.ceil((due90-now90)/86400000)});}
   });
   premAlerts.forEach(function(a){
     var c1=a.days<=30?'rgba(255,82,82,.1)':'rgba(255,183,77,.08)',c2=a.days<=30?'rgba(255,82,82,.3)':'rgba(255,183,77,.25)',c3=a.days<=30?'var(--red)':'var(--amber)';
@@ -2410,13 +2456,33 @@ function renderInsurance(){
     html += '<div style="background:'+statusBg+';border:1px solid '+statusBorder+';border-radius:18px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden">';
     
     // Urgent banner
-    if(pol.urgent) html += '<div style="background:rgba(255,183,77,.15);border:1px solid rgba(255,183,77,.4);border-radius:9px;padding:7px 12px;margin-bottom:10px;font-size:12px;color:var(--amber)">&#x23F0; '+pol.urgentMsg+'</div>';
+    if(pol.urgent && !isPaid(pol.no, new Date().getFullYear())) html += '<div style="background:rgba(255,183,77,.15);border:1px solid rgba(255,183,77,.4);border-radius:9px;padding:7px 12px;margin-bottom:10px;font-size:12px;color:var(--amber)">&#x23F0; '+pol.urgentMsg+'</div>';
     
     // Header
     html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">';
-    html += '<div style="width:36px;height:36px;border-radius:10px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
-    html += '<div style="flex:1"><div style="font-size:15px;font-weight:700">'+pol.name+'</div>';
-    html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+pol.no+'</div></div>';
+    // Policy card image thumbnail (if any)
+    if(pol.cardImage){
+      html += '<div onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="width:36px;height:36px;border-radius:10px;overflow:hidden;flex-shrink:0;cursor:pointer;border:2px solid rgba(255,255,255,.15)">';
+      html += '<img src="'+pol.cardImage+'" style="width:100%;height:100%;object-fit:cover">';
+      html += '</div>';
+    } else {
+      html += '<div style="width:36px;height:36px;border-radius:10px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
+    }
+    html += '<div style="flex:1">';
+    html += '<div style="font-size:15px;font-weight:700;line-height:1.3">'+pol.name+'</div>';
+    html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+pol.no+'</div>';
+    // Premium fee inline
+    if(pol.premium>0){
+      var yr2 = new Date().getFullYear();
+      var pd2 = isPaid(pol.no, yr2);
+      html += '<div style="font-size:12px;margin-top:3px;color:'+(pd2?'var(--green)':'var(--amber)');
+      html += '">'+(pd2?'&#x2705;':'&#x23F0;')+' '+pol.premium.toLocaleString()+' บาท/ปี'+(pd2?' ('+(S.lang==='th'?'ชำระแล้ว':'Paid')+')':' ('+(S.lang==='th'?'ค้างชำระ':'Unpaid')+')')+'</div>';
+    } else if(pol.freePolicy){
+      html += '<div style="font-size:11px;margin-top:3px;color:var(--green)">&#x1F3E2; '+(S.lang==='th'?'บริษัทจ่าย':'Employer pays')+'</div>';
+    } else if(pol.status==='paid_up'){
+      html += '<div style="font-size:11px;margin-top:3px;color:var(--blue)">&#x2705; '+(S.lang==='th'?'ชำระครบแล้ว':'Paid-up')+'</div>';
+    }
+    html += '</div>';
     html += '<span class="badge '+(pol.status==='active'?'b-ok':pol.status==='paid_up'?'b-info':'b-info')+'" style="font-size:10px;flex-shrink:0">'+statusLabel+'</span>';
     html += '</div>';
 
@@ -2626,6 +2692,19 @@ function editPolicy(policyNo){
 
   var html = '';
 
+  // Card image upload at top
+  var currentImg = pol.cardImage || CARD_IMAGES[policyNo];
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+  if(currentImg){
+    html += '<img src="'+currentImg+'" onclick="showCardImage(&quot;'+policyNo+'&quot;)" style="height:50px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,.2)">';
+    html += '<div><div style="font-size:12px;color:var(--teal)">&#x2705; '+(th?'มีรูปบัตรแล้ว (แตะเพื่อดู)':'Card image saved (tap to view)')+'</div>';
+  } else {
+    html += '<div style="width:50px;height:50px;border-radius:8px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:20px">&#x1F4B3;</div>';
+    html += '<div><div style="font-size:12px;color:var(--t3)">'+(th?'ยังไม่มีรูปบัตร':'No card image yet')+'</div>';
+  }
+  html += '<button class="btn btn-secondary" style="font-size:11px;padding:6px 12px" onclick="uploadCardImage(&quot;'+policyNo+'&quot;);closeModal()">&#x1F4F7; '+(th?'อัพโหลดรูปบัตร':'Upload Card')+'</button>';
+  html += '</div></div>';
+
   // Payment status toggle - most important at top
   html += '<div style="background:'+(paid?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border:1px solid '+(paid?'rgba(105,240,174,.3)':'rgba(255,183,77,.3)')+';border-radius:14px;padding:14px;margin-bottom:14px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center">';
@@ -2643,7 +2722,7 @@ function editPolicy(policyNo){
   html += '<div class="frow">';
   html += '<div class="fg"><label class="lbl">'+(th?'เลขกรมธรรม์':'Policy Number')+'</label><input class="inp" id="ep-no" value="'+pol.no+'" style="font-family:monospace"></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'บริษัทประกัน':'Insurer')+'</label><select class="inp" id="ep-insurer">';
-  ['TLI','AIA','AXA','DHIP','MTL','FWD','KTAXA','SCBL','PRU','CIGNA','OTHER'].forEach(function(i){
+  ['TLI','AIA','AXA','ALLIANZ','DHIP','MTL','FWD','KTAXA','SCBL','PRU','CIGNA','OTHER'].forEach(function(i){
     html += '<option value="'+i+'"'+(pol.insurer===i?' selected':'')+'>'+i+'</option>';
   });
   html += '</select></div></div>';
