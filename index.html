@@ -324,7 +324,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.1.1';
+var APP_VERSION = '2.2.0';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th' };
@@ -1033,47 +1033,6 @@ async function loadHealthRecordsFromDB(profileId) {
   } catch(e){ console.warn('loadHealthRecordsFromDB error:', e); }
 }
 
-async function loadInsuranceFromDB() {
-  if(!sbAuth) return;
-  try {
-    var db = getDbClient();
-    if(!db) return;
-    var { data, error } = await db.from('insurance_policies')
-      .select('*, premium_payments(*)')
-      .eq('is_active', true);
-    if(error || !data) return;
-    INSURANCE = data.map(function(ins){
-      var paid2025 = (ins.premium_payments || []).find(function(p){ 
-        return p.payment_year === 2025 && p.status === 'paid'; 
-      });
-      var profile = PROFILES.find(function(p){ return p.dbId === ins.profile_id; });
-      var cov = {};
-      if(ins.ipd_coverage) cov['IPD'] = (ins.ipd_coverage/1000000).toFixed(0)+'M THB';
-      if(ins.opd_coverage) cov['OPD'] = (ins.opd_coverage/1000).toFixed(0)+'K THB';
-      if(ins.surgery_covered) cov['Surgery'] = 'Covered';
-      if(ins.dental_coverage) cov['Dental'] = (ins.dental_coverage/1000).toFixed(0)+'K THB';
-      if(ins.death_benefit) cov['Death'] = (ins.death_benefit/1000000).toFixed(0)+'M THB';
-      if(ins.accident_death) cov['Accident'] = (ins.accident_death/1000000).toFixed(0)+'M THB';
-      if(ins.critical_illness) cov['Critical'] = (ins.critical_illness/1000000).toFixed(0)+'M THB';
-      if(ins.disability_covered) cov['Disability'] = 'Covered';
-      return {
-        id: ins.id,
-        holder: profile ? profile.name : 'Unknown',
-        holderId: ins.profile_id,
-        type: ins.policy_type === 'health' ? 'Health' : 'Life',
-        name: ins.policy_name,
-        policy: ins.policy_number,
-        insurer: ins.insurer_name,
-        cov: cov,
-        prem: ins.annual_premium,
-        dueM: ins.premium_due_month,
-        paid: !!paid2025,
-        notes: ins.notes
-      };
-    });
-    console.log('Insurance loaded:', INSURANCE.length, 'policies');
-  } catch(e){ console.warn('loadInsuranceFromDB error:', e); }
-}
 
 async function loadDoctorVisitsFromDB() {
   if(!sbAuth) return;
@@ -1137,6 +1096,59 @@ async function loadAllDataFromDB() {
   renderTab(S.tab);
   toast(S.lang==='th' ? 'โหลดข้อมูลสำเร็จ ✓' : 'Data loaded ✓');
 }
+
+async function loadInsuranceFromDB(){
+  if(!sbAuth||S.demo) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('insurance_policies')
+      .select('*, policy_riders(*), premium_payments(*)')
+      .eq('owner_id','05e2165e-a9e0-4bcd-b0a7-bb1858bd86de')
+      .order('sort_order');
+    if(error||!data||!data.length) return;
+    var loaded = data.map(function(row){
+      var pr = PROFILES.find(function(p){return p.dbId===row.profile_id;});
+      var latestPayment = (row.premium_payments||[]).filter(function(p){return p.status==='paid';})
+        .sort(function(a,b){return b.payment_year-a.payment_year;})[0];
+      var riders = (row.policy_riders||[]).map(function(r){
+        return {
+          code:r.rider_code, name:r.rider_name, cat:r.rider_category,
+          amount:r.coverage_amount?parseFloat(r.coverage_amount):null,
+          perDay:r.per_day?parseFloat(r.per_day):(r.coverage_per_day?parseFloat(r.coverage_per_day):null),
+          fromFirst:r.covers_from_first_baht!==false,
+          hasDeductible:r.has_deductible===true,
+          deductible:r.deductible_amount?parseFloat(r.deductible_amount):null,
+          copay:r.copay_percent?parseFloat(r.copay_percent):0,
+          note:r.coverage_notes||null
+        };
+      });
+      return {
+        no:row.policy_number, name:row.policy_name,
+        insurer:row.insurer_code||'OTHER',
+        holder:row.holder_name||(pr?pr.name:'Unknown'),
+        holderId:row.profile_id,
+        cat:row.policy_category, status:row.policy_status,
+        startDate:row.policy_start_date, endDate:row.policy_end_date,
+        sumAssured:row.sum_assured?parseFloat(row.sum_assured):null,
+        premium:row.annual_premium!=null?parseFloat(row.annual_premium):null,
+        dueMonth:row.premium_due_month,
+        paidYear:latestPayment?latestPayment.payment_year:(row.paid_year||null),
+        selfPaid:row.self_paid!==false,
+        freePolicy:row.free_policy===true,
+        urgent:row.urgent===true,
+        urgentMsg:row.urgent_message||null,
+        cardImage:row.card_image_url||null,
+        note:row.notes||null, riders:riders
+      };
+    });
+    if(loaded.length>0){
+      POLICIES_DEMO = loaded;
+      console.log('Insurance loaded from DB:',loaded.length,'policies');
+    }
+  } catch(e){ console.warn('loadInsuranceFromDB error:',e); }
+}
+
 
 function updateHeader(){
   var p = prof(S.pid);
@@ -2316,6 +2328,10 @@ function togglePaid(policyNo) {
   PAYMENTS[policyNo + '_' + year] = !currentlyPaid;
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(pol) pol.paidYear = !currentlyPaid ? year : year-1;
+  // Save to DB
+  if(!S.demo && sbAuth){
+    savePaymentToDB(policyNo, year, !currentlyPaid);
+  }
   renderInsurance();
   toast(S.lang==='th' 
     ? (!currentlyPaid ? 'บันทึกว่าชำระแล้ว ✓' : 'ยกเลิกการชำระ') 
@@ -2365,6 +2381,81 @@ function uploadCardImage(policyNo){
   input.click();
 }
 
+
+// ── SAVE INSURANCE POLICY TO DB ─────────────────────────────
+async function saveInsurancePolicyToDB(pol){
+  if(!sbAuth||S.demo) return false;
+  try {
+    var db = getDbClient();
+    if(!db) return false;
+    var pr = PROFILES.find(function(x){return x.name===pol.holder||x.dbId===pol.holderId;});
+    var profileId = pr ? pr.dbId : null;
+    var payload = {
+      policy_number: pol.no,
+      policy_name: pol.name,
+      insurer_code: pol.insurer,
+      policy_category: pol.cat,
+      policy_status: pol.status,
+      policy_start_date: pol.startDate || null,
+      policy_end_date: pol.endDate || null,
+      sum_assured: pol.sumAssured || null,
+      annual_premium: pol.premium != null ? pol.premium : null,
+      premium_due_month: pol.dueMonth || null,
+      self_paid: pol.selfPaid !== false,
+      free_policy: pol.freePolicy === true,
+      paid_up: pol.status === 'paid_up',
+      urgent: pol.urgent === true,
+      urgent_message: pol.urgentMsg || null,
+      paid_year: pol.paidYear || null,
+      holder_name: pol.holder || null,
+      notes: pol.note || pol.notes || null,
+      updated_at: new Date().toISOString()
+    };
+    if(profileId) payload.profile_id = profileId;
+    payload.owner_id = '05e2165e-a9e0-4bcd-b0a7-bb1858bd86de';
+    var { error } = await db.from('insurance_policies')
+      .upsert(payload, { onConflict: 'policy_number' });
+    if(error){ console.error('Save insurance error:', error); return false; }
+    console.log('Policy saved to DB:', pol.no);
+    return true;
+  } catch(e){ console.warn('saveInsurancePolicyToDB error:', e); return false; }
+}
+
+// ── SAVE PAYMENT STATUS TO DB ────────────────────────────────
+async function savePaymentToDB(policyNo, year, paid){
+  if(!sbAuth||S.demo) return false;
+  try {
+    var db = getDbClient();
+    if(!db) return false;
+    var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+    var policyId = null;
+    // Get DB id for this policy
+    var { data } = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
+    if(data) policyId = data.id;
+    if(!policyId) return false;
+    // Update paid_year on main policy
+    await db.from('insurance_policies').update({paid_year: paid?year:year-1}).eq('id',policyId);
+    // Upsert premium_payments record
+    if(paid){
+      await db.from('premium_payments').upsert({
+        policy_id: policyId,
+        payment_year: year,
+        status: 'paid',
+        payment_date: new Date().toISOString().split('T')[0],
+        amount_paid: pol ? pol.premium : null
+      }, {onConflict:'policy_id,payment_year'});
+    } else {
+      await db.from('premium_payments').upsert({
+        policy_id: policyId,
+        payment_year: year,
+        status: 'pending'
+      }, {onConflict:'policy_id,payment_year'});
+    }
+    return true;
+  } catch(e){ console.warn('savePaymentToDB error:', e); return false; }
+}
+
+// ── LOAD INSURANCE FROM DB ────────────────────────────────────
 // Update top header when insurance filter changes
 function updateInsHeader(){
   var ip = S.insFilter==='all' ? PROFILES[0] : (PROFILES.find(function(x){return x.id===S.insFilter;})||PROFILES[0]);
@@ -2818,8 +2909,16 @@ function saveEditPolicyFull(policyNo){
   pol.urgentMsg = document.getElementById('ep-urgentmsg').value;
   pol.note = document.getElementById('ep-notes').value;
   closeModal();
-  toast(S.lang==='th' ? 'บันทึกแล้ว ✓' : 'Saved ✓');
-  renderInsurance();
+  // Save to DB
+  if(!S.demo && sbAuth){
+    saveInsurancePolicyToDB(pol).then(function(ok){
+      toast(ok ? (S.lang==='th'?'บันทึกลง DB แล้ว ✓':'Saved to DB ✓') : (S.lang==='th'?'บันทึกในเครื่อง (ไม่ได้ sync)':'Saved locally only'));
+      renderInsurance();
+    });
+  } else {
+    toast(S.lang==='th' ? 'บันทึกแล้ว ✓' : 'Saved ✓');
+    renderInsurance();
+  }
 }
 
 function addRiderToPolicy(policyNo){
@@ -2952,7 +3051,13 @@ function saveNewPolicy(){
   };
   POLICIES_DEMO.push(newPol);
   closeModal();
-  toast(th?'เพิ่มกรมธรรม์แล้ว ✓ กด "แก้ไข" เพื่อเพิ่ม Rider':'Policy added ✓ Tap Edit to add riders');
+  if(!S.demo && sbAuth){
+    saveInsurancePolicyToDB(newPol).then(function(ok){
+      toast(ok ? (th?'เพิ่มกรมธรรม์ใน DB แล้ว ✓':'Policy saved to DB ✓') : (th?'เพิ่มกรมธรรม์แล้ว (ไม่ได้ sync)':'Added locally only'));
+    });
+  } else {
+    toast(th?'เพิ่มกรมธรรม์แล้ว ✓ กด "แก้ไข" เพื่อเพิ่ม Rider':'Policy added ✓ Tap Edit to add riders');
+  }
   S.insFilter = holderId;
   renderInsurance();
 }
