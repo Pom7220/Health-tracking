@@ -320,8 +320,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0}
 // ── SUPABASE (optional) ──────────────────────────────
 var SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MzI3ODUsImV4cCI6MjA4OTMwODc4NX0.0Ee2LfF8kwjatASFAzXINBRb46UHEX5sPdIHPxAuHZk';
-var sbAuth = null;  // public schema auth client
-var sbDb = null;    // healthvault schema client (for data operations)
+var sbAuth = null;  // single Supabase client — auth + data
 
 // Wait up to 5 seconds for Supabase script to load
 function waitForSupabase(callback) {
@@ -332,7 +331,6 @@ function waitForSupabase(callback) {
     if (typeof window.supabase !== 'undefined') {
       try {
         sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        sbDb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {db:{schema:'healthvault'}});
         callback(true);
       } catch(e) {
         console.warn('Supabase client error:', e);
@@ -353,7 +351,6 @@ function initSupabase() {
   if (typeof window.supabase !== 'undefined' && !sbAuth) {
     try {
       sbAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      sbDb   = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {db:{schema:'healthvault'}});
       return true;
     } catch(e) {}
   }
@@ -361,10 +358,10 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.6.1';
+var APP_VERSION = '2.7.2';
 var APP_DATE = '22 Mar 2026 fix';
 
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
 
 // ── DEMO DATA ────────────────────────────────────────
 
@@ -1023,15 +1020,21 @@ function enterApp(user){
   // Load real data from DB if not demo
   if(!S.demo && sbAuth){
     loadAllDataFromDB();
+    loadPolicyImagesFromDB();
   }
 }
 
 
 // ── DB HELPERS ────────────────────────────────────────
 function getDbClient(){
-  // Return the pre-created healthvault schema client
-  // sbDb shares localStorage session with sbAuth → RLS works
-  return sbDb || sbAuth;
+  // Use sbAuth.schema() to switch to healthvault schema WITHOUT creating a new client
+  // This avoids the "multiple GoTrueClient instances" warning
+  if(!sbAuth) return null;
+  try {
+    return sbAuth.schema('healthvault');
+  } catch(e) {
+    return sbAuth;  // fallback if .schema() not available
+  }
 }
 
 async function loadProfilesFromDB() {
@@ -2678,7 +2681,8 @@ function togglePaid(policyNo) {
 
 
 // ── POLICY CARD IMAGES ───────────────────────────────────────
-var CARD_IMAGES = {}; // {policyNo: base64DataURL}
+var CARD_IMAGES = {}; // {policyNo: base64DataURL} — legacy single image
+var POLICY_IMAGES = {}; // {policyNo: [{id,data,label,order}]} — multiple images
 
 function showCardImage(policyNo){
   var img = CARD_IMAGES[policyNo] || (POLICIES_DEMO.find(function(p){return p.no===policyNo;})||{}).cardImage;
@@ -2967,20 +2971,27 @@ function handleCardUpload(event){
     closeModal();
     setTimeout(function(){
       openImageEditor(raw, pno, function(finalURL){
+        // Save to POLICY_IMAGES array (multi-image support)
+        if(!POLICY_IMAGES[pno]) POLICY_IMAGES[pno] = [];
+        var newImg = {id:'img_'+Date.now(), data:finalURL, label:'photo_'+(POLICY_IMAGES[pno].length+1), order:POLICY_IMAGES[pno].length};
+        POLICY_IMAGES[pno].push(newImg);
+        // Also update legacy single-image fields
         CARD_IMAGES[pno] = finalURL;
         var pol = POLICIES_DEMO.find(function(p){return p.no===pno;});
         if(pol) pol.cardImage = finalURL;
         window._uploadPolicyNo = null;
         window._returnToEdit = false;
-        // ── SAVE TO DB IMMEDIATELY ──────────────────────────
+        // Save to DB
         if(!S.demo && sbAuth && pol){
           saveInsurancePolicyToDB(pol).then(function(ok){
+            // Also save to policy_images table
+            savePolicyImageToDB(pno, newImg);
             toast(ok 
-              ? (S.lang==='th'?'บันทึกรูปบัตรลง DB แล้ว ✓':'Card photo saved to DB ✓')
+              ? (S.lang==='th'?'บันทึกรูปลง DB แล้ว ✓':'Photo saved to DB ✓')
               : (S.lang==='th'?'บันทึกในเครื่องแล้ว (sync ล้มเหลว)':'Saved locally — sync failed'));
           });
         } else {
-          toast(S.lang==='th'?'บันทึกรูปบัตรแล้ว ✓':'Card photo saved ✓');
+          toast(S.lang==='th'?'บันทึกรูปแล้ว ✓':'Photo saved ✓');
         }
         renderInsurance();
         if(retEdit && pno) setTimeout(function(){ editPolicy(pno); }, 300);
@@ -2993,6 +3004,42 @@ function handleCardUpload(event){
 
 
 // ── SAVE INSURANCE POLICY TO DB ─────────────────────────────
+async function savePolicyImageToDB(policyNo, imgObj){
+  if(!sbAuth) return false;
+  try {
+    var db = getDbClient();
+    var { error } = await db.from('policy_images').insert({
+      policy_number: policyNo,
+      owner_id: '05e2165e-a9e0-4bcd-b0a7-bb1858bd86de',
+      image_data: imgObj.data,
+      image_label: imgObj.label,
+      sort_order: imgObj.order
+    });
+    if(error) { console.error('savePolicyImageToDB:', error.message); return false; }
+    imgObj.id = imgObj.id; // keep local id
+    return true;
+  } catch(e){ console.error('savePolicyImageToDB exception:', e); return false; }
+}
+
+async function loadPolicyImagesFromDB(){
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    var { data, error } = await db.from('policy_images')
+      .select('*')
+      .eq('owner_id','05e2165e-a9e0-4bcd-b0a7-bb1858bd86de')
+      .order('sort_order');
+    if(error||!data) return;
+    POLICY_IMAGES = {};
+    data.forEach(function(row){
+      if(!POLICY_IMAGES[row.policy_number]) POLICY_IMAGES[row.policy_number] = [];
+      POLICY_IMAGES[row.policy_number].push({id:row.id, data:row.image_data, label:row.image_label||'photo', order:row.sort_order||0});
+    });
+    console.log('Policy images loaded:', Object.keys(POLICY_IMAGES).length, 'policies');
+  } catch(e){ console.error('loadPolicyImagesFromDB:', e); }
+}
+
+
 async function saveInsurancePolicyToDB(pol){
   if(!sbAuth||S.demo) return false;
   try {
@@ -3077,534 +3124,482 @@ function updateInsHeader(){
   if(nm) nm.textContent = S.insFilter==='all' ? (S.lang==='th'?'ทั้งครอบครัว':'All Family') : (ip.nick||ip.name);
 }
 function renderInsurance(){
-  // Sync filter: if coming from another tab, set filter to current person or 'all'
-  // Don't auto-sync to S.pid since insurance has its own filter logic
-  // Derive display profile from S.insFilter (not S.pid which is for health tabs)
-  var insProfileId = S.insFilter==='all' ? 'rutchapon' : S.insFilter;
-  var p = prof(insProfileId);
-  var myPolicies = POLICIES_DEMO.filter(function(pol){
-    // Profile filter
-    if(S.insFilter!=='all'){
-      var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
-      if(!fp) return true;
-      if(pol.holder!==fp.name && pol.holderId!==fp.dbId) return false;
-    }
-    // Search filter
-    if(S.insSearch && S.insSearch.trim()){
-      var q = S.insSearch.toLowerCase().trim();
-      var haystack = [pol.name, pol.no, pol.insurer, pol.holder, pol.note||'',
-        (pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' ')
-      ].join(' ').toLowerCase();
-      if(haystack.indexOf(q) < 0) return false;
-    }
-    return true;
-  });
-
-  // Sort
-  if(!S.insSort) S.insSort='status';
-  myPolicies.sort(function(a,b){
-    if(S.insSort==='status'){
-      var o={active:0,paid_up:1,matured:2,lapsed:3};
-      return (o[a.status]||0)-(o[b.status]||0);
-    } else if(S.insSort==='name'){
-      return a.name.localeCompare(b.name);
-    } else if(S.insSort==='premium'){
-      return (b.premium||0)-(a.premium||0);
-    } else if(S.insSort==='holder'){
-      return (a.holder||'').localeCompare(b.holder||'');
-    } else if(S.insSort==='room'){
-      // Sort by IPD room coverage (highest first)
-      function getRoom(pol){ var r=(pol.riders||[]).find(function(r){return r.cat==='ipd_room_board';}); return r?(r.perDay||r.amount||0):0; }
-      return getRoom(b)-getRoom(a);
-    }
-    return 0;
-  });
-
-  // ── HTML output begins here ──────────────────────────────
-  var html = '<div class="fade">';
-
-  // Search box
+  var th = S.lang==='th';
+  if(!S.insView) S.insView='room';
   if(!S.insSearch) S.insSearch='';
-  if(!S.insSort) S.insSort='status';
-  html += '<div style="position:relative;margin-bottom:10px">';
-  html += '<input type="text" id="ins-search" placeholder="'+(S.lang==='th'?'ค้นหา เช่น ค่าห้อง IPD มะเร็ง TLI...':'Search e.g. room, IPD, cancer, TLI...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" ';
-  html += 'oninput="S.insSearch=this.value;renderInsurance()" ';
-  html += 'style="width:100%;box-sizing:border-box;padding:10px 38px 10px 12px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
-  if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:16px;line-height:1">&#x2715;</div>';
-  html += '</div>';
+  if(!S.insFilter) S.insFilter='all';
 
-  // Profile filter pills + sort dropdown on same row
-  html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
-  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';updateInsHeader();renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(S.lang==='th'?'ทั้งหมด':'All')+'</div>';
-  PROFILES.forEach(function(pr){
-    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';updateInsHeader();renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
-  });
-  // Sort
-  html += '<select onchange="S.insSort=this.value;renderInsurance()" style="margin-left:auto;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);border-radius:8px;padding:5px 8px;font-size:11px;cursor:pointer">';
-  html += '<option value="status"'+(S.insSort==='status'?' selected':'')+'>&#x1F4CB; '+(S.lang==='th'?'เรียง: สถานะ':'Status')+'</option>';
-  html += '<option value="room"'+(S.insSort==='room'?' selected':'')+'>&#x1F6CF; '+(S.lang==='th'?'ค่าห้อง/วัน':'Room/day')+'</option>';
-  html += '<option value="premium"'+(S.insSort==='premium'?' selected':'')+'>&#x1F4B0; '+(S.lang==='th'?'เบี้ยสูงสุด':'Premium')+'</option>';
-  html += '<option value="holder"'+(S.insSort==='holder'?' selected':'')+'>&#x1F464; '+(S.lang==='th'?'ผู้ถือ':'Holder')+'</option>';
-  html += '<option value="name"'+(S.insSort==='name'?' selected':'')+'>&#x1F524; '+(S.lang==='th'?'ชื่อ':'Name')+'</option>';
-  html += '</select>';
-  html += '</div>';
-
-  // Coverage + IPD buttons
-  html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
-  html += '<div class="pp" onclick="openCoverageSummary()" style="flex:1;padding:8px;font-size:12px;text-align:center;background:rgba(38,217,176,.1);border-color:rgba(38,217,176,.3);color:var(--teal)">&#x1F4CB; ภาพรวม</div>';
-  html += '<div class="pp" onclick="openIPDWorkflow()" style="flex:1;padding:8px;font-size:12px;text-align:center;background:rgba(255,82,82,.1);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F3E5; IPD</div>';
-  html += '</div>';
-
-  // ── 90-day alerts ─────────────────────────────────────────
-  var now90=new Date(),in90d=new Date(now90.getTime()+90*24*3600000);
-  var premAlerts=[];
-  POLICIES_DEMO.forEach(function(pol){
-    if(S.insFilter!=='all'){var pr90=PROFILES.find(function(x){return x.id===S.insFilter;});if(!pr90||(pol.holder!==pr90.name&&pol.holderId!==pr90.dbId)) return;}
-    if(pol.endDate&&(pol.status==='active'||pol.status==='paid_up')){var exp90=new Date(pol.endDate);if(exp90>=now90&&exp90<=in90d) premAlerts.push({t:'expire',pol:pol,days:Math.ceil((exp90-now90)/86400000)});}
-    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'&&!isPaid(pol.no,now90.getFullYear())){var yr=now90.getFullYear(),due90=new Date(yr,pol.dueMonth-1,15);if(due90<now90)due90=new Date(yr+1,pol.dueMonth-1,15);if(due90<=in90d) premAlerts.push({t:'premium',pol:pol,days:Math.ceil((due90-now90)/86400000)});}
-  });
-  premAlerts.forEach(function(a){
-    var c1=a.days<=30?'rgba(255,82,82,.1)':'rgba(255,183,77,.08)',c2=a.days<=30?'rgba(255,82,82,.3)':'rgba(255,183,77,.25)',c3=a.days<=30?'var(--red)':'var(--amber)';
-    var tx=a.t==='expire'?'&#x23F3; '+(S.lang==='th'?'กรมธรรม์ '+a.pol.no+' หมดอายุใน '+a.days+' วัน ('+a.pol.endDate+')':'Policy '+a.pol.no+' expires in '+a.days+' days ('+a.pol.endDate+')'):'&#x23F0; '+(S.lang==='th'?'เบี้ย '+a.pol.name+' ครบกำหนดใน '+a.days+' วัน ('+a.pol.premium.toLocaleString()+' บาท)':'Premium '+a.pol.name+' due in '+a.days+' days ('+a.pol.premium.toLocaleString()+' THB)');
-    html+='<div style="background:'+c1+';border:1px solid '+c2+';border-radius:10px;padding:9px 14px;margin-bottom:6px;font-size:13px;color:'+c3+'">'+tx+'</div>';
-  });
-
-  // ── Premium Summary Card ───────────────────────────────────
-  html+='<div class="card" style="background:rgba(156,127,224,.08);border-color:rgba(156,127,224,.2);margin-bottom:12px">';
-  html+='<div style="font-size:12px;font-weight:700;color:var(--violet);margin-bottom:8px">&#x1F4B0; '+(S.lang==='th'?'เบี้ยประกันที่ต้องจ่ายเอง/ปี':'Annual Self-Pay Premiums')+'</div>';
-  PROFILES.forEach(function(pr){
-    var pols=POLICIES_DEMO.filter(function(pol){return (pol.holder===pr.name||pol.holderId===pr.dbId)&&pol.status==='active';});
-    if(!pols.length) return;
-    var selfPols=pols.filter(function(pol){return pol.selfPaid&&pol.premium>0;});
-    var freePols=pols.filter(function(pol){return pol.freePolicy||pol.selfPaid===false;});
-    var tot=selfPols.reduce(function(s,pol){return s+pol.premium;},0);
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
-    html+='<span style="font-size:12px;color:var(--t2)">'+pr.nick+'</span>';
-    if(tot>0){
-      html+='<span style="font-size:13px;font-weight:600">'+tot.toLocaleString()+' ฿</span>';
-    } else {
-      html+='<span style="font-size:12px;color:var(--green)">&#x1F3E2; '+(S.lang==='th'?'นายจ้างจ่าย':'Employer paid')+'</span>';
-    }
-    html+='</div>';
-  });
-  var grandTot=POLICIES_DEMO.filter(function(pol){return pol.selfPaid&&pol.premium>0&&pol.status==='active';}).reduce(function(s,pol){return s+pol.premium;},0);
-  html+='<div style="display:flex;justify-content:space-between;padding-top:8px;font-size:15px;font-weight:700">';
-  html+='<span>'+(S.lang==='th'?'รวมทั้งหมด':'Total')+'</span><span style="color:var(--teal)">'+grandTot.toLocaleString()+' ฿/ปี</span></div>';
-  html+='</div>';
-
-  // Policies list
-  myPolicies.forEach(function(pol){
-    var ins = INSURERS_DEMO.find(function(i){return i.code===pol.insurer;});
-    var insColor = ins ? ins.color : 'var(--violet)';
-    var cardImg = pol.cardImage || CARD_IMAGES[pol.no];
-    var yr2 = new Date().getFullYear();
-    var pd2 = isPaid(pol.no, yr2);
-    var th = S.lang==='th';
-
-    // Status colors
-    var statusBg = pol.status==='active' ? 'rgba(105,240,174,.07)' :
-                   pol.status==='paid_up' ? 'rgba(79,195,247,.07)' : 'rgba(255,255,255,.03)';
-    var statusBorder = pol.status==='active' ? 'rgba(105,240,174,.22)' :
-                       pol.status==='paid_up' ? 'rgba(79,195,247,.22)' : 'rgba(255,255,255,.07)';
-    var statusLabel = pol.status==='active' ? (th?'มีผลบังคับ':'Active') :
-                      pol.status==='paid_up' ? (th?'ชำระครบแล้ว':'Paid-up') :
-                      pol.status==='matured' ? (th?'ครบกำหนด':'Matured') : (th?'ขาดอายุ':'Lapsed');
-
-    html += '<div style="background:'+statusBg+';border:1px solid '+statusBorder+';border-radius:16px;padding:14px;margin-bottom:10px">';
-
-    // ── Urgent banner ─────────────────────────────────────────
-    if(pol.urgent && !isPaid(pol.no, yr2)){
-      html += '<div style="background:rgba(255,183,77,.15);border:1px solid rgba(255,183,77,.4);border-radius:9px;padding:7px 12px;margin-bottom:10px;font-size:12px;color:var(--amber)">&#x23F0; '+pol.urgentMsg+'</div>';
-    }
-
-    // ── TOP ROW: insurer badge + name + status ────────────────
-    html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">';
-    html += '<div style="width:38px;height:38px;border-radius:10px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:-.3px">'+pol.insurer+'</div>';
-    html += '<div style="flex:1;min-width:0">';
-    html += '<div style="font-size:15px;font-weight:700;line-height:1.3">'+pol.name+'</div>';
-    html += '<div style="font-size:11px;color:var(--t3);font-family:monospace;margin-top:1px">'+pol.no+'</div>';
-    // Premium inline under name
-    if(pol.premium>0){
-      html += '<div style="font-size:12px;margin-top:4px;color:'+(pd2?'var(--green)':'var(--amber)');
-      html += '">'+(pd2?'&#x2705;':'&#x23F0;')+' '+pol.premium.toLocaleString()+' ฿/ปี '+'<span style="font-size:10px;opacity:.7">'+(pd2?'('+th?'ชำระแล้ว':'Paid'+')':'('+th?'ค้างชำระ':'Unpaid'+')')+'</span></div>';
-    } else if(pol.freePolicy){
-      html += '<div style="font-size:11px;margin-top:3px;color:var(--green)">&#x1F3E2; '+(th?'นายจ้างจ่าย':'Employer pays')+'</div>';
-    } else if(pol.status==='paid_up'){
-      html += '<div style="font-size:11px;margin-top:3px;color:var(--blue)">&#x2705; '+(th?'ชำระครบแล้ว':'Paid-up')+'</div>';
-    }
-    html += '</div>';
-    html += '<span style="font-size:10px;padding:3px 8px;border-radius:20px;background:'+(pol.status==='active'?'rgba(105,240,174,.15)':'rgba(79,195,247,.15)')+';color:'+(pol.status==='active'?'var(--green)':'var(--blue)')+';flex-shrink:0">'+statusLabel+'</span>';
-    html += '</div>';
-
-    // ── CARD PHOTO — inline, full-width, tap to enlarge ───────
-    if(cardImg){
-      html += '<div style="display:flex;gap:6px;margin-bottom:10px">';
-      html += '<div onclick="showCardImage(&quot;'+pol.no+'&quot;)" style="flex:1;height:90px;border-radius:10px;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,.12);background:#0d0d1a">';
-      html += '<img src="'+cardImg+'" style="width:100%;height:100%;object-fit:contain">';
-      html += '</div>';
-      html += '</div>';
-    }
-
-    // ── INFO CHIPS: sum assured, end date, due month ──────────
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
-    if(pol.sumAssured) html += '<div style="background:rgba(79,195,247,.1);border-radius:8px;padding:5px 10px"><div style="font-size:9px;color:var(--t3)">'+th?'ทุนประกัน':'Sum Assured'+'</div><div style="font-size:13px;font-weight:700;color:var(--blue)">'+fmtTHB(pol.sumAssured)+'</div></div>';
-    if(pol.endDate) html += '<div style="background:rgba(255,255,255,.05);border-radius:8px;padding:5px 10px"><div style="font-size:9px;color:var(--t3)">'+(th?'สิ้นสุด':'Ends')+'</div><div style="font-size:13px;font-weight:600">'+pol.endDate.substring(0,4)+'</div></div>';
-    if(pol.dueMonth && pol.premium>0) html += '<div style="background:rgba(255,183,77,.1);border-radius:8px;padding:5px 10px"><div style="font-size:9px;color:var(--t3)">'+(th?'เดือนครบกำหนด':'Due Month')+'</div><div style="font-size:13px;font-weight:600;color:var(--amber)">'+(th?'เดือน':'Month ')+pol.dueMonth+'</div></div>';
-    html += '</div>';
-
-    // ── RIDERS — collapsible ──────────────────────────────────
-    if(pol.riders && pol.riders.length){
-      var riderId = 'riders-'+pol.no.replace(/[^a-zA-Z0-9]/g,'_');
-      html += '<div style="border-top:1px solid rgba(255,255,255,.07);padding-top:8px">';
-      html += '<div onclick="toggleRiders(\'' + riderId + '\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:4px 0;margin-bottom:4px">';
-      html += '<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม':'Riders')+' ('+pol.riders.length+')</div>';
-      html += '<div id="'+riderId+'-icon" style="color:var(--t3);font-size:12px">&#x25BC;</div></div>';
-      html += '<div id="'+riderId+'">';  // visible by default
-
-      // Group riders by category
-      var rCats = {};
-      pol.riders.forEach(function(r){
-        var cat = r.cat||'other';
-        if(!rCats[cat]) rCats[cat]=[];
-        rCats[cat].push(r);
-      });
-      var catOrder = ['ipd_room_board','ipd_total','ipd_medical','ipd_surgery','ipd_surgery_room','ipd_anesthesia',
-                      'daily_hospital_cash','opd_general','opd_accident','opd_consult','opd_lab',
-                      'critical_illness_severe','critical_illness_early','critical_illness_cancer',
-                      'accident_death','accident_medical','premium_waiver'];
-      var catLabel = {
-        'ipd_room_board': th?'ค่าห้อง':'Room & Board',
-        'ipd_total': th?'IPD เหมาจ่าย':'IPD Lump Sum',
-        'ipd_medical': th?'ค่ารักษา':'Medical Expenses',
-        'ipd_surgery': th?'ค่าผ่าตัด':'Surgery',
-        'ipd_surgery_room': th?'ห้องผ่าตัด':'OR',
-        'ipd_anesthesia': th?'ยาสลบ':'Anesthesia',
-        'daily_hospital_cash': th?'ค่าชดเชยรายวัน':'Daily Cash',
-        'opd_general': th?'OPD':'OPD',
-        'opd_accident': th?'OPD อุบัติเหตุ':'ER / Accident',
-        'opd_consult': th?'ค่าปรึกษา':'Consultation',
-        'opd_lab': th?'Lab / X-ray':'Lab / X-ray',
-        'critical_illness_severe': th?'โรคร้ายแรง (ระยะสุดท้าย)':'Critical Illness',
-        'critical_illness_early': th?'โรคร้ายแรง (ระยะเริ่มต้น)':'CI Early Stage',
-        'critical_illness_cancer': th?'โรคมะเร็ง':'Cancer',
-        'accident_death': th?'เสียชีวิต/ทุพพลภาพ':'AD&D',
-        'accident_medical': th?'ค่ารักษาอุบัติเหตุ':'Accident Medical',
-        'premium_waiver': th?'ยกเว้นเบี้ย':'Premium Waiver'
-      };
-
-      // Render in category order, then uncategorized
-      var renderedCats = [];
-      catOrder.forEach(function(cat){
-        if(!rCats[cat]) return;
-        renderedCats.push(cat);
-        var label = catLabel[cat] || cat;
-        html += '<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 3px">'+label+'</div>';
-        rCats[cat].forEach(function(r){
-          var valStr = r.perDay ? r.perDay.toLocaleString()+'/'+th?'วัน':'day' :
-                       r.amount ? (r.amount>=10000?Math.round(r.amount/1000)+'K':r.amount.toLocaleString()) : '';
-          var dotColor = r.fromFirst ? 'var(--green)' : 'var(--red)';
-          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:3px 0;font-size:12px">';
-          html += '<div style="display:flex;gap:6px;align-items:flex-start;flex:1;min-width:0">';
-          html += '<span style="color:'+dotColor+';flex-shrink:0;margin-top:2px">&#x25CF;</span>';
-          html += '<div style="flex:1"><div style="color:var(--t2)">'+r.name+'</div>';
-          if(r.hasDeductible && r.deductible){
-            html += '<div style="color:var(--red);font-size:10px">&#x26A0;&#xFE0F; Deductible '+r.deductible.toLocaleString()+' ฿</div>';
-          } else if(r.note){
-            var _n=(typeof r.note==='object')?(th?r.note.th||r.note.en:r.note.en||r.note.th):r.note;
-            html += '<div style="color:var(--amber);font-size:10px">&#x26A0;&#xFE0F; '+_n+'</div>';
-          }
-          html += '</div></div>';
-          if(valStr) html += '<div style="font-size:13px;font-weight:700;color:var(--teal);flex-shrink:0;margin-left:8px">'+valStr+'</div>';
-          html += '</div>';
-        });
-      });
-      html += '</div>';  // riders div
-      html += '</div>';  // border-top div
-    }
-
-    // ── Notes ─────────────────────────────────────────────────
-    if(pol.note || pol.notes){
-      html += '<div style="font-size:11px;color:var(--t3);margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.05)">'+(pol.note||pol.notes)+'</div>';
-    }
-
-    // ── FOOTER: Edit | 📷 Camera ─────────────────────────────
-    html += '<div style="display:flex;gap:8px;margin-top:12px">';
-    html += '<button class="btn btn-secondary" onclick="editPolicy(&quot;'+pol.no+'&quot;)" style="flex:1;font-size:13px;padding:10px;font-weight:600">&#x270F;&#xFE0F; '+(th?'แก้ไข':'Edit')+'</button>';
-    html += '<button class="btn btn-secondary" onclick="uploadCardImage(&quot;'+pol.no+'&quot;)" style="font-size:16px;padding:10px 16px" title="'+(th?'อัพโหลดรูปบัตร':'Upload card photo')+'">&#x1F4F7;</button>';
-    html += '</div>';
-
-    html += '</div>';  // card
-  });
-  // Premium summary (self-paid only, all active)
-  var activePols = myPolicies.filter(function(p){return p.status==='active'&&p.selfPaid!==false&&p.premium>0;});
-  var totalPrem = activePols.reduce(function(s,p){return s+(p.premium||0);},0);
-  if(totalPrem>0){
-    html += '<div class="card" style="background:rgba(79,195,247,.06);border-color:rgba(79,195,247,.2);margin-top:4px">';
-    html += '<div style="font-size:14px;font-weight:600;margin-bottom:10px">&#x1F4B0; '+(S.lang==='th'?'สรุปเบี้ยประกัน':'Premium Summary')+'</div>';
-    activePols.forEach(function(pol){
-      html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">';
-      html += '<span style="color:var(--t2)">'+pol.no+'</span>';
-      html += '<span style="font-weight:600">'+pol.premium.toLocaleString()+' ฿</span></div>';
-    });
-    html += '<hr class="div" style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700"><span>'+(S.lang==='th'?'รวม':'Total')+'</span><span style="color:var(--teal)">'+totalPrem.toLocaleString()+' ฿/'+( S.lang==='th'?'ปี':'yr')+'</span></div>';
-    html += '</div>';
+  // Filter policies by selected person
+  function filterByPerson(pols){
+    if(S.insFilter==='all') return pols;
+    var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
+    if(!fp) return pols;
+    return pols.filter(function(p){return p.holder===fp.name||p.holderId===fp.dbId;});
   }
 
-  html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:8px">+ '+(S.lang==='th'?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
-  html += '<div style="height:10px"></div></div>';
+  // All active policies filtered by person
+  var allPols = filterByPerson(POLICIES_DEMO.filter(function(p){return p.status==='active'||p.status==='paid_up';}));
+
+  // Search further filters by text
+  if(S.insSearch.trim()){
+    var q = S.insSearch.toLowerCase();
+    allPols = allPols.filter(function(pol){
+      return [pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',
+        (pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' ')
+      ].join(' ').toLowerCase().indexOf(q)>=0;
+    });
+  }
+
+  var html = '<div class="fade">';
+
+  // ── Person filter pills ────────────────────────────────────
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(th?'ทั้งหมด':'All')+'</div>';
+  PROFILES.forEach(function(pr){
+    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
+  });
+  html += '</div>';
+
+  // ── Search box ────────────────────────────────────────────
+  html += '<div style="position:relative;margin-bottom:10px">';
+  html += '<input id="ins-search" type="text" placeholder="'+(th?'ค้นหา เช่น TLI, AIA, ค่าห้อง...':'Search e.g. TLI, AIA, room...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" ';
+  html += 'oninput="S.insSearch=this.value;renderInsurance()" ';
+  html += 'style="width:100%;box-sizing:border-box;padding:9px 36px 9px 12px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
+  if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:15px">&#x2715;</div>';
+  html += '</div>';
+
+  // ── Situation tabs ────────────────────────────────────────
+  var views = [
+    {id:'room',  icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
+    {id:'icu',   icon:'&#x1F4C8;', label:'ICU'},
+    {id:'surg',  icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'},
+    {id:'opd',   icon:'&#x1F48A;', label:'OPD'},
+    {id:'cash',  icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'},
+    {id:'ci',    icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'},
+    {id:'all',   icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'}
+  ];
+  html += '<div style="display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">';
+  views.forEach(function(v){
+    var on = S.insView===v.id;
+    html += '<div onclick="S.insView=\''+v.id+'\';renderInsurance()" ';
+    html += 'style="flex-shrink:0;padding:7px 12px;border-radius:20px;font-size:12px;cursor:pointer;white-space:nowrap;';
+    html += on ? 'background:rgba(79,195,247,.2);border:1px solid rgba(79,195,247,.5);color:var(--blue);font-weight:700"'
+               : 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--t2)"';
+    html += '>'+v.icon+' '+v.label+'</div>';
+  });
+  html += '</div>';
+
+  // ── SITUATION VIEW ────────────────────────────────────────
+  if(S.insView !== 'all'){
+    html += renderInsuranceSituation(allPols, S.insView, th);
+  } else {
+    html += renderInsuranceAllPolicies(allPols, th);
+  }
+
+  // ── Add policy button ─────────────────────────────────────
+  html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
+  html += '<div style="height:16px"></div></div>';
   document.getElementById('pg-insurance').innerHTML = html;
 }
 
-function openCoverageSummary(){
-  // Use insFilter if set to specific person, else S.pid
-  var covProfileId = (S.insFilter!=='all') ? S.insFilter : S.pid;
-  var p = prof(covProfileId);
-  var holderId = p.dbId;
-  var sum = getCoverageSummary(holderId);
-  
-  function coverageRows(items){
-    if(!items.length) return '<div style="color:var(--t3);font-size:12px">ไม่มีความคุ้มครอง</div>';
-    return items.map(function(it){
-      var badge = it.deductible>0 ? '<span style="font-size:10px;color:var(--red);margin-left:4px">ส่วนแรก '+it.deductible.toLocaleString()+'฿</span>' :
-                  it.fromFirst ? '' : '';
-      var insTag = '<span style="font-size:10px;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;margin-right:4px">'+it.insurer+' '+it.policy+'</span>';
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05)">'+
-        '<div>'+insTag+'<span style="font-size:12px;color:var(--t2)">'+it.name+'</span>'+badge+'</div>'+
-        '<div style="font-size:14px;font-weight:700;color:var(--green)">'+
-        (it.amount?(it.amount/1000).toFixed(0)+'K':it.amount===undefined?'':it.amount)+
-        (it.amount?'฿':'')+'</div></div>';
-    }).join('');
+// ── SITUATION VIEW: flat table by coverage type ───────────────
+function renderInsuranceSituation(pols, view, th){
+  // Map view → rider cats to include
+  var catMap = {
+    room: ['ipd_room_board'],
+    icu:  ['ipd_room_board'],  // we'll filter by 'ICU' in name
+    surg: ['ipd_surgery','ipd_surgery_room','ipd_anesthesia'],
+    opd:  ['opd_general','opd_accident','opd_consult','opd_lab'],
+    cash: ['daily_hospital_cash'],
+    ci:   ['critical_illness_severe','critical_illness_early','critical_illness_cancer']
+  };
+  var cats = catMap[view] || [];
+  var isICU = (view==='icu');
+
+  // Collect matching riders across all policies
+  var rows = [];
+  pols.forEach(function(pol){
+    var ins = INSURERS_DEMO.find(function(i){return i.code===pol.insurer;});
+    var color = ins ? ins.color : '#888';
+    (pol.riders||[]).forEach(function(r){
+      if(cats.indexOf(r.cat)<0) return;
+      // ICU: only riders with ICU/ICC in name
+      if(isICU && !/ICU|ICC|icu|icc/i.test(r.name) && !/ICU|ICC/i.test(r.code||'')) return;
+      // Room (non-ICU): exclude ICU-named riders
+      if(view==='room' && /ICU|ICC/i.test(r.name)) return;
+      rows.push({pol:pol, r:r, color:color});
+    });
+  });
+
+  if(!rows.length){
+    return '<div style="text-align:center;padding:40px 20px;color:var(--t3);font-size:13px">'+
+           (th?'ไม่พบความคุ้มครองประเภทนี้':'No coverage found for this category')+'</div>';
   }
+
+  // Sort: fromFirst (no deductible) first, then by amount desc
+  rows.sort(function(a,b){
+    if(a.r.fromFirst && !b.r.fromFirst) return -1;
+    if(!a.r.fromFirst && b.r.fromFirst) return 1;
+    var va = a.r.perDay||a.r.amount||0;
+    var vb = b.r.perDay||b.r.amount||0;
+    return vb-va;
+  });
 
   var html = '';
-  
-  // Hospital card to show nurses
-  html += '<div style="background:linear-gradient(135deg,rgba(255,82,82,.1),rgba(156,127,224,.08));border:1px solid rgba(255,82,82,.2);border-radius:16px;padding:16px;margin-bottom:14px">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:10px">&#x1F3E5; '+(S.lang==='th'?'แสดงที่โรงพยาบาล (เมื่อ Admit)':'Show at Hospital on Admission')+'</div>';
-  html += '<div style="font-size:12px;color:var(--t2);margin-bottom:8px">'+(S.lang==='th'?'กรมธรรม์ที่มีผลบังคับ (แจ้งพยาบาล):':'Active policy numbers (inform nurse):')+'</div>';
-  var activePols2 = POLICIES_DEMO.filter(function(p2){ return p2.holderId===holderId && (p2.status==='active'||p2.status==='paid_up'); });
-  activePols2.forEach(function(pol){
-    var hasIPD = (pol.riders||[]).some(function(r){ return r.cat==='ipd_room_board'||r.cat==='ipd_medical'||r.cat==='daily_hospital_cash'; });
-    if(hasIPD){
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-      html += '<div style="background:rgba(255,255,255,.1);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700">'+pol.insurer+'</div>';
-      html += '<div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--t1)">'+pol.no+'</div>';
-      html += '<div style="font-size:11px;color:var(--t3)">'+pol.name+'</div>';
-      html += '</div>';
+
+  // Summary card at top
+  var fromFirstRows = rows.filter(function(x){return x.r.fromFirst;});
+  var dedRows = rows.filter(function(x){return !x.r.fromFirst;});
+  html += '<div style="background:rgba(79,195,247,.08);border:1px solid rgba(79,195,247,.2);border-radius:14px;padding:12px 14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px">&#x1F4A1; '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
+  if(fromFirstRows.length){
+    var best = fromFirstRows[0];
+    var bestVal = best.r.perDay ? best.r.perDay.toLocaleString()+(th?' ฿/วัน':' ฿/day') : (best.r.amount?(best.r.amount/1000).toFixed(0)+'K ฿':'');
+    html += '<div style="font-size:12px;color:var(--t2);margin-bottom:3px">&#x2705; <b>'+(th?'ใช้ได้ตั้งแต่บาทแรก:':'From 1st baht:')+'</b> '+best.pol.insurer+' '+best.r.name+' <span style="color:var(--green);font-weight:700">'+bestVal+'</span></div>';
+  }
+  if(dedRows.length){
+    var minDed = Math.min.apply(null, dedRows.map(function(x){return x.r.deductible||999999;}));
+    html += '<div style="font-size:12px;color:var(--t2)">&#x26A0;&#xFE0F; <b>'+(th?'หลังจาก deductible:':'After deductible:')+'</b> '+
+            dedRows.length+(th?' รายการ (ต่ำสุด ':' items (min deductible ')+minDed.toLocaleString()+' ฿)</div>';
+  }
+  html += '</div>';
+
+  // Table of all matching riders
+  rows.forEach(function(x){
+    var pol=x.pol, r=x.r;
+    var valStr = r.perDay ? '<span style="font-size:18px;font-weight:800;color:var(--teal)">'+r.perDay.toLocaleString()+'</span><span style="font-size:10px;color:var(--t3)"> ฿/'+(th?'วัน':'day')+'</span>' :
+                 r.amount ? '<span style="font-size:18px;font-weight:800;color:var(--teal)">'+(r.amount>=10000?(r.amount/1000).toFixed(0)+'K':r.amount.toLocaleString())+'</span><span style="font-size:10px;color:var(--t3)"> ฿</span>' : '';
+    var dedStr = (r.hasDeductible && r.deductible) ?
+      '<div style="font-size:10px;color:var(--red);margin-top:2px">&#x26A0; Deductible '+r.deductible.toLocaleString()+' ฿</div>' : '';
+    var condStr = r.note ?
+      '<div style="font-size:10px;color:var(--amber);margin-top:2px">'+
+      (typeof r.note==='object'?(th?r.note.th||r.note.en:r.note.en||r.note.th):r.note)+'</div>' : '';
+    var fromFirstBadge = r.fromFirst ?
+      '<span style="font-size:9px;background:rgba(105,240,174,.2);color:var(--green);padding:2px 6px;border-radius:10px;margin-left:4px">'+(th?'บาทแรก':'1st baht')+'</span>' : '';
+
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:8px">';
+    // Insurer badge
+    html += '<div style="width:36px;height:36px;border-radius:9px;background:'+x.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
+    // Main info
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+pol.no+'</div>';
+    html += '<div style="font-size:12px;color:var(--t2)">'+r.name+fromFirstBadge+'</div>';
+    html += dedStr + condStr;
+    html += '</div>';
+    // Value
+    html += '<div style="text-align:right;flex-shrink:0">'+valStr+'</div>';
+    html += '</div>';
+  });
+
+  // Quick action: IPD workflow
+  html += '<div onclick="openIPDWorkflow()" style="text-align:center;padding:10px;background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.2);border-radius:12px;cursor:pointer;font-size:13px;color:var(--red);margin-top:4px">&#x1F3E5; '+(th?'วิธีใช้ประกัน IPD':'IPD Usage Workflow')+'</div>';
+
+  return html;
+}
+
+// ── ALL POLICIES: compact cards ───────────────────────────────
+function renderInsuranceAllPolicies(pols, th){
+  var html = '';
+  var yr2 = new Date().getFullYear();
+
+  // 90-day alerts
+  var now90=new Date(), in90d=new Date(now90.getTime()+90*24*3600000);
+  pols.forEach(function(pol){
+    if(pol.endDate){
+      var exp=new Date(pol.endDate);
+      if(exp>=now90&&exp<=in90d){
+        var days=Math.ceil((exp-now90)/86400000);
+        html+='<div style="background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.25);border-radius:10px;padding:9px 12px;margin-bottom:6px;font-size:12px;color:var(--red)">&#x23F3; '+pol.no+' '+(th?'หมดอายุใน':'expires in')+' '+days+(th?' วัน':'d')+' ('+pol.endDate+')</div>';
+      }
+    }
+    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'&&!isPaid(pol.no,yr2)){
+      var due=new Date(yr2,pol.dueMonth-1,15);
+      if(due<now90) due=new Date(yr2+1,pol.dueMonth-1,15);
+      if(due<=in90d){
+        var days2=Math.ceil((due-now90)/86400000);
+        html+='<div style="background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.25);border-radius:10px;padding:9px 12px;margin-bottom:6px;font-size:12px;color:var(--amber)">&#x23F0; '+pol.name+' '+(th?'เบี้ยครบกำหนดใน':'premium due in')+' '+days2+(th?' วัน':' days')+'</div>';
+      }
     }
   });
-  html += '</div>';
 
-  // IPD Coverage breakdown
-  html += '<div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px">&#x1F6CF;&#xFE0F; ความคุ้มครองผู้ป่วยใน (IPD)</div>';
-  
-  html += '<div class="card card-sm" style="margin-bottom:10px">';
-  html += '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">ค่าห้องและอาหาร/วัน (รวม '+sum.total_ipd_room.toLocaleString()+' ฿/วัน)</div>';
-  html += coverageRows(sum.ipd_room.map(function(x){return Object.assign({},x,{amount:x.amount});}));
-  html += '</div>';
-
-  if(sum.ipd_surgery.length){
-    html += '<div class="card card-sm" style="margin-bottom:10px">';
-    html += '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">ค่าผ่าตัด</div>';
-    html += coverageRows(sum.ipd_surgery);
-    html += '</div>';
+  // Premium summary
+  var selfTotal = pols.filter(function(p){return p.selfPaid&&p.premium>0&&p.status==='active';}).reduce(function(s,p){return s+(p.premium||0);},0);
+  if(selfTotal){
+    html+='<div style="background:rgba(156,127,224,.08);border:1px solid rgba(156,127,224,.2);border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">';
+    html+='<div style="font-size:12px;color:var(--violet)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-pay premium/yr')+'</div>';
+    html+='<div style="font-size:16px;font-weight:800;color:var(--teal)">'+selfTotal.toLocaleString()+' ฿</div>';
+    html+='</div>';
   }
 
-  html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:8px;margin-top:4px">&#x1F4B5; ค่าชดเชยรายวัน (Daily Cash)</div>';
-  html += '<div class="card card-sm" style="margin-bottom:10px">';
-  html += '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">รวม '+sum.total_daily_cash.toLocaleString()+' ฿/วัน (รับแยกจากค่ารักษา)</div>';
-  html += coverageRows(sum.daily_cash.map(function(x){return Object.assign({},x,{amount:x.amount});}));
-  html += '</div>';
+  // Policy cards
+  pols.forEach(function(pol){
+    var ins = INSURERS_DEMO.find(function(i){return i.code===pol.insurer;});
+    var insColor = ins ? ins.color : '#888';
+    var pd2 = isPaid(pol.no, yr2);
+    var imgs = POLICY_IMAGES[pol.no] || [];
+    var legacyImg = pol.cardImage || CARD_IMAGES[pol.no];
+    if(legacyImg && !imgs.length) imgs = [{id:'legacy',data:legacyImg,label:'card'}];
 
-  html += '<div style="font-size:13px;font-weight:700;color:var(--rose);margin-bottom:8px;margin-top:4px">&#x1F9EC; โรคร้ายแรง (Critical Illness)</div>';
-  html += '<div class="card card-sm" style="margin-bottom:10px">';
-  html += '<div style="font-size:11px;color:var(--t3);margin-bottom:4px">ระยะสุดท้าย</div>'+coverageRows(sum.critical_severe);
-  html += '<div style="font-size:11px;color:var(--t3);margin-bottom:4px;margin-top:8px">ระยะเริ่มต้น</div>'+coverageRows(sum.critical_early);
-  if(sum.critical_cancer.length){ html += '<div style="font-size:11px;color:var(--t3);margin-bottom:4px;margin-top:8px">โรคมะเร็ง</div>'+coverageRows(sum.critical_cancer); }
-  html += '</div>';
+    var statusColor = pol.status==='active' ? 'var(--green)' : pol.status==='paid_up' ? 'var(--blue)' : 'var(--t3)';
+    var statusLabel = pol.status==='active'?(th?'มีผลบังคับ':'Active'):pol.status==='paid_up'?(th?'ชำระครบ':'Paid-up'):(th?'หมดอายุ':'Expired');
 
-  html += '<div style="height:10px"></div>';
-  openModal(S.lang==='th'?'ภาพรวมความคุ้มครอง':'Coverage Summary', html);
-}
+    html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:14px;margin-bottom:10px">';
 
-function openIPDWorkflow(){
-  var covProfileId2 = (S.insFilter!=='all') ? S.insFilter : S.pid;
-  var p = prof(covProfileId2);
-  var advice = getIPDAdvice(p.dbId||'aaaaaaaa-0000-0000-0000-000000000001');
-  
-  var html = '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(S.lang==='th'?'บันทึกการเข้าพักรักษาตัว และรับคำแนะนำการใช้ประกัน':'Record hospitalization and get insurance utilization advice.')+'</div>';
+    // Urgent
+    if(pol.urgent&&!pd2) html+='<div style="background:rgba(255,183,77,.12);border:1px solid rgba(255,183,77,.3);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:var(--amber)">&#x23F0; '+pol.urgentMsg+'</div>';
 
-  // Insurance advice box
-  html += '<div style="background:rgba(38,217,176,.08);border:1px solid rgba(38,217,176,.2);border-radius:14px;padding:14px;margin-bottom:14px">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">&#x1F916; '+(S.lang==='th'?'คำแนะนำการใช้ประกัน':'Insurance Usage Advice')+'</div>';
-  
-  html += '<div style="font-size:12px;margin-bottom:8px;color:var(--t1)"><b>'+(S.lang==='th'?'ขั้นตอนที่ 1 — ใช้ AIA ก่อน (คุ้มครองตั้งแต่บาทแรก)':'Step 1 — Use AIA first (covers from 1st baht)')+'</b></div>';
-  advice.useFirst.forEach(function(x){
-    html += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--t2)">';
-    html += '<span style="color:var(--green)">&#x2705;</span>';
-    html += '<span><b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name+'</span></div>';
-  });
-  advice.dailyCash.forEach(function(x){
-    html += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--teal)">';
-    html += '<span>&#x1F4B5;</span>';
-    html += '<span><b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name+' '+x.rider.perDay.toLocaleString()+' ฿/วัน</span></div>';
-  });
+    // Header row
+    html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+    html+='<div style="width:36px;height:36px;border-radius:9px;background:'+insColor+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
+    html+='<div style="flex:1;min-width:0">';
+    html+='<div style="font-size:14px;font-weight:700;line-height:1.3">'+pol.name+'</div>';
+    html+='<div style="font-size:10px;color:var(--t3);font-family:monospace">'+pol.no+'</div>';
+    html+='</div>';
+    html+='<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.07);color:'+statusColor+'">'+statusLabel+'</span>';
+    html+='</div>';
 
-  if(advice.useSecond.length){
-    html += '<div style="font-size:12px;margin:10px 0 8px;color:var(--t1)"><b>'+(S.lang==='th'?'ขั้นตอนที่ 2 — ใช้ TLI หลังจากครบ Deductible':'Step 2 — Use TLI after deductible (lowest deductible first)')+'</b></div>';
-    // Group step2 by policy, sorted by lowest deductible first
-    var s2g={};
-    advice.useSecond.forEach(function(x){
-      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,riders:[],minDed:x.rider.deductible||999999};
-      s2g[x.pol.no].riders.push(x.rider);
-      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
+    // Key info chips
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+    if(pol.sumAssured) html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">ทุน </span><span style="color:var(--blue);font-weight:600">'+fmtTHB(pol.sumAssured)+'</span></div>';
+    if(pol.endDate) html+='<div style="background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">'+(th?'ถึง ':'to ')+'</span><span style="font-weight:600">'+pol.endDate.substring(0,4)+'</span></div>';
+    if(pol.premium>0) html+='<div style="background:'+(pd2?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border-radius:6px;padding:3px 8px;font-size:11px">'+(pd2?'&#x2705; ':'&#x23F0; ')+'<span style="font-weight:600">'+pol.premium.toLocaleString()+' ฿/ปี</span></div>';
+    if(pol.freePolicy) html+='<div style="background:rgba(105,240,174,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--green)">&#x1F3E2; '+(th?'นายจ้างจ่าย':'Employer')+'</div>';
+    if(pol.status==='paid_up') html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--blue)">&#x2705; Paid-up</div>';
+    html+='</div>';
+
+    // Top riders summary (key ones only — room, total, CI)
+    var keyRiders = (pol.riders||[]).filter(function(r){
+      return ['ipd_room_board','ipd_total','critical_illness_severe','daily_hospital_cash'].indexOf(r.cat)>=0;
     });
-    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
-      var g=s2g[key],ded=g.minDed<999999?g.minDed:null,th2=S.lang==='th';
-      html+='<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.25);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
-      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">';
-      html+='<span>&#x26A0;&#xFE0F;</span><b style="font-size:13px">'+g.pol.insurer+' '+g.pol.no+'</b>';
-      if(ded) html+='<span style="font-size:10px;background:rgba(255,82,82,.25);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
+    if(keyRiders.length){
+      html+='<div style="border-top:1px solid rgba(255,255,255,.07);padding-top:8px;margin-bottom:8px">';
+      keyRiders.forEach(function(r){
+        var val = r.perDay?r.perDay.toLocaleString()+(th?'/วัน':'/day'):r.amount?(r.amount>=10000?(r.amount/1000).toFixed(0)+'K':''+r.amount):'';
+        html+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">';
+        html+='<span style="color:var(--t2)">'+r.name+'</span>';
+        html+='<span style="color:var(--teal);font-weight:700">'+val+' ฿</span></div>';
+        if(r.hasDeductible&&r.deductible) html+='<div style="font-size:10px;color:var(--red);padding-left:8px;margin-bottom:2px">&#x26A0; Ded. '+r.deductible.toLocaleString()+' ฿</div>';
+      });
+      // "Show all" link if there are more
+      var totalRiders = (pol.riders||[]).length;
+      if(totalRiders > keyRiders.length){
+        html+='<div onclick="showAllRiders(\''+pol.no+'\')" style="font-size:11px;color:var(--blue);cursor:pointer;padding-top:4px">&#x25BC; '+(th?'สัญญาเพิ่มเติมทั้งหมด':'All riders')+' ('+totalRiders+')</div>';
+      }
       html+='</div>';
-      g.riders.forEach(function(r){html+='<div style="font-size:12px;color:var(--t2);padding:2px 0 2px 22px">• '+r.name+'</div>';});
-      if(ded) html+='<div style="font-size:11px;color:var(--red);margin-top:5px;padding-left:22px">➡️ '+(th2?'ต้องจ่ายส่วนแรก '+ded.toLocaleString()+' ฿ ก่อน จึงจะเบิกได้':'Pay '+ded.toLocaleString()+' ฿ deductible first, then claim')+'</div>';
+    }
+
+    // Photos thumbnails (multi-image)
+    if(imgs.length){
+      html+='<div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px">';
+      imgs.forEach(function(im,idx){
+        html+='<div onclick="viewPolicyImage(\''+pol.no+'\','+idx+')" style="width:72px;height:52px;border-radius:8px;overflow:hidden;flex-shrink:0;cursor:pointer;border:1px solid rgba(255,255,255,.15);background:#0d0d1a">';
+        html+='<img src="'+im.data+'" style="width:100%;height:100%;object-fit:cover">';
+        html+='</div>';
+      });
+      // Add more button
+      html+='<div onclick="uploadCardImage(\''+pol.no+'\')" style="width:52px;height:52px;border-radius:8px;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:18px">+</div>';
       html+='</div>';
+    }
+
+    // Footer
+    html+='<div style="display:flex;gap:8px">';
+    html+='<button class="btn btn-secondary" onclick="editPolicy(&quot;'+pol.no+'&quot;)" style="flex:1;font-size:13px;padding:9px;font-weight:600">&#x270F;&#xFE0F; '+(th?'แก้ไข':'Edit')+'</button>';
+    if(!imgs.length) html+='<button class="btn btn-secondary" onclick="uploadCardImage(&quot;'+pol.no+'&quot;)" style="font-size:15px;padding:9px 14px" title="'+(th?'เพิ่มรูปบัตร':'Add photo')+'">&#x1F4F7;</button>';
+    html+='</div>';
+
+    html+='</div>'; // card
+  });
+
+  return html;
+}
+
+// Show all riders in a modal
+function showAllRiders(policyNo){
+  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+  if(!pol) return;
+  var th = S.lang==='th';
+  var html = '';
+  var catLabel = {
+    'ipd_room_board':th?'ค่าห้อง':'Room & Board',
+    'ipd_total':th?'IPD เหมาจ่าย':'IPD Lump Sum',
+    'ipd_medical':th?'ค่ารักษา':'Medical',
+    'ipd_surgery':th?'ค่าผ่าตัด':'Surgery',
+    'ipd_surgery_room':th?'ห้องผ่าตัด':'OR',
+    'ipd_anesthesia':th?'ยาสลบ':'Anesthesia',
+    'daily_hospital_cash':th?'ค่าชดเชยรายวัน':'Daily Cash',
+    'opd_general':'OPD','opd_accident':th?'OPD อุบัติเหตุ':'ER',
+    'opd_consult':th?'ค่าปรึกษา':'Consult','opd_lab':'Lab',
+    'critical_illness_severe':th?'โรคร้ายแรง':'CI',
+    'critical_illness_early':th?'CI ระยะเริ่มต้น':'CI Early',
+    'critical_illness_cancer':th?'มะเร็ง':'Cancer',
+    'accident_death':th?'เสียชีวิต/ทุพพลภาพ':'AD&D',
+    'accident_medical':th?'ค่ารักษาอุบัติเหตุ':'Accident',
+    'premium_waiver':th?'ยกเว้นเบี้ย':'Premium Waiver'
+  };
+  var cats = {};
+  (pol.riders||[]).forEach(function(r){
+    var c=r.cat||'other';
+    if(!cats[c]) cats[c]=[];
+    cats[c].push(r);
+  });
+  Object.keys(cats).forEach(function(cat){
+    html+='<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">'+(catLabel[cat]||cat)+'</div>';
+    cats[cat].forEach(function(r){
+      var val = r.perDay?r.perDay.toLocaleString()+(th?'/วัน':'/day'):r.amount?(r.amount>=10000?(r.amount/1000).toFixed(0)+'K ฿':''+r.amount+' ฿'):'';
+      html+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.05)">';
+      html+='<div><span style="color:'+(r.fromFirst?'var(--green)':'var(--red)')+'">&#x25CF;</span> <span style="color:var(--t2)">'+r.name+'</span>';
+      if(r.hasDeductible&&r.deductible) html+='<div style="font-size:10px;color:var(--red);margin-left:14px">&#x26A0; Ded. '+r.deductible.toLocaleString()+' ฿</div>';
+      if(r.note){var n=typeof r.note==='object'?(th?r.note.th:r.note.en):r.note; html+='<div style="font-size:10px;color:var(--amber);margin-left:14px">'+n+'</div>';}
+      html+='</div><div style="color:var(--teal);font-weight:700;white-space:nowrap">'+val+'</div></div>';
     });
-  }
+  });
+  openModal(pol.name, html);
+}
+
+// View single policy image
+function viewPolicyImage(policyNo, idx){
+  var imgs = POLICY_IMAGES[policyNo] || [];
+  var legacyImg = (POLICIES_DEMO.find(function(p){return p.no===policyNo;})||{}).cardImage || CARD_IMAGES[policyNo];
+  if(legacyImg && !imgs.length) imgs = [{id:'legacy',data:legacyImg,label:'card'}];
+  if(!imgs[idx]) return;
+  var html = '<div style="text-align:center">';
+  html += '<img src="'+imgs[idx].data+'" style="max-width:100%;border-radius:10px;max-height:70vh;object-fit:contain">';
+  if(imgs.length>1) html += '<div style="font-size:12px;color:var(--t3);margin-top:8px">'+(idx+1)+' / '+imgs.length+'</div>';
   html += '</div>';
-
-  // Admission form
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'วันที่ Admit':'Admission Date')+'</label><input class="inp" type="date" id="ipd-admit" value="'+new Date().toISOString().split('T')[0]+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'โรงพยาบาล':'Hospital')+'</label><input class="inp" id="ipd-hospital" placeholder="โรงพยาบาล..."></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'โรคหลักที่รักษา':'Primary Diagnosis')+'</label><input class="inp" id="ipd-diag" placeholder="เช่น ไส้ติ่งอักเสบ, หัวใจ..."></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'วันที่ Discharge (ถ้าทราบ)':'Discharge Date (if known)')+'</label><input class="inp" type="date" id="ipd-discharge"></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'ยาที่ต้องรับกลับบ้าน':'Discharge Medications')+'</label><textarea class="inp" id="ipd-meds" rows="2" placeholder="ชื่อยา, วิธีรับประทาน..."></textarea></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'นัดติดตาม (Follow-up)':'Follow-up Appointment')+'</label><input class="inp" type="date" id="ipd-followup"></div>';
-  html += '<div class="fg"><label class="lbl">'+(S.lang==='th'?'บันทึกเพิ่มเติม':'Notes')+'</label><textarea class="inp" id="ipd-notes" rows="2" placeholder="..."></textarea></div>';
-  html += '<button class="btn btn-primary" onclick="saveIPDRecord()">&#x1F4BE; '+(S.lang==='th'?'บันทึกการรักษา':'Save Hospitalization')+'</button>';
-  html += '<div style="height:10px"></div>';
-  
-  openModal(S.lang==='th'?'บันทึกการเข้าพักรักษา (IPD)':'Hospitalization Record', html);
-}
-
-function saveIPDRecord(){
-  var admit = document.getElementById('ipd-admit').value;
-  var hospital = document.getElementById('ipd-hospital').value;
-  var diag = document.getElementById('ipd-diag').value;
-  if(!hospital||!diag){ toast(S.lang='th'?'กรุณากรอกโรงพยาบาลและโรคหลัก':'Please enter hospital and diagnosis'); return; }
-  closeModal();
-  toast(S.lang==='th'?'บันทึกการรักษาแล้ว ✓':'Hospitalization saved ✓');
-  // TODO: save to healthvault.hospitalizations via Supabase
+  openModal((S.lang==='th'?'รูปบัตร/เอกสาร':'Card / Document')+' '+policyNo, html);
 }
 
 
-// ── EDIT POLICY (comprehensive) ──────────────────────────────
+
+
+// ── MODAL ─────────────────────────────────────────────────────
+function openModal(title, body){
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal').className = 'on';
+}
+function closeModal(e){
+  if(e && e.target !== document.getElementById('modal')) return;
+  document.getElementById('modal').className = '';
+}
+function closeModalForce(){
+  document.getElementById('modal').className = '';
+}
+
+// ── TOAST ─────────────────────────────────────────────────────
+function toast(msg, duration){
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.className=''; }, duration||3000);
+}
+
+// ── AUTH ──────────────────────────────────────────────────────
+function login(){
+  // Alias for doSignIn — kept for backwards compat
+  doSignIn();
+}
+function logout(){
+  if(sbAuth) sbAuth.auth.signOut();
+  S.demo=true;
+  var appEl  = document.getElementById('app');
+  var authEl = document.getElementById('auth-screen');
+  if(appEl)  appEl.style.display='none';
+  if(authEl) authEl.style.display='flex';
+  toast('ออกจากระบบแล้ว');
+}
+function selProfile(pid){
+  S.pid=pid;
+  renderTab(S.tab);
+}
+
+// ── EDIT POLICY ───────────────────────────────────────────────
 function editPolicy(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
-  if(!pol){ toast('Policy not found'); return; }
+  if(!pol) return;
   var th = S.lang==='th';
   var yr = new Date().getFullYear();
   var paid = isPaid(policyNo, yr);
 
   var html = '';
 
-  // Card image upload at top
+  // Card image upload
   var currentImg = pol.cardImage || CARD_IMAGES[policyNo];
-  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
-  if(currentImg){
-    html += '<img src="'+currentImg+'" onclick="showCardImage(&quot;'+policyNo+'&quot;)" style="height:50px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,.2)">';
-    html += '<div><div style="font-size:12px;color:var(--teal)">&#x2705; '+(th?'มีรูปบัตรแล้ว (แตะเพื่อดู)':'Card image saved (tap to view)')+'</div>';
+  var allImgs = POLICY_IMAGES[policyNo]||[];
+  if(currentImg && !allImgs.length) allImgs=[{id:'legacy',data:currentImg,label:'card'}];
+  html += '<div style="margin-bottom:14px">';
+  if(allImgs.length){
+    html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px">';
+    allImgs.forEach(function(im,i){
+      html += '<div onclick="viewPolicyImage(&quot;'+policyNo+'&quot;,'+i+')" style="width:72px;height:52px;border-radius:8px;overflow:hidden;flex-shrink:0;cursor:pointer;border:1px solid rgba(255,255,255,.2)">';
+      html += '<img src="'+im.data+'" style="width:100%;height:100%;object-fit:cover"></div>';
+    });
+    html += '</div>';
   } else {
-    html += '<div style="width:50px;height:50px;border-radius:8px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:20px">&#x1F4B3;</div>';
-    html += '<div><div style="font-size:12px;color:var(--t3)">'+(th?'ยังไม่มีรูปบัตร':'No card image yet')+'</div>';
+    html += '<div style="font-size:12px;color:var(--t3);margin-bottom:6px">'+(th?'ยังไม่มีรูปบัตร':'No card photo yet')+'</div>';
   }
-  html += '<button class="btn btn-secondary" style="font-size:11px;padding:6px 12px" onclick="uploadCardImage(&quot;'+policyNo+'&quot;);closeModal()">&#x1F4F7; '+(th?'อัพโหลดรูปบัตร':'Upload Card')+'</button>';
-  html += '</div></div>';
-
-  // Payment status toggle - most important at top
-  html += '<div style="background:'+(paid?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border:1px solid '+(paid?'rgba(105,240,174,.3)':'rgba(255,183,77,.3)')+';border-radius:14px;padding:14px;margin-bottom:14px">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-  html += '<div><div style="font-size:14px;font-weight:700;color:'+(paid?'var(--green)':'var(--amber)')+'">'+(paid?'&#x2705; '+(th?'ชำระเบี้ยแล้ว '+yr:'Paid '+yr):'&#x23F0; '+(th?'ยังไม่ได้ชำระ '+yr:'Unpaid '+yr))+'</div>';
-  html += '<div style="font-size:11px;color:var(--t3);margin-top:2px">'+(th?'แตะปุ่มเพื่อเปลี่ยนสถานะ':'Tap to toggle payment status')+'</div></div>';
-  html += '<button class="btn '+(paid?'btn-secondary':'btn-primary')+'" style="padding:8px 16px;font-size:13px" onclick="togglePaid(\''+policyNo+'\')">';
-  html += paid?(th?'ยกเลิก':'Undo'):(th?'บันทึกว่าชำระแล้ว':'Mark Paid');
-  html += '</button></div></div>';
-
-  // Policy identity
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อกรมธรรม์':'Policy Name')+'</label><input class="inp" id="ep-name" value="'+pol.name+'"></div>';
+  html += '<button class="btn btn-secondary" style="font-size:12px;padding:7px 14px" onclick="window._returnToEdit=true;uploadCardImage(&quot;'+policyNo+'&quot;)">&#x1F4F7; '+(th?'อัพโหลดรูปบัตร':'Upload card photo')+'</button>';
   html += '</div>';
 
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'เลขกรมธรรม์':'Policy Number')+'</label><input class="inp" id="ep-no" value="'+pol.no+'" style="font-family:monospace"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'บริษัทประกัน':'Insurer')+'</label><select class="inp" id="ep-insurer">';
-  ['TLI','AIA','AXA','ALLIANZ','DHIP','MTL','FWD','KTAXA','SCBL','PRU','CIGNA','OTHER'].forEach(function(i){
-    html += '<option value="'+i+'"'+(pol.insurer===i?' selected':'')+'>'+i+'</option>';
-  });
-  html += '</select></div></div>';
+  // Payment status
+  html += '<div style="background:'+(paid?'rgba(105,240,174,.1)':'rgba(255,183,77,.12)')+';border:1px solid '+(paid?'rgba(105,240,174,.3)':'rgba(255,183,77,.4)')+';border-radius:12px;padding:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">';
+  html += '<div><div style="font-size:12px;font-weight:700;color:'+(paid?'var(--green)':'var(--amber)');
+  html += '">'+(paid?'&#x2705; ชำระแล้ว '+yr:'&#x23F0; ยังไม่ได้ชำระ '+yr)+'</div>';
+  html += '<div style="font-size:11px;color:var(--t3)">'+(th?'แตะปุ่มเพื่อเปลี่ยนสถานะ':'Tap to change payment status')+'</div></div>';
+  html += '<button class="btn btn-primary" onclick="togglePaid(&quot;'+policyNo+'&quot;,'+yr+')">'+(paid?'ยกเลิกการชำระ':'บันทึกว่าชำระแล้ว')+'</button>';
+  html += '</div>';
 
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'ผู้ถือกรมธรรม์':'Policyholder')+'</label><select class="inp" id="ep-holder">';
-  PROFILES.forEach(function(pr){
-    html += '<option value="'+pr.id+'"'+(pol.holder===pr.name||pol.holderId===pr.dbId?' selected':'')+'>'+pr.nick+' ('+pr.name+')</option>';
+  // Fields
+  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อกรมธรรม์':'Policy Name')+'</label><input id="ep-name" class="inp" value="'+pol.name+'"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  html += '<div class="fg"><label class="lbl">'+(th?'เลขกรมธรรม์':'Policy No.')+'</label><input id="ep-no" class="inp" value="'+pol.no+'" readonly></div>';
+  // Insurer select
+  html += '<div class="fg"><label class="lbl">'+(th?'บริษัทประกัน':'Insurer')+'</label><select id="ep-ins" class="inp">';
+  INSURERS_DEMO.forEach(function(ins){ html+='<option value="'+ins.code+'"'+(ins.code===pol.insurer?' selected':'')+'>'+ins.code+'</option>'; });
+  html += '</select></div>';
+  // Holder
+  html += '<div class="fg"><label class="lbl">'+(th?'ผู้ถือกรมธรรม์':'Policy Holder')+'</label><select id="ep-holder" class="inp">';
+  PROFILES.forEach(function(p){ html+='<option value="'+p.name+'"'+(p.name===pol.holder?' selected':'')+'>'+p.name+' ('+p.nick+')</option>'; });
+  html += '</select></div>';
+  // Category
+  html += '<div class="fg"><label class="lbl">'+(th?'ประเภท':'Type')+'</label><select id="ep-cat" class="inp">';
+  [['life',th?'ชีวิต/Life':'Life'],['health',th?'สุขภาพ/Health':'Health'],['accident',th?'อุบัติเหตุ':'Accident'],['critical_illness',th?'โรคร้ายแรง':'Critical Illness']].forEach(function(o){
+    html+='<option value="'+o[0]+'"'+(o[0]===pol.cat?' selected':'')+'>'+o[1]+'</option>';
   });
   html += '</select></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'ประเภท':'Category')+'</label><select class="inp" id="ep-cat">';
-  [['life','ชีวิต/Life'],['endowment','ออมทรัพย์/Endowment'],['health','สุขภาพ/Health'],['critical_illness','โรคร้ายแรง/CI'],['accident','อุบัติเหตุ/Accident']].forEach(function(c){
-    html += '<option value="'+c[0]+'"'+(pol.cat===c[0]?' selected':'')+'>'+c[1]+'</option>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  html += '<div class="fg"><label class="lbl">'+(th?'วันที่เริ่ม':'Start Date')+'</label><input id="ep-start" class="inp" type="date" value="'+(pol.startDate||'')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'วันที่ครบกำหนด':'End Date')+'</label><input id="ep-end" class="inp" type="date" value="'+(pol.endDate||'')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ทุนประกัน (฿)':'Sum Assured (฿)')+'</label><input id="ep-sum" class="inp" type="number" value="'+(pol.sumAssured||'')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'เบี้ยประกัน/ปี (฿)':'Annual Premium (฿)')+'</label><input id="ep-prem" class="inp" type="number" value="'+(pol.premium||'')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'เดือนที่ครบกำหนดชำระ':'Due Month')+'</label><input id="ep-due" class="inp" type="number" min="1" max="12" value="'+(pol.dueMonth||'')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'สถานะ':'Status')+'</label><select id="ep-status" class="inp">';
+  [['active',th?'มีผลบังคับ':'Active'],['paid_up',th?'ชำระครบแล้ว':'Paid-up'],['matured',th?'ครบกำหนด':'Matured'],['lapsed',th?'ขาดอายุ':'Lapsed']].forEach(function(o){
+    html+='<option value="'+o[0]+'"'+(o[0]===pol.status?' selected':'')+'>'+o[1]+'</option>';
   });
-  html += '</select></div></div>';
-
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'วันที่เริ่ม':'Start Date')+'</label><input class="inp" type="date" id="ep-start" value="'+(pol.startDate||'')+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'วันที่ครบกำหนด':'End/Maturity Date')+'</label><input class="inp" type="date" id="ep-end" value="'+(pol.endDate||'')+'"></div>';
+  html += '</select></div>';
+  html += '</div>';
+  // Self-paid checkbox
+  html += '<div class="fg" style="display:flex;align-items:center;gap:8px"><input id="ep-self" type="checkbox"'+(pol.selfPaid?' checked':'')+' style="width:18px;height:18px"><label class="lbl" style="margin:0">'+(th?'จ่ายเบี้ยเอง (ไม่ใช่นายจ้าง)':'Self-paid (not employer)')+'</label></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><textarea id="ep-notes" class="inp" rows="2">'+(pol.note||pol.notes||'')+'</textarea></div>';
+  // Riders
+  html += '<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม':'Riders')+' ('+((pol.riders||[]).length)+')</div>';
+  (pol.riders||[]).forEach(function(r,i){
+    var val = r.perDay?r.perDay:r.amount||'';
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;padding:6px;background:rgba(255,255,255,.04);border-radius:8px">';
+    html+='<span style="flex:1;color:var(--t2)">'+r.name+'</span>';
+    html+='<span style="color:var(--teal);font-weight:700">'+(val?val.toLocaleString():'-')+' ฿</span>';
+    html+='</div>';
+  });
+  html += '<button class="btn btn-secondary" onclick="addRiderToPolicy(&quot;'+policyNo+'&quot;)" style="margin-top:6px;font-size:12px">+ '+(th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider')+'</button>';
   html += '</div>';
 
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'ทุนประกัน (฿)':'Sum Assured (฿)')+'</label><input class="inp" type="number" id="ep-sum" value="'+(pol.sumAssured||'')+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'เบี้ยประกัน/ปี (฿)':'Annual Premium (฿)')+'</label><input class="inp" type="number" id="ep-prem" value="'+(pol.premium||'')+'"></div>';
+  html += '<div style="display:flex;gap:10px;margin-top:16px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="saveEditPolicyFull(&quot;'+policyNo+'&quot;)" style="flex:2">'+(th?'บันทึก':'Save Changes')+'</button>';
   html += '</div>';
-
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'เดือนที่ครบกำหนดชำระ':'Premium Due Month (1-12)')+'</label><input class="inp" type="number" min="1" max="12" id="ep-month" value="'+(pol.dueMonth||'')+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'สถานะ':'Status')+'</label><select class="inp" id="ep-status">';
-  [['active','Active / มีผล'],['paid_up','Paid-up / ชำระครบ'],['matured','Matured / ครบกำหนด'],['lapsed','Lapsed / ขาดอายุ']].forEach(function(s){
-    html += '<option value="'+s[0]+'"'+(pol.status===s[0]?' selected':'')+'>'+s[1]+'</option>';
-  });
-  html += '</select></div></div>';
-
-  // Self-paid toggle
-  html += '<div style="display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px;background:rgba(255,255,255,.04);border-radius:10px">';
-  html += '<input type="checkbox" id="ep-selfpaid"'+(pol.selfPaid?' checked':'')+' style="width:18px;height:18px">';
-  html += '<div><label for="ep-selfpaid" style="font-size:13px;font-weight:600">'+(th?'จ่ายเบี้ยเอง (Self-paid)':'Self-paid premium')+'</label>';
-  html += '<div style="font-size:11px;color:var(--t3)">'+(th?'ถ้าบริษัทจ่ายให้ ไม่ต้องติ๊ก':'Uncheck if employer/company pays the premium')+'</div></div></div>';
-
-  // Urgent flag
-  html += '<div style="display:flex;align-items:center;gap:10px;margin:4px 0 10px;padding:10px;background:rgba(255,255,255,.04);border-radius:10px">';
-  html += '<input type="checkbox" id="ep-urgent"'+(pol.urgent?' checked':'')+' style="width:18px;height:18px">';
-  html += '<div><label for="ep-urgent" style="font-size:13px;font-weight:600">'+(th?'แจ้งเตือนด่วน':'Urgent alert')+'</label>';
-  html += '<input class="inp" id="ep-urgentmsg" placeholder="'+(th?'ข้อความแจ้งเตือน...':'Alert message...')+'" value="'+(pol.urgentMsg||'')+'" style="margin-top:6px;font-size:12px"></div></div>';
-
-  html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><textarea class="inp" rows="2" id="ep-notes">'+(pol.note||pol.notes||'')+'</textarea></div>';
-
-  // Riders section
-  html += '<div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">';
-  html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม (Riders)':'Riders / Benefits')+'</div>';
-  (pol.riders||[]).forEach(function(r, i){
-    html += '<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px;margin-bottom:6px;font-size:12px">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<div style="color:var(--t1);font-weight:600">'+r.name+'</div>';
-    html += '<div style="color:var(--teal)">'+(r.perDay?r.perDay.toLocaleString()+'/day':r.amount?(r.amount>=10000?Math.round(r.amount/1000)+'K':r.amount.toLocaleString()):'-')+'</div>';
-    html += '</div>';
-    if(r.hasDeductible) html += '<div style="color:var(--red);font-size:11px;margin-top:2px">&#x26A0;&#xFE0F; Deductible '+r.deductible.toLocaleString()+' ฿</div>';
-    if(r.note) html += '<div style="color:var(--t3);font-size:10px;margin-top:2px">'+r.note+'</div>';
-    html += '</div>';
-  });
-  html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;margin-top:4px" onclick="addRiderToPolicy(\''+policyNo+'\')">+ '+(th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider')+'</button>';
-  html += '</div>';
-
-  html += '<button class="btn btn-primary" onclick="saveEditPolicyFull(\''+policyNo+'\')" style="margin-top:14px">&#x1F4BE; '+(th?'บันทึก':'Save Changes')+'</button>';
-  html += '<div style="height:10px"></div>';
 
   openModal((th?'แก้ไขกรมธรรม์ ':'Edit Policy ')+policyNo, html);
 }
@@ -3612,36 +3607,26 @@ function editPolicy(policyNo){
 function saveEditPolicyFull(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(!pol) return;
-  pol.name = document.getElementById('ep-name').value || pol.name;
-  pol.insurer = document.getElementById('ep-insurer').value || pol.insurer;
-  pol.cat = document.getElementById('ep-cat').value || pol.cat;
-  pol.status = document.getElementById('ep-status').value || pol.status;
-  var newHolder = document.getElementById('ep-holder').value;
-  var newPr = PROFILES.find(function(x){return x.id===newHolder;});
-  if(newPr){ pol.holder=newPr.name; pol.holderId=newPr.dbId; }
-  var sum = parseFloat(document.getElementById('ep-sum').value);
-  if(!isNaN(sum)) pol.sumAssured = sum;
-  var prem = parseFloat(document.getElementById('ep-prem').value);
-  if(!isNaN(prem)) pol.premium = prem;
-  var month = parseInt(document.getElementById('ep-month').value);
-  if(!isNaN(month) && month>=1 && month<=12) pol.dueMonth = month;
-  var startEl = document.getElementById('ep-start');
-  if(startEl && startEl.value) pol.startDate = startEl.value;
-  var endEl = document.getElementById('ep-end');
-  if(endEl && endEl.value) pol.endDate = endEl.value;
-  pol.selfPaid = document.getElementById('ep-selfpaid').checked;
-  pol.urgent = document.getElementById('ep-urgent').checked;
-  pol.urgentMsg = document.getElementById('ep-urgentmsg').value;
-  pol.note = document.getElementById('ep-notes').value;
-  closeModal();
-  // Save to DB
+  pol.name     = document.getElementById('ep-name').value;
+  pol.insurer  = document.getElementById('ep-ins').value;
+  pol.holder   = document.getElementById('ep-holder').value;
+  pol.cat      = document.getElementById('ep-cat').value;
+  pol.startDate= document.getElementById('ep-start').value;
+  pol.endDate  = document.getElementById('ep-end').value;
+  pol.sumAssured= parseFloat(document.getElementById('ep-sum').value)||null;
+  pol.premium  = parseFloat(document.getElementById('ep-prem').value)||0;
+  pol.dueMonth = parseInt(document.getElementById('ep-due').value)||null;
+  pol.status   = document.getElementById('ep-status').value;
+  pol.selfPaid = document.getElementById('ep-self').checked;
+  pol.note     = document.getElementById('ep-notes').value;
+  closeModalForce();
   if(!S.demo && sbAuth){
     saveInsurancePolicyToDB(pol).then(function(ok){
       toast(ok ? (S.lang==='th'?'บันทึกลง DB แล้ว ✓':'Saved to DB ✓') : (S.lang==='th'?'บันทึกไม่สำเร็จ กรุณาลองใหม่':'Save failed — please retry'));
       renderInsurance();
     });
   } else {
-    toast(S.lang==='th' ? 'บันทึกแล้ว ✓' : 'Saved ✓');
+    toast(S.lang==='th'?'บันทึกแล้ว ✓':'Saved ✓');
     renderInsurance();
   }
 }
@@ -3650,289 +3635,200 @@ function addRiderToPolicy(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(!pol) return;
   var th = S.lang==='th';
-
-  var html = '<div class="fg"><label class="lbl">'+(th?'ชื่อสัญญาเพิ่มเติม':'Rider Name')+'</label><input class="inp" id="rider-name" placeholder="'+(th?'เช่น ค่าห้อง/วัน, โรคร้ายแรง':'e.g. Room/day, Critical illness')+'"></div>';
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'ประเภท':'Category')+'</label><select class="inp" id="rider-cat">';
-  [['ipd_room_board','ค่าห้อง IPD'],['ipd_medical','ค่ารักษาพยาบาล'],['ipd_surgery','ค่าศัลยกรรม'],['ipd_total','IPD เหมาจ่าย'],['daily_hospital_cash','ค่าชดเชยรายวัน'],['opd_general','OPD ทั่วไป'],['opd_accident','OPD อุบัติเหตุ'],['critical_illness_severe','โรคร้ายแรงระยะสุดท้าย'],['critical_illness_early','โรคร้ายแรงระยะเริ่มต้น'],['critical_illness_cancer','โรคมะเร็ง'],['accident_death','อุบัติเหตุเสียชีวิต'],['premium_waiver','ยกเว้นเบี้ย']].forEach(function(c){
-    html += '<option value="'+c[0]+'">'+c[1]+'</option>';
-  });
+  var html = '<div class="fg"><label class="lbl">'+(th?'ชื่อสัญญาเพิ่มเติม':'Rider Name')+'</label><input id="nr-name" class="inp" placeholder="e.g. Health FitDD ค่าห้อง/วัน"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  html += '<div class="fg"><label class="lbl">Category</label><select id="nr-cat" class="inp">';
+  [['ipd_room_board','Room & Board'],['ipd_total','IPD Total'],['ipd_medical','IPD Medical'],
+   ['ipd_surgery','Surgery'],['daily_hospital_cash','Daily Cash'],['opd_general','OPD'],
+   ['opd_accident','ER/Accident'],['critical_illness_severe','CI Severe'],
+   ['critical_illness_cancer','Cancer'],['accident_death','AD&D'],['premium_waiver','Premium Waiver']
+  ].forEach(function(o){ html+='<option value="'+o[0]+'">'+o[1]+'</option>'; });
   html += '</select></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'รหัส (ถ้ามี)':'Rider Code')+'</label><input class="inp" id="rider-code" placeholder="e.g. HSN5"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'จำนวน/ครั้ง (฿)':'Amount/claim (฿)')+'</label><input id="nr-amount" class="inp" type="number" placeholder="0"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ต่อวัน (฿)':'Per Day (฿)')+'</label><input id="nr-perday" class="inp" type="number" placeholder="0"></div>';
+  html += '<div class="fg"><label class="lbl">Deductible (฿)</label><input id="nr-ded" class="inp" type="number" placeholder="0"></div>';
   html += '</div>';
-  html += '<div class="frow">';
-  html += '<div class="fg"><label class="lbl">'+(th?'วงเงิน/ครั้ง (฿)':'Coverage Amount (฿)')+'</label><input class="inp" type="number" id="rider-amount" placeholder="0"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'วงเงิน/วัน (฿)':'Per Day (฿)')+'</label><input class="inp" type="number" id="rider-perday" placeholder="0"></div>';
+  html += '<div class="fg" style="display:flex;align-items:center;gap:8px"><input id="nr-first" type="checkbox" style="width:18px;height:18px"><label class="lbl" style="margin:0">From 1st baht (no deductible)</label></div>';
+  html += '<div class="fg"><label class="lbl">Note</label><input id="nr-note" class="inp" placeholder="Optional conditions"></div>';
+  html += '<div style="display:flex;gap:10px;margin-top:12px">';
+  html += '<button class="btn btn-secondary" onclick="editPolicy(&quot;'+policyNo+'&quot;)" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="saveNewRider(&quot;'+policyNo+'&quot;)" style="flex:2">'+(th?'เพิ่มสัญญา':'Add Rider')+'</button>';
   html += '</div>';
-  html += '<div class="frow">';
-  html += '<div class="fg" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="rider-first" checked><label>'+(th?'คุ้มครองตั้งแต่บาทแรก':'Covers from 1st baht')+'</label></div>';
-  html += '<div class="fg" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="rider-deductible"><label>'+(th?'มี Deductible':'Has Deductible')+'</label></div>';
-  html += '</div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'จำนวน Deductible (฿)':'Deductible Amount (฿)')+'</label><input class="inp" type="number" id="rider-ded" placeholder="0"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><input class="inp" id="rider-note" placeholder="'+(th?'เช่น สูงสุด 365 วัน':'e.g. max 365 days')+'"></div>';
-  html += '<button class="btn btn-primary" onclick="saveNewRider(\''+policyNo+'\')" style="margin-top:10px">+ '+(th?'เพิ่ม Rider':'Add Rider')+'</button>';
-  html += '<div style="height:10px"></div>';
-  openModal((th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider'), html);
+  openModal((th?'เพิ่มสัญญาเพิ่มเติม — ':'Add Rider — ')+policyNo, html);
 }
 
 function saveNewRider(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(!pol) return;
-  var name = document.getElementById('rider-name').value;
-  if(!name){ toast(S.lang==='th'?'กรุณาใส่ชื่อ Rider':'Please enter rider name'); return; }
-  var amount = parseFloat(document.getElementById('rider-amount').value)||null;
-  var perday = parseFloat(document.getElementById('rider-perday').value)||null;
-  var ded = parseFloat(document.getElementById('rider-ded').value)||null;
-  var newRider = {
-    code: document.getElementById('rider-code').value || 'RIDER-'+Date.now(),
-    name: name,
-    cat: document.getElementById('rider-cat').value,
-    amount: amount||null,
-    perDay: perday||null,
-    fromFirst: document.getElementById('rider-first').checked,
-    hasDeductible: document.getElementById('rider-deductible').checked,
-    deductible: ded||null,
-    note: document.getElementById('rider-note').value||null,
-    copay: 0
-  };
   if(!pol.riders) pol.riders=[];
-  pol.riders.push(newRider);
-  closeModal();
-  toast(S.lang==='th' ? 'เพิ่ม Rider แล้ว ✓' : 'Rider added ✓');
-  renderInsurance();
-}
-
-// ── ADD NEW POLICY WIZARD ────────────────────────────────────
-async function scanPolicyPhoto(event){
-  var file = event.target.files[0];
-  if(!file) return;
-  var result = document.getElementById('np-scan-result');
-  if(result) result.innerHTML = '&#x1F916; '+(S.lang==='th'?'AI กำลังอ่าน...':'AI scanning...');
-  var reader = new FileReader();
-  reader.onload = async function(e){
-    var base64 = e.target.result.split(',')[1];
-    try {
-      var resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:base64}},
-          {type:'text',text:'Extract insurance policy details from this Thai/English document. Return ONLY JSON: {"policy_name":"","policy_number":"","insurer":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","sum_assured":null,"annual_premium":null,"premium_due_month":null,"notes":""}'}
-        ]}]})
-      });
-      if(!resp.ok) throw new Error('API '+resp.status);
-      var data = await resp.json();
-      var txt = data.content[0].text;
-      var m = txt.match(/\{[\s\S]*\}/);
-      if(!m) throw new Error('No JSON');
-      var ex = JSON.parse(m[0]);
-      if(ex.policy_name && document.getElementById('np-name')) document.getElementById('np-name').value=ex.policy_name;
-      if(ex.policy_number && document.getElementById('np-no')) document.getElementById('np-no').value=ex.policy_number;
-      if(ex.start_date && document.getElementById('np-start')) document.getElementById('np-start').value=ex.start_date;
-      if(ex.end_date && document.getElementById('np-end')) document.getElementById('np-end').value=ex.end_date;
-      if(ex.sum_assured && document.getElementById('np-sum')) document.getElementById('np-sum').value=ex.sum_assured;
-      if(ex.annual_premium && document.getElementById('np-prem')) document.getElementById('np-prem').value=ex.annual_premium;
-      if(ex.premium_due_month && document.getElementById('np-month')) document.getElementById('np-month').value=ex.premium_due_month;
-      if(result) result.innerHTML='<span style="color:var(--green)">&#x2705; '+(S.lang==='th'?'กรอกให้แล้ว กรุณาตรวจสอบ':'Fields filled — please verify')+'</span>';
-    } catch(err) {
-      if(result) result.innerHTML='<span style="color:var(--t3)">'+(S.lang==='th'?'อ่านไม่ได้ กรุณากรอกเอง':'Could not read, please fill manually')+'</span>';
-    }
+  var ded = parseFloat(document.getElementById('nr-ded').value)||0;
+  var r = {
+    name:   document.getElementById('nr-name').value,
+    cat:    document.getElementById('nr-cat').value,
+    amount: parseFloat(document.getElementById('nr-amount').value)||null,
+    perDay: parseFloat(document.getElementById('nr-perday').value)||null,
+    deductible: ded, hasDeductible: ded>0,
+    fromFirst: document.getElementById('nr-first').checked,
+    note: document.getElementById('nr-note').value||null
   };
-  reader.readAsDataURL(file);
+  pol.riders.push(r);
+  closeModalForce();
+  toast(S.lang==='th'?'เพิ่มสัญญาเพิ่มเติมแล้ว ✓':'Rider added ✓');
+  editPolicy(policyNo);
 }
 
-function saveNewPolicy(){
+// ── COVERAGE SUMMARY & IPD WORKFLOW ──────────────────────────
+function openCoverageSummary(){
+  var covId = (S.insFilter!=='all') ? S.insFilter : S.pid;
+  var p = prof(covId);
   var th = S.lang==='th';
-  var name = (document.getElementById('np-name')||{}).value;
-  var no = (document.getElementById('np-no')||{}).value;
-  var holderId = (document.getElementById('np-holder')||{}).value;
-  if(!name||!no){ toast(th?'กรุณาใส่ชื่อและเลขกรมธรรม์':'Please enter policy name and number'); return; }
-  // Check duplicate
-  if(POLICIES_DEMO.find(function(p){return p.no===no;})){
-    toast(th?'เลขกรมธรรม์นี้มีอยู่แล้ว':'Policy number already exists'); return;
-  }
-  var pr = PROFILES.find(function(x){return x.id===holderId;})||PROFILES[0];
-  var prem = parseFloat((document.getElementById('np-prem')||{}).value)||0;
-  var sum = parseFloat((document.getElementById('np-sum')||{}).value)||null;
-  var month = parseInt((document.getElementById('np-month')||{}).value)||null;
-  var newPol = {
-    no: no,
-    name: name,
-    insurer: (document.getElementById('np-insurer')||{}).value||'OTHER',
-    holder: pr.name,
-    holderId: pr.dbId,
-    cat: (document.getElementById('np-cat')||{}).value||'life',
-    status: 'active',
-    startDate: (document.getElementById('np-start')||{}).value||null,
-    endDate: (document.getElementById('np-end')||{}).value||null,
-    sumAssured: sum,
-    premium: prem,
-    dueMonth: month,
-    paidYear: null,
-    selfPaid: (document.getElementById('np-selfpaid')||{}).checked !== false,
-    freePolicy: prem===0,
-    note: (document.getElementById('np-notes')||{}).value||null,
-    riders: []
+  var pols = POLICIES_DEMO.filter(function(pol){return (pol.holder===p.name||pol.holderId===p.dbId)&&pol.status==='active';});
+  var html = '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:12px">'+p.name+' — '+(th?'ภาพรวมความคุ้มครอง':'Coverage Overview')+'</div>';
+  var cats = {
+    'IPD ค่าห้อง/วัน':   ['ipd_room_board'],
+    'IPD เหมาจ่าย':       ['ipd_total'],
+    'ค่าผ่าตัด':          ['ipd_surgery','ipd_surgery_room','ipd_anesthesia'],
+    'ค่าชดเชยรายวัน':     ['daily_hospital_cash'],
+    'OPD':                 ['opd_general','opd_accident'],
+    'โรคร้ายแรง / CI':    ['critical_illness_severe','critical_illness_early','critical_illness_cancer']
   };
-  POLICIES_DEMO.push(newPol);
-  closeModal();
-  if(!S.demo && sbAuth){
-    saveInsurancePolicyToDB(newPol).then(function(ok){
-      toast(ok ? (th?'เพิ่มกรมธรรม์ใน DB แล้ว ✓':'Policy saved to DB ✓') : (th?'เพิ่มกรมธรรม์แล้ว (ไม่ได้ sync)':'Added locally only'));
-    });
-  } else {
-    toast(th?'เพิ่มกรมธรรม์แล้ว ✓ กด "แก้ไข" เพื่อเพิ่ม Rider':'Policy added ✓ Tap Edit to add riders');
-  }
-  S.insFilter = holderId;
-  renderInsurance();
-}
-
-function previewUpload(e){
-  var files = e.target.files;
-  if(!files.length) return;
-  var preview = document.getElementById('upload-preview');
-  if(preview){ preview.style.display='block'; preview.innerHTML='&#x2705; '+files.length+' '+(S.lang==='th'?'ไฟล์พร้อม':'file(s) ready'); }
-}
-
-async function processWithAI(){
-  var fileInput = document.getElementById('fu');
-  if(!fileInput || !fileInput.files.length){ toast(S.lang==='th'?'กรุณาเลือกไฟล์ก่อน':'Please select a file first'); return; }
-  var resultBox = document.getElementById('ai-result-box');
-  if(resultBox){ resultBox.style.display='block'; resultBox.innerHTML='<div class="notice pulse">&#x1F916; '+(S.lang==='th'?'AI กำลังอ่านผลตรวจ...':'AI reading your report...')+'</div>'; }
-  var file = fileInput.files[0];
-  var reader = new FileReader();
-  reader.onload = async function(e){
-    var base64 = e.target.result.split(',')[1];
-    var mimeType = file.type||'image/jpeg';
-    var year = parseInt(document.getElementById('up-year').value)||new Date().getFullYear();
-    var pid = document.getElementById('up-profile').value;
-    try {
-      var resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:'claude-opus-4-6',max_tokens:2000,messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
-          {type:'text',text:'Extract health data from this Thai/English medical report. Return ONLY valid JSON: {"check_date":"YYYY-MM-DD","hospital":"","weight_kg":null,"height_cm":null,"blood_pressure":"","pulse_rate":null,"hemoglobin":null,"hematocrit":null,"wbc":null,"neutrophil":null,"eosinophil":null,"platelet":null,"cholesterol":null,"triglyceride":null,"hdl":null,"ldl":null,"blood_sugar":null,"hba1c":null,"creatinine":null,"egfr":null,"uric_acid":null,"bun":null,"sgot":null,"sgpt":null,"alp":null,"doctor_notes":""}'}
-        ]}]})
+  Object.keys(cats).forEach(function(label){
+    var catList = cats[label];
+    var rows = [];
+    pols.forEach(function(pol){
+      (pol.riders||[]).filter(function(r){return catList.indexOf(r.cat)>=0;}).forEach(function(r){
+        var val = r.perDay?r.perDay.toLocaleString()+(th?'/วัน':'/day') : r.amount?(r.amount>=10000?(r.amount/1000).toFixed(0)+'K':''+r.amount):'';
+        rows.push({insurer:pol.insurer, val:val, fromFirst:r.fromFirst, ded:r.deductible||0});
       });
-      if(!resp.ok) throw new Error('API error '+resp.status);
-      var data = await resp.json();
-      var txt = data.content[0].text;
-      var m = txt.match(/\{[\s\S]*\}/);
-      showExtractedPreview(pid, year, m?JSON.parse(m[0]):null, resultBox);
-    } catch(err){ showExtractedPreview(pid, year, null, resultBox); }
-  };
-  reader.readAsDataURL(file);
+    });
+    if(!rows.length) return;
+    html += '<div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;color:var(--t3);letter-spacing:.06em;margin-bottom:4px">'+label+'</div>';
+    rows.forEach(function(r){
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">';
+      html += '<span style="color:var(--t2)"><span style="color:'+(r.fromFirst?'var(--green)':'var(--red)')+'">&#x25CF;</span> '+r.insurer+'</span>';
+      html += '<span style="font-weight:700;color:var(--teal)">'+r.val+'</span></div>';
+      if(!r.fromFirst&&r.ded) html += '<div style="font-size:10px;color:var(--red);padding-left:14px;margin-bottom:2px">Deductible '+r.ded.toLocaleString()+' ฿</div>';
+    });
+    html += '</div>';
+  });
+  openModal(th?'ภาพรวมความคุ้มครอง':'Coverage Summary', html);
 }
 
-function showExtractedPreview(pid, year, extracted, resultBox){
-  extracted = extracted||{};
-  var found = Object.entries(extracted).filter(function(e){return e[1]!==null&&e[1]!=='';}).length;
-  var html = found>0
-    ? '<div class="alert ok">&#x2705; <b>'+(S.lang==='th'?'AI อ่านสำเร็จ':'AI extracted')+'</b> '+found+' '+(S.lang==='th'?'รายการ':'fields')+'</div>'
-    : '<div class="notice">'+(S.lang==='th'?'อ่านไม่ได้อัตโนมัติ กรอกเองด้วย Manual Entry':'Could not auto-extract. Use Manual Entry.')+'</div>';
-  if(!HR[pid]) HR[pid]={};
-  if(!HR[pid][year]) HR[pid][year]={age:calcAge(prof(pid).dob,year)};
-  var d=HR[pid][year];
-  var map={check_date:'date',hospital:'hospital',weight_kg:'weight',height_cm:'height',blood_pressure:'bp',pulse_rate:'pulse',hemoglobin:'hb',hematocrit:'hct',wbc:'wbc',neutrophil:'neut',eosinophil:'eos',platelet:'plat',cholesterol:'chol',triglyceride:'trig',hdl:'hdl',ldl:'ldl',blood_sugar:'sugar',hba1c:'hba1c',creatinine:'creat',egfr:'egfr',uric_acid:'uric',bun:'bun',sgot:'sgot',sgpt:'sgpt',alp:'alp',doctor_notes:'notes'};
-  Object.entries(map).forEach(function(e){if(extracted[e[0]]!=null) d[e[1]]=extracted[e[0]];});
-  if(d.weight&&d.height) d.bmi=parseFloat(bmi(d.weight,d.height));
-  html+='<button class="btn btn-primary" style="margin-top:10px" onclick="confirmAISave(\''+pid+'\','+year+')">&#x1F4BE; '+(S.lang==='th'?'บันทึกข้อมูล':'Save & Confirm')+'</button>';
-  if(resultBox) resultBox.innerHTML=html;
-}
-
-function confirmAISave(pid,year){
-  S.year=year; closeModal();
-  if(!S.demo&&sbAuth){ saveHealthRecordToDB(pid,year,HR[pid][year]).then(function(ok){ toast(ok?'Saved to DB ✓':'Saved locally'); renderTab(S.tab); }); }
-  else { toast('Saved'); renderTab(S.tab); }
-}
-
-function uploadHTML(){
-  var p = prof(S.pid);
-  return '<p style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(S.lang==='th'?'ถ่ายรูปหรืออัพโหลดผลตรวจ AI จะอ่านข้อมูลให้อัตโนมัติ':'Take a photo or upload your health report. AI auto-extracts all data.')+'</p>'+
-    '<div class="upload-zone" onclick="document.getElementById(\'fu\').click()">'+
-    '<div style="font-size:36px;margin-bottom:10px">&#x1F4CB;</div>'+
-    '<div style="font-size:15px;font-weight:600;margin-bottom:4px">'+(S.lang==='th'?'แตะเพื่อเลือกไฟล์':'Tap to select photo or PDF')+'</div>'+
-    '<div style="font-size:12px;color:var(--t2)">JPG, PNG, PDF</div>'+
-    '<input type="file" id="fu" accept="image/*,application/pdf" style="display:none" onchange="previewUpload(event)">'+
-    '</div>'+
-    '<div id="upload-preview" style="display:none;margin-top:8px;font-size:13px;color:var(--teal);text-align:center"></div>'+
-    '<div class="fg" style="margin-top:14px"><label class="lbl">Profile</label>'+
-    '<select class="inp" id="up-profile">'+PROFILES.map(function(p2){return '<option value="'+p2.id+'"'+(p2.id===p.id?' selected':'')+'>'+p2.name+'</option>';}).join('')+'</select></div>'+
-    '<div class="fg"><label class="lbl">Year</label><input class="inp" type="number" id="up-year" value="'+new Date().getFullYear()+'" min="2010" max="2035"></div>'+
-    '<div id="ai-result-box" style="display:none;margin-top:8px"></div>'+
-    '<button class="btn btn-primary" onclick="processWithAI()" style="margin-top:8px">&#x1F916; '+(S.lang==='th'?'ประมวลผลด้วย AI':'Process with AI')+'</button>'+
-    '<div style="height:10px"></div>';
-}
-
-function manualEntryHTML(){
-  return '<div class="frow"><div class="fg"><label class="lbl">Profile</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div><div class="fg"><label class="lbl">Year</label><input class="inp" type="number" value="2025"></div></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">Date</label><input class="inp" type="date" value="2025-09-07"></div><div class="fg"><label class="lbl">Weight (kg)</label><input class="inp" type="number" step=".1" placeholder="61.0"></div></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">Blood Pressure</label><input class="inp" placeholder="120/80"></div><div class="fg"><label class="lbl">Cholesterol</label><input class="inp" type="number" placeholder="200"></div></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">LDL</label><input class="inp" type="number" placeholder="130"></div><div class="fg"><label class="lbl">HDL</label><input class="inp" type="number" placeholder="50"></div></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">Blood Sugar</label><input class="inp" type="number" placeholder="90"></div><div class="fg"><label class="lbl">HbA1c %</label><input class="inp" type="number" step=".1" placeholder="5.2"></div></div>'+
-    '<div class="fg"><label class="lbl">Hospital</label><input class="inp" placeholder="Praram 9"></div>'+
-    '<div class="fg"><label class="lbl">Notes</label><textarea class="inp" rows="3" placeholder="Doctor notes..."></textarea></div>'+
-    '<button class="btn btn-primary" onclick="saveManualEntry()">'+tr('Save Vitals')+'</button><div style="height:10px"></div>';
+function openIPDWorkflow(){
+  var covId = (S.insFilter!=='all') ? S.insFilter : S.pid;
+  var p = prof(covId);
+  var th = S.lang==='th';
+  var advice = getIPDAdvice ? getIPDAdvice(p.dbId) : {useFirst:[],useSecond:[],dailyCash:[]};
+  var html = '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(th?'บันทึกการเข้าพักรักษาตัว และรับคำแนะนำการใช้ประกัน':'Record hospitalization and get insurance utilization advice.')+'</div>';
+  html += '<div style="background:rgba(38,217,176,.08);border:1px solid rgba(38,217,176,.2);border-radius:14px;padding:14px;margin-bottom:14px">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">&#x1F916; '+(th?'คำแนะนำการใช้ประกัน':'Insurance Usage Advice')+'</div>';
+  if(advice.useFirst&&advice.useFirst.length){
+    html += '<div style="font-size:12px;margin-bottom:8px;color:var(--t1)"><b>'+(th?'ขั้นตอนที่ 1 — ใช้ก่อน (คุ้มครองตั้งแต่บาทแรก)':'Step 1 — Use first (from 1st baht)')+'</b></div>';
+    advice.useFirst.forEach(function(x){
+      html += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--t2)">&#x2705; <b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name+'</div>';
+    });
+  }
+  if(advice.dailyCash&&advice.dailyCash.length){
+    advice.dailyCash.forEach(function(x){
+      html += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--teal)">&#x1F4B5; <b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name+' '+x.rider.perDay.toLocaleString()+' ฿/วัน</div>';
+    });
+  }
+  if(advice.useSecond&&advice.useSecond.length){
+    html += '<div style="font-size:12px;margin:10px 0 8px;color:var(--t1)"><b>'+(th?'ขั้นตอนที่ 2 — หลังจากครบ Deductible':'Step 2 — After deductible')+'</b></div>';
+    var s2g={};
+    advice.useSecond.forEach(function(x){
+      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,riders:[],minDed:x.rider.deductible||999999};
+      s2g[x.pol.no].riders.push(x.rider);
+      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
+    });
+    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
+      var g=s2g[key],ded=g.minDed<999999?g.minDed:null;
+      html += '<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.25);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">&#x26A0;&#xFE0F; <b style="font-size:13px">'+g.pol.insurer+' '+g.pol.no+'</b>';
+      if(ded) html += '<span style="font-size:10px;background:rgba(255,82,82,.25);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
+      html += '</div>';
+      g.riders.forEach(function(r){html+='<div style="font-size:12px;color:var(--t2);padding:2px 0 2px 22px">\u2022 '+r.name+'</div>';});
+      if(ded) html += '<div style="font-size:11px;color:var(--red);margin-top:5px;padding-left:22px">\u27a1\ufe0f '+(th?'\u0e15\u0e49\u0e2d\u0e07\u0e08\u0e48\u0e32\u0e22\u0e2a\u0e48\u0e27\u0e19\u0e41\u0e23\u0e01 '+ded.toLocaleString()+' \u0e3f \u0e01\u0e48\u0e2d\u0e19 \u0e08\u0e36\u0e07\u0e08\u0e30\u0e40\u0e1a\u0e34\u0e01\u0e44\u0e14\u0e49':'Pay '+ded.toLocaleString()+' \u0e3f deductible first')+'</div>';
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+  openModal(th?'บันทึกการเข้าพักรักษา (IPD)':'IPD Hospitalization', html);
 }
 
 function addInsuranceHTML(){
-  return '<div class="frow"><div class="fg"><label class="lbl">Holder</label><select class="inp">'+PROFILES.map(function(p){return '<option>'+p.name+'</option>';}).join('')+'</select></div><div class="fg"><label class="lbl">Type</label><select class="inp"><option>Health</option><option>Life</option><option>Accident</option></select></div></div>'+
-    '<div class="fg"><label class="lbl">Policy Name</label><input class="inp" placeholder="AIA Health Plan"></div>'+
-    '<div class="fg"><label class="lbl">Policy Number</label><input class="inp" placeholder="TH-AIA-001-2024"></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">Annual Premium (THB)</label><input class="inp" type="number" placeholder="50000"></div><div class="fg"><label class="lbl">Due Month</label><input class="inp" type="number" min="1" max="12" placeholder="3"></div></div>'+
-    '<button class="btn btn-primary" onclick="toast(\'Policy saved!\');closeModal()">Save Policy</button><div style="height:10px"></div>';
+  var th = S.lang==='th';
+  var html = '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(th?'เพิ่มกรมธรรม์ใหม่':'Add a new insurance policy')+'</div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อกรมธรรม์':'Policy Name')+'</label><input id="np-name" class="inp" placeholder="e.g. AIA Health Care"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  html += '<div class="fg"><label class="lbl">'+(th?'เลขกรมธรรม์':'Policy No.')+'</label><input id="np-no" class="inp"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'บริษัทประกัน':'Insurer')+'</label><select id="np-ins" class="inp">';
+  INSURERS_DEMO.forEach(function(ins){ html+='<option value="'+ins.code+'">'+ins.code+'</option>'; });
+  html += '</select></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ผู้ถือกรมธรรม์':'Holder')+'</label><select id="np-holder" class="inp">';
+  PROFILES.forEach(function(p){ html+='<option value="'+p.name+'">'+p.name+' ('+p.nick+')</option>'; });
+  html += '</select></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'เบี้ยประกัน/ปี (฿)':'Premium/yr')+'</label><input id="np-prem" class="inp" type="number" placeholder="0"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:10px;margin-top:14px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="saveNewPolicy()" style="flex:2">'+(th?'บันทึกกรมธรรม์':'Save Policy')+'</button>';
+  html += '</div>';
+  return html;
 }
 
-function addProfileHTML(){
-  return '<div class="frow"><div class="fg"><label class="lbl">Full Name</label><input class="inp" placeholder="Full name"></div><div class="fg"><label class="lbl">Gender</label><select class="inp"><option>Male</option><option>Female</option></select></div></div>'+
-    '<div class="frow"><div class="fg"><label class="lbl">Blood Group</label><select class="inp"><option>A</option><option>B</option><option>O</option><option>AB</option></select></div><div class="fg"><label class="lbl">Date of Birth</label><input class="inp" type="date"></div></div>'+
-    '<div class="fg"><label class="lbl">Hospital</label><input class="inp" placeholder="Praram 9"></div>'+
-    '<button class="btn btn-primary" onclick="toast(\'Profile created!\');closeModal()">Create Profile</button><div style="height:10px"></div>';
+function saveNewPolicy(){
+  var no = (document.getElementById('np-no').value||'').trim();
+  var name = (document.getElementById('np-name').value||'').trim();
+  if(!no||!name){ toast(S.lang==='th'?'กรุณากรอกชื่อและเลขกรมธรรม์':'Please fill name and policy number'); return; }
+  if(POLICIES_DEMO.find(function(p){return p.no===no;})){ toast(S.lang==='th'?'เลขกรมธรรม์นี้มีอยู่แล้ว':'Policy number already exists'); return; }
+  var pol = {
+    no:no, name:name, insurer:document.getElementById('np-ins').value,
+    holder:document.getElementById('np-holder').value, cat:'health',
+    status:'active', premium:parseFloat(document.getElementById('np-prem').value)||0,
+    selfPaid:true, riders:[]
+  };
+  POLICIES_DEMO.push(pol);
+  closeModalForce();
+  if(!S.demo&&sbAuth) saveInsurancePolicyToDB(pol).then(function(ok){ toast(ok?'บันทึกลง DB ✓':'บันทึกในเครื่อง'); });
+  else toast(S.lang==='th'?'เพิ่มกรมธรรม์แล้ว ✓':'Policy added ✓');
+  renderInsurance();
 }
 
-// ── NOTIFICATIONS ─────────────────────────────────────
-function openNotif(){
-  openModal('Notifications',
-    '<div class="alert danger" style="margin-bottom:8px">&#x26A0;&#xFE0F; <div><b>Rutchapon - LDL High</b><br><span style="font-size:11px">LDL 171 mg/dL exceeds 130 target. See cardiologist.</span></div></div>'+
-    '<div class="alert warn" style="margin-bottom:8px">&#x1F4B0; <div><b>Kanokpai - Premium Due</b><br><span style="font-size:11px">Muang Thai Life - Due Jan - 55,000 THB</span></div></div>'+
-    '<div class="alert info" style="margin-bottom:8px">&#x1F4C5; <div><b>Annual Checkup Reminder</b><br><span style="font-size:11px">Both profiles due September 2026</span></div></div>'+
-    '<div class="alert ok">&#x2705; <div><b>Kanokpai - EST Treadmill</b><br><span style="font-size:11px">Excellent result 2024! Follow-up in 2-3 years.</span></div></div>'+
-    '<div style="height:10px"></div>'
-  );
-}
-
-// ── MODAL ─────────────────────────────────────────────
-function openModal(title, body){
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = body;
-  document.getElementById('modal').className = 'on';
-}
-function closeModal(e){
-  if(!e||e.target===document.getElementById('modal'))
-    document.getElementById('modal').className = '';
-}
-
-// ── TOAST ─────────────────────────────────────────────
-function toast(msg){
-  var el=document.getElementById('toast');
-  el.textContent=msg; el.className='on';
-  setTimeout(function(){ el.className=''; },2800);
-}
-
-// ── INIT ─────────────────────────────────────────────
-window.onload = function(){
-  // Show version
+// ── APP INIT ──────────────────────────────────────────────────
+function initApp(){
+  // Populate version
   var vn = document.getElementById('v-num');
   var vd = document.getElementById('v-date');
   if(vn) vn.textContent = APP_VERSION;
   if(vd) vd.textContent = APP_DATE;
-  // Init Supabase on page load
-  initSupabase();
-  // Always show auth screen first
-  document.getElementById('auth-screen').style.display='flex';
-  document.getElementById('app').style.display='none';
-};
+
+  // Show auth, hide app
+  var authEl = document.getElementById('auth-screen');
+  var appEl  = document.getElementById('app');
+  if(authEl) authEl.style.display='flex';
+  if(appEl)  appEl.style.display='none';
+
+  switchTab('dashboard');
+
+  // Try auto-login from existing Supabase session
+  waitForSupabase(function(ok){
+    if(!ok) return;
+    sbAuth.auth.getSession().then(function(res){
+      if(res.data&&res.data.session){
+        S.demo=false;
+        if(authEl) authEl.style.display='none';
+        if(appEl)  appEl.style.display='flex';
+        loadAllDataFromDB();
+        loadPolicyImagesFromDB();
+        renderTab(S.tab);
+        toast('เชื่อมต่อ DB แล้ว ✓');
+      }
+    });
+  });
+}
+window.onload = initApp;
+
 </script>
 </body>
 </html>
