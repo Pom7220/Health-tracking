@@ -358,7 +358,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.7.2';
+var APP_VERSION = '2.7.3';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
@@ -3123,6 +3123,51 @@ function updateInsHeader(){
   var nm = document.getElementById('hdr-name');
   if(nm) nm.textContent = S.insFilter==='all' ? (S.lang==='th'?'ทั้งครอบครัว':'All Family') : (ip.nick||ip.name);
 }
+var _insSearchTimer = null;
+function insSearchChange(val){
+  S.insSearch = val;
+  clearTimeout(_insSearchTimer);
+  _insSearchTimer = setTimeout(function(){
+    // Re-render only the policy list area, not the whole insurance tab
+    renderInsurancePoliciesOnly();
+  }, 300);
+}
+
+function renderInsurancePoliciesOnly(){
+  // Re-render just the policies section without destroying search input
+  var container = document.getElementById('ins-policies-container');
+  if(!container){ renderInsurance(); return; }
+  var th = S.lang==='th';
+  if(!S.insView) S.insView='room';
+  var allPols = getFilteredPolicies();
+  if(S.insView !== 'all'){
+    container.innerHTML = renderInsuranceSituation(allPols, S.insView, th);
+  } else {
+    container.innerHTML = renderInsuranceAllPolicies(allPols, th);
+  }
+  // Restore focus to search input
+  var inp = document.getElementById('ins-search');
+  if(inp){ var len=inp.value.length; inp.focus(); inp.setSelectionRange(len,len); }
+}
+
+function getFilteredPolicies(){
+  var allPols = POLICIES_DEMO.filter(function(p){return p.status==='active'||p.status==='paid_up';});
+  if(S.insFilter!=='all'){
+    var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
+    if(fp) allPols=allPols.filter(function(p){return p.holder===fp.name||p.holderId===fp.dbId;});
+  }
+  if(S.insSearch&&S.insSearch.trim()){
+    var q=S.insSearch.toLowerCase();
+    allPols=allPols.filter(function(pol){
+      return [pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',
+        (pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' ')
+      ].join(' ').toLowerCase().indexOf(q)>=0;
+    });
+  }
+  return allPols;
+}
+
+
 function renderInsurance(){
   var th = S.lang==='th';
   if(!S.insView) S.insView='room';
@@ -3163,21 +3208,23 @@ function renderInsurance(){
   // ── Search box ────────────────────────────────────────────
   html += '<div style="position:relative;margin-bottom:10px">';
   html += '<input id="ins-search" type="text" placeholder="'+(th?'ค้นหา เช่น TLI, AIA, ค่าห้อง...':'Search e.g. TLI, AIA, room...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" ';
-  html += 'oninput="S.insSearch=this.value;renderInsurance()" ';
+  html += 'oninput="insSearchChange(this.value)" ';
   html += 'style="width:100%;box-sizing:border-box;padding:9px 36px 9px 12px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
   if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:15px">&#x2715;</div>';
   html += '</div>';
 
   // ── Situation tabs ────────────────────────────────────────
   var views = [
+    {id:'all',   icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'},
     {id:'room',  icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
     {id:'icu',   icon:'&#x1F4C8;', label:'ICU'},
     {id:'surg',  icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'},
     {id:'opd',   icon:'&#x1F48A;', label:'OPD'},
     {id:'cash',  icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'},
-    {id:'ci',    icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'},
-    {id:'all',   icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'}
+    {id:'ci',    icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'}
   ];
+  // Default to 'all' view on first load
+  if(!S.insView) S.insView='all';
   html += '<div style="display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">';
   views.forEach(function(v){
     var on = S.insView===v.id;
@@ -3190,11 +3237,13 @@ function renderInsurance(){
   html += '</div>';
 
   // ── SITUATION VIEW ────────────────────────────────────────
+  html += '<div id="ins-policies-container">';
   if(S.insView !== 'all'){
     html += renderInsuranceSituation(allPols, S.insView, th);
   } else {
     html += renderInsuranceAllPolicies(allPols, th);
   }
+  html += '</div>';
 
   // ── Add policy button ─────────────────────────────────────
   html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
@@ -3230,6 +3279,24 @@ function renderInsuranceSituation(pols, view, th){
       rows.push({pol:pol, r:r, color:color});
     });
   });
+
+  // Add lump-sum (เหมาจ่าย) policies that cover this category
+  // IPD lump-sum = covers room, ICU, surgery, medical all-in-one
+  var lumpSumCats = ['room','icu','surg'];
+  if(lumpSumCats.indexOf(view)>=0){
+    pols.forEach(function(pol){
+      var ins = INSURERS_DEMO.find(function(i){return i.code===pol.insurer;});
+      var color = ins ? ins.color : '#888';
+      (pol.riders||[]).forEach(function(r){
+        if(r.cat!=='ipd_total') return;
+        // Only add if not already in rows (no specific rider for this view)
+        var alreadyCovered = rows.some(function(x){return x.pol.no===pol.no;});
+        if(!alreadyCovered){
+          rows.push({pol:pol, r:r, color:color, isLumpSum:true});
+        }
+      });
+    });
+  }
 
   if(!rows.length){
     return '<div style="text-align:center;padding:40px 20px;color:var(--t3);font-size:13px">'+
@@ -3271,19 +3338,25 @@ function renderInsuranceSituation(pols, view, th){
                  r.amount ? '<span style="font-size:18px;font-weight:800;color:var(--teal)">'+(r.amount>=10000?(r.amount/1000).toFixed(0)+'K':r.amount.toLocaleString())+'</span><span style="font-size:10px;color:var(--t3)"> ฿</span>' : '';
     var dedStr = (r.hasDeductible && r.deductible) ?
       '<div style="font-size:10px;color:var(--red);margin-top:2px">&#x26A0; Deductible '+r.deductible.toLocaleString()+' ฿</div>' : '';
-    var condStr = r.note ?
-      '<div style="font-size:10px;color:var(--amber);margin-top:2px">'+
-      (typeof r.note==='object'?(th?r.note.th||r.note.en:r.note.en||r.note.th):r.note)+'</div>' : '';
+    var noteText = r.note ? (typeof r.note==='object'?(th?r.note.th||r.note.en:r.note.en||r.note.th):r.note) : '';
+    // Skip note if it's just repeating the numeric value already shown
+    var noteIsRedundant = noteText && r.perDay && noteText.toString().replace(/[^0-9]/g,'')===r.perDay.toString();
+    var condStr = (noteText && !noteIsRedundant) ?
+      '<div style="font-size:10px;color:var(--amber);margin-top:2px">'+noteText+'</div>' : '';
     var fromFirstBadge = r.fromFirst ?
       '<span style="font-size:9px;background:rgba(105,240,174,.2);color:var(--green);padding:2px 6px;border-radius:10px;margin-left:4px">'+(th?'บาทแรก':'1st baht')+'</span>' : '';
 
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:8px">';
+    var lumpSumBadge = x.isLumpSum ? '<span style="font-size:9px;background:rgba(156,127,224,.25);color:var(--violet);padding:2px 6px;border-radius:10px;margin-left:4px">'+(th?'เหมาจ่าย':'Lump-sum')+'</span>' : '';
+    var rowBg = x.isLumpSum ? 'rgba(156,127,224,.05)' : 'rgba(255,255,255,.04)';
+    var rowBorder = x.isLumpSum ? 'rgba(156,127,224,.2)' : 'rgba(255,255,255,.08)';
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+rowBg+';border:1px solid '+rowBorder+';border-radius:12px;margin-bottom:8px">';
     // Insurer badge
     html += '<div style="width:36px;height:36px;border-radius:9px;background:'+x.color+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">'+pol.insurer+'</div>';
     // Main info
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+pol.no+'</div>';
-    html += '<div style="font-size:12px;color:var(--t2)">'+r.name+fromFirstBadge+'</div>';
+    html += '<div style="font-size:12px;color:var(--t2)">'+r.name+fromFirstBadge+lumpSumBadge+'</div>';
+    if(x.isLumpSum) html += '<div style="font-size:10px;color:var(--violet);margin-top:2px">'+(th?'ครอบคลุม ค่าห้อง+ผ่าตัด+ICU รวมกัน':'Covers room+surgery+ICU combined')+'</div>';
     html += dedStr + condStr;
     html += '</div>';
     // Value
@@ -3362,9 +3435,14 @@ function renderInsuranceAllPolicies(pols, th){
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
     if(pol.sumAssured) html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">ทุน </span><span style="color:var(--blue);font-weight:600">'+fmtTHB(pol.sumAssured)+'</span></div>';
     if(pol.endDate) html+='<div style="background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">'+(th?'ถึง ':'to ')+'</span><span style="font-weight:600">'+pol.endDate.substring(0,4)+'</span></div>';
-    if(pol.premium>0) html+='<div style="background:'+(pd2?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border-radius:6px;padding:3px 8px;font-size:11px">'+(pd2?'&#x2705; ':'&#x23F0; ')+'<span style="font-weight:600">'+pol.premium.toLocaleString()+' ฿/ปี</span></div>';
-    if(pol.freePolicy) html+='<div style="background:rgba(105,240,174,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--green)">&#x1F3E2; '+(th?'นายจ้างจ่าย':'Employer')+'</div>';
-    if(pol.status==='paid_up') html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--blue)">&#x2705; Paid-up</div>';
+    // Premium/payment chip: freePolicy takes priority over premium amount
+    if(pol.freePolicy||pol.selfPaid===false){
+      html+='<div style="background:rgba(105,240,174,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--green)">&#x1F3E2; '+(th?'นายจ้างจ่าย':'Employer pays')+'</div>';
+    } else if(pol.premium>0){
+      html+='<div style="background:'+(pd2?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border-radius:6px;padding:3px 8px;font-size:11px">'+(pd2?'&#x2705; ':'&#x23F0; ')+'<span style="font-weight:600">'+pol.premium.toLocaleString()+' ฿/ปี</span></div>';
+    } else if(pol.status==='paid_up'){
+      html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--blue)">&#x2705; Paid-up</div>';
+    }
     html+='</div>';
 
     // Top riders summary (key ones only — room, total, CI)
@@ -3462,11 +3540,43 @@ function viewPolicyImage(policyNo, idx){
   var legacyImg = (POLICIES_DEMO.find(function(p){return p.no===policyNo;})||{}).cardImage || CARD_IMAGES[policyNo];
   if(legacyImg && !imgs.length) imgs = [{id:'legacy',data:legacyImg,label:'card'}];
   if(!imgs[idx]) return;
+  var th = S.lang==='th';
   var html = '<div style="text-align:center">';
-  html += '<img src="'+imgs[idx].data+'" style="max-width:100%;border-radius:10px;max-height:70vh;object-fit:contain">';
-  if(imgs.length>1) html += '<div style="font-size:12px;color:var(--t3);margin-top:8px">'+(idx+1)+' / '+imgs.length+'</div>';
+  html += '<img src="'+imgs[idx].data+'" style="max-width:100%;border-radius:10px;max-height:60vh;object-fit:contain">';
+  if(imgs.length>1) html += '<div style="font-size:12px;color:var(--t3);margin:8px 0">'+(idx+1)+' / '+imgs.length+'</div>';
   html += '</div>';
-  openModal((S.lang==='th'?'รูปบัตร/เอกสาร':'Card / Document')+' '+policyNo, html);
+  html += '<div style="display:flex;gap:10px;margin-top:12px">';
+  if(idx>0) html += '<button class="btn btn-secondary" onclick="viewPolicyImage(&quot;'+policyNo+'&quot;,'+(idx-1)+')" style="flex:1">&#x276E; '+(th?'ก่อนหน้า':'Prev')+'</button>';
+  html += '<button class="btn btn-secondary" style="flex:1;color:var(--red)" onclick="deletePolicyImage(&quot;'+policyNo+'&quot;,'+idx+')">&#x1F5D1; '+(th?'ลบรูปนี้':'Delete')+'</button>';
+  if(idx<imgs.length-1) html += '<button class="btn btn-secondary" onclick="viewPolicyImage(&quot;'+policyNo+'&quot;,'+(idx+1)+')" style="flex:1">'+(th?'ถัดไป':'Next')+' &#x276F;</button>';
+  html += '</div>';
+  openModal((th?'รูปบัตร/เอกสาร':'Card / Document')+' ('+policyNo+')', html);
+}
+
+function deletePolicyImage(policyNo, idx){
+  var imgs = POLICY_IMAGES[policyNo] || [];
+  var legacyImg = (POLICIES_DEMO.find(function(p){return p.no===policyNo;})||{}).cardImage || CARD_IMAGES[policyNo];
+  if(legacyImg && !imgs.length) imgs = [{id:'legacy',data:legacyImg,label:'card'}];
+  if(!imgs[idx]) return;
+  var th = S.lang==='th';
+  var imgToDelete = imgs[idx];
+  // Delete from DB if it has a real ID
+  if(imgToDelete.id && imgToDelete.id!=='legacy' && sbAuth){
+    getDbClient().from('policy_images').delete().eq('id', imgToDelete.id).then(function(res){
+      if(res.error) console.error('Delete image error:', res.error.message);
+    });
+  }
+  // Remove from memory
+  imgs.splice(idx, 1);
+  if(!imgs.length){
+    delete POLICY_IMAGES[policyNo];
+    delete CARD_IMAGES[policyNo];
+    var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+    if(pol) delete pol.cardImage;
+  }
+  closeModalForce();
+  toast(th?'ลบรูปแล้ว ✓':'Photo deleted ✓');
+  renderInsurance();
 }
 
 
