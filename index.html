@@ -3171,50 +3171,52 @@ function getFilteredPolicies(){
 
 // New SMART SEARCH CODE
 function getFilteredPolicies() {
+  // ดึงข้อมูลจาก POLICIES_DEMO ตามมาตรฐานไฟล์เดิมของคุณ
   var list = S.demo ? (window.POLICIES_DEMO || []) : (S.dbPolicies || []);
   
-  // Updated Mapping: Ensure all variations are included for both keys
-  const SEARCH_MAP = {
-    "room": ["room", "ห้อง", "ค่าห้อง"],
-    "ห้อง": ["ห้อง", "ค่าห้อง", "room"],
-    "ค่าห้อง": ["ค่าห้อง", "ห้อง", "room"],
-    "life": ["life", "ชีวิต"],
-    "ชีวิต": ["ชีวิต", "life"],
-    "health": ["health", "สุขภาพ"],
-    "สุขภาพ": ["สุขภาพ", "health"]
-  };
-
   return list.filter(function(p) {
-    // 1. Owner Filter
+    // 1. กรองตามเจ้าของ (R/K/All)
     if (S.insFilter !== 'all' && p.pid !== S.insFilter) return false;
     
-    // 2. Search Filter
-    var s = S.insSearch.toLowerCase().trim();
+    // 2. จัดการคำค้นหา
+    var s = (S.insSearch || "").toLowerCase().trim();
     if (!s) return true;
 
-    // Get the list of synonyms. If word not in map, just use the typed word.
-    var searchTerms = SEARCH_MAP[s] ? SEARCH_MAP[s] : [s];
+    // 3. พจนานุกรมคำศัพท์ที่เกี่ยวข้องกัน (Bilingual Mapping)
+    var searchTerms = [s]; // เริ่มต้นด้วยคำที่พิมพ์มา
+    
+    const SEARCH_MAP = {
+      "room": ["room", "ห้อง", "ค่าห้อง"],
+      "ห้อง": ["ห้อง", "ค่าห้อง", "room"],
+      "ค่าห้อง": ["ค่าห้อง", "ห้อง", "room"],
+      "life": ["life", "ชีวิต"],
+      "ชีวิต": ["ชีวิต", "life"],
+      "health": ["health", "สุขภาพ"],
+      "สุขภาพ": ["สุขภาพ", "health"]
+    };
 
-    // Build the full text string of the record
-    // Added more fields to ensure we don't miss anything
+    // ถ้าคำที่พิมพ์มาอยู่ใน Map ให้ดึงคำที่เกี่ยวข้องทั้งหมดมาใส่ในรายการค้นหาด้วย
+    if (SEARCH_MAP[s]) {
+      searchTerms = SEARCH_MAP[s];
+    }
+
+    // 4. รวมข้อมูลในกรมธรรม์เป็นข้อความยาวๆ เพื่อใช้ค้นหา
     var targetText = (
-      (p.name || '') + ' ' + 
-      (p.type || '') + ' ' + 
-      (p.insurer || '') + ' ' + 
-      (p.policy || '') + ' ' +
-      (p.holder || '') + ' ' +
-      (p.cat || '')
+      (p.name || "") + " " + 
+      (p.insurer || "") + " " + 
+      (p.type || "") + " " +
+      (p.policy || "") + " " +
+      (p.holder || "")
     ).toLowerCase();
 
-    // Add Rider names to the searchable text
-    if (p.riders && p.riders.length > 0) {
+    // รวมข้อมูลจาก Riders (ความคุ้มครองเสริม) เข้าไปด้วย
+    if (p.riders && Array.isArray(p.riders)) {
       p.riders.forEach(function(r) {
-        targetText += ' ' + (r.name || '').toLowerCase();
+        targetText += " " + (r.name || "").toLowerCase();
       });
     }
 
-    // CRITICAL FIX: Check if ANY of the synonyms exist anywhere in the targetText
-    // We use .some() which returns true if at least one term matches
+    // 5. ตรวจสอบว่า "คำใดคำหนึ่ง" ใน searchTerms ตรงกับข้อมูลใน targetText หรือไม่
     return searchTerms.some(function(term) {
       return targetText.indexOf(term.toLowerCase()) !== -1;
     });
