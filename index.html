@@ -358,7 +358,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.7.4';
+var APP_VERSION = '2.7.5';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
@@ -2560,8 +2560,8 @@ var POLICIES_DEMO = [
   { no:'GT000000407963088-D1', name:'ทิพยประกันชีวิต Plan 4 (Proud)', insurer:'DHIP',
     holder:'Pitchsinee', holderId:'cccccccc-0000-0000-0000-000000000003',
     cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
-    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:true,
-    note:'Card No.6. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
+    sumAssured:500000, premium:9000, dueMonth:null, paidYear:2025, freePolicy:false, selfPaid:true,
+    note:'Card No.6. กลุ่ม CIMB Thai — Pom จ่ายเองให้ลูก',
     riders:[
       {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
       {code:'DHIP-OPD', name:'OPD 1,500/ครั้ง สูงสุด 30 ครั้ง/ปี', cat:'opd_general', amount:1500, fromFirst:true, copay:0},
@@ -2571,8 +2571,8 @@ var POLICIES_DEMO = [
   { no:'GT000000407963088-D2', name:'ทิพยประกันชีวิต Plan 4 (Peart)', insurer:'DHIP',
     holder:'Varannapas', holderId:'dddddddd-0000-0000-0000-000000000004',
     cat:'health', status:'active', startDate:'2025-09-01', endDate:'2026-08-31',
-    sumAssured:500000, premium:0, dueMonth:null, paidYear:2025, freePolicy:true, selfPaid:true,
-    note:'Card No.7. กลุ่ม CIMB Thai — บริษัทจ่ายให้',
+    sumAssured:500000, premium:9000, dueMonth:null, paidYear:2025, freePolicy:false, selfPaid:true,
+    note:'Card No.7. กลุ่ม CIMB Thai — Pom จ่ายเองให้ลูก',
     riders:[
       {code:'DHIP-IPD', name:'IPD เหมาจ่าย 500,000/ปี', cat:'ipd_total', amount:500000, fromFirst:true, copay:0},
       {code:'DHIP-OPD', name:'OPD 1,500/ครั้ง สูงสุด 30 ครั้ง/ปี', cat:'opd_general', amount:1500, fromFirst:true, copay:0},
@@ -3435,8 +3435,10 @@ function renderInsuranceAllPolicies(pols, th){
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
     if(pol.sumAssured) html+='<div style="background:rgba(79,195,247,.1);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">ทุน </span><span style="color:var(--blue);font-weight:600">'+fmtTHB(pol.sumAssured)+'</span></div>';
     if(pol.endDate) html+='<div style="background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;font-size:11px"><span style="color:var(--t3)">'+(th?'ถึง ':'to ')+'</span><span style="font-weight:600">'+pol.endDate.substring(0,4)+'</span></div>';
-    // Premium/payment chip: freePolicy takes priority over premium amount
-    if(pol.freePolicy||pol.selfPaid===false){
+    // Premium/payment chip
+    // "Employer pays" only if genuinely free — not self-paid or has a premium amount
+    var genuinelyFree = pol.freePolicy && !pol.selfPaid && !(pol.premium>0);
+    if(genuinelyFree){
       html+='<div style="background:rgba(105,240,174,.1);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--green)">&#x1F3E2; '+(th?'นายจ้างจ่าย':'Employer pays')+'</div>';
     } else if(pol.premium>0){
       html+='<div style="background:'+(pd2?'rgba(105,240,174,.1)':'rgba(255,183,77,.1)')+';border-radius:6px;padding:3px 8px;font-size:11px">'+(pd2?'&#x2705; ':'&#x23F0; ')+'<span style="font-weight:600">'+pol.premium.toLocaleString()+' ฿/ปี</span></div>';
