@@ -358,7 +358,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.7.3';
+var APP_VERSION = '2.7.4';
 var APP_DATE = '22 Mar 2026 fix';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
@@ -3560,11 +3560,23 @@ function deletePolicyImage(policyNo, idx){
   if(!imgs[idx]) return;
   var th = S.lang==='th';
   var imgToDelete = imgs[idx];
-  // Delete from DB if it has a real ID
-  if(imgToDelete.id && imgToDelete.id!=='legacy' && sbAuth){
-    getDbClient().from('policy_images').delete().eq('id', imgToDelete.id).then(function(res){
-      if(res.error) console.error('Delete image error:', res.error.message);
-    });
+  // Delete from DB — handle both storage paths
+  if(sbAuth){
+    if(imgToDelete.id && imgToDelete.id!=='legacy'){
+      // Delete from policy_images table (new multi-image system)
+      getDbClient().from('policy_images').delete().eq('id', imgToDelete.id).then(function(res){
+        if(res.error) console.error('Delete policy_image error:', res.error.message);
+      });
+    }
+    // Also clear card_image_url on the insurance_policies row (legacy single-image field)
+    // Do this always — belt-and-suspenders so image can't come back on reload
+    getDbClient().from('insurance_policies')
+      .update({card_image_url: null, updated_at: new Date().toISOString()})
+      .eq('policy_number', policyNo)
+      .then(function(res){
+        if(res.error) console.error('Clear card_image_url error:', res.error.message);
+        else console.log('card_image_url cleared for', policyNo);
+      });
   }
   // Remove from memory
   imgs.splice(idx, 1);
