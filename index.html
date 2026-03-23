@@ -3173,57 +3173,53 @@ function getFilteredPolicies(){
 function getFilteredPolicies() {
   var list = S.demo ? (window.POLICIES_DEMO || []) : (S.dbPolicies || []);
   
-  // 1. Bilingual Mapping: This connects Thai and English terms
+  // Updated Mapping: Ensure all variations are included for both keys
   const SEARCH_MAP = {
-    "room": ["ห้อง", "ค่าห้อง", "room"],
-    "ห้อง": ["room", "ค่าห้อง", "ห้อง"],
-    "ค่าห้อง": ["room", "ค่าห้อง", "ห้อง"],
-    "life": ["ชีวิต", "life"],
-    "ชีวิต": ["life", "ชีวิต"],
-    "health": ["สุขภาพ", "health"],
-    "สุขภาพ": ["health", "สุขภาพ"],
-    "opd": ["ผู้ป่วยนอก", "opd"],
-    "ipd": ["ผู้ป่วยใน", "ipd"],
-    "accident": ["อุบัติเหตุ", "accident"],
-    "อุบัติเหตุ": ["accident", "อุบัติเหตุ"]
+    "room": ["room", "ห้อง", "ค่าห้อง"],
+    "ห้อง": ["ห้อง", "ค่าห้อง", "room"],
+    "ค่าห้อง": ["ค่าห้อง", "ห้อง", "room"],
+    "life": ["life", "ชีวิต"],
+    "ชีวิต": ["ชีวิต", "life"],
+    "health": ["health", "สุขภาพ"],
+    "สุขภาพ": ["สุขภาพ", "health"]
   };
 
   return list.filter(function(p) {
-    // Filter by Owner (R/K/All)
+    // 1. Owner Filter
     if (S.insFilter !== 'all' && p.pid !== S.insFilter) return false;
     
-    // Filter by Search Input
+    // 2. Search Filter
     var s = S.insSearch.toLowerCase().trim();
     if (!s) return true;
 
-    // Check if the search word has a bilingual partner
-    var searchTerms = [s];
-    if (SEARCH_MAP[s]) {
-      searchTerms = SEARCH_MAP[s];
-    }
+    // Get the list of synonyms. If word not in map, just use the typed word.
+    var searchTerms = SEARCH_MAP[s] ? SEARCH_MAP[s] : [s];
 
-    // Combine all text in the policy record to search through it
+    // Build the full text string of the record
+    // Added more fields to ensure we don't miss anything
     var targetText = (
       (p.name || '') + ' ' + 
       (p.type || '') + ' ' + 
       (p.insurer || '') + ' ' + 
       (p.policy || '') + ' ' +
-      (p.holder || '')
+      (p.holder || '') + ' ' +
+      (p.cat || '')
     ).toLowerCase();
 
-    // Also look inside the "Riders" (extra coverage)
+    // Add Rider names to the searchable text
     if (p.riders && p.riders.length > 0) {
       p.riders.forEach(function(r) {
         targetText += ' ' + (r.name || '').toLowerCase();
       });
     }
 
-    // Return TRUE if any of our Thai/English terms are found
+    // CRITICAL FIX: Check if ANY of the synonyms exist anywhere in the targetText
+    // We use .some() which returns true if at least one term matches
     return searchTerms.some(function(term) {
-      return targetText.indexOf(term) !== -1;
+      return targetText.indexOf(term.toLowerCase()) !== -1;
     });
   });
-}      
+}
       
 
 function renderInsurance(){
