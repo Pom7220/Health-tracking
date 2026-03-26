@@ -3281,9 +3281,6 @@ function renderInsurance(){
   if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:15px">&#x2715;</div>';
   html += '</div>';
 
-  // ── 3.4: STANDALONE บัตรหาหมอ — BEFORE insurance policies ──
-  html += renderStandaloneHospitalCards(th, S.insFilter);
-
   // ── 3.1a IPD Workflow at TOP (always visible) ─────────────
   var ipdPerson = (S.insFilter!=='all') ? PROFILES.find(function(x){return x.id===S.insFilter;}) : PROFILES.find(function(x){return x.id===S.pid;});
   var ipdHolderId = ipdPerson ? ipdPerson.dbId : null;
@@ -3333,42 +3330,50 @@ function renderInsurance(){
   // ── 3.1b Dynamic Coverage Summary ─────────────────────────
   var covPols = allPols.filter(function(p){ return p.status==='active'; });
   if(covPols.length){
-    // Build summary dynamically from actual policies
-    var covData = {room:[], icu:[], surgery:[], cash:[], ci:[], opd:[]};
-    covPols.forEach(function(pol){
-      (pol.riders||[]).forEach(function(r){
-        var entry = {insurer:pol.insurer, no:pol.no, name:r.name, fromFirst:r.fromFirst,
-                     amount:r.amount, perDay:r.perDay, deductible:r.deductible||0};
-        if(r.cat==='ipd_room_board') covData.room.push(entry);
-        else if(r.cat==='icu') covData.icu.push(entry);
-        else if(['ipd_surgery','ipd_surgery_room'].includes(r.cat)) covData.surgery.push(entry);
-        else if(r.cat==='daily_hospital_cash') covData.cash.push(entry);
-        else if(['critical_illness_severe','critical_illness_early','critical_illness_cancer'].includes(r.cat)) covData.ci.push(entry);
-        else if(['opd_general','opd_accident'].includes(r.cat)) covData.opd.push(entry);
-      });
-    });
     html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     html += '<div style="font-size:12px;font-weight:700;color:var(--teal)">📋 '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
     html += '<div style="font-size:11px;color:var(--t3)">'+(th?'แตะเพื่อดูรายละเอียด':'Tap for details')+' ›</div></div>';
-    // Dynamic summary rows
+    // Dynamic summary rows — all major categories
+    var covAll = {room:[], icu:[], surgery:[], cash:[], ci:[], opd:[], add:[], waiver:[]};
+    covPols.forEach(function(pol){
+      (pol.riders||[]).forEach(function(r){
+        var e={insurer:pol.insurer,no:pol.no,name:r.name,fromFirst:r.fromFirst,amount:r.amount,perDay:r.perDay,deductible:r.deductible||0};
+        if(r.cat==='ipd_room_board') covAll.room.push(e);
+        else if(r.cat==='icu') covAll.icu.push(e);
+        else if(['ipd_surgery','ipd_surgery_room','ipd_anesthesia'].indexOf(r.cat)>=0) covAll.surgery.push(e);
+        else if(r.cat==='daily_hospital_cash') covAll.cash.push(e);
+        else if(['critical_illness_severe','critical_illness_early','critical_illness_cancer'].indexOf(r.cat)>=0) covAll.ci.push(e);
+        else if(['opd_general','opd_accident','opd_consult','opd_lab'].indexOf(r.cat)>=0) covAll.opd.push(e);
+        else if(r.cat==='accident_death') covAll.add.push(e);
+        else if(r.cat==='premium_waiver') covAll.waiver.push(e);
+      });
+    });
     var summaryRows = [];
-    if(covData.room.length){
-      var bestRoom = covData.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return (b.perDay||0)-(a.perDay||0);})[0]
-                  || covData.room.sort(function(a,b){return (b.perDay||0)-(a.perDay||0);})[0];
-      if(bestRoom) summaryRows.push({label:th?'ค่าห้องสูงสุด/วัน':'Best Room/day', val:(bestRoom.perDay||0).toLocaleString()+' ฿', ok:bestRoom.fromFirst});
+    // ค่าห้อง
+    if(covAll.room.length){
+      var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];
+      if(bR&&bR.perDay) summaryRows.push({label:th?'ค่าห้องสูงสุด/วัน':'Best Room/day', val:bR.perDay.toLocaleString()+' ฿'});
     }
-    if(covData.surgery.length){
-      var surgAmt = covData.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);
-      if(surgAmt) summaryRows.push({label:th?'ค่าผ่าตัดรวม':'Total Surgery', val:fmtTHB(surgAmt)+' ฿', ok:true});
+    // ค่าผ่าตัด
+    if(covAll.surgery.length){
+      var sAmt=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);
+      if(sAmt) summaryRows.push({label:th?'ค่าผ่าตัดรวม':'Total Surgery', val:fmtTHB(sAmt)});
     }
-    if(covData.ci.length){
-      var ciAmt = covData.ci.reduce(function(s,r){return s+(r.amount||0);},0);
-      if(ciAmt) summaryRows.push({label:th?'CI/มะเร็งรวม':'Total CI/Cancer', val:fmtTHB(ciAmt)+' ฿', ok:true});
+    // CI/มะเร็ง
+    if(covAll.ci.length){
+      var ciAmt=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0);
+      if(ciAmt) summaryRows.push({label:th?'CI/มะเร็งรวม':'Total CI/Cancer', val:fmtTHB(ciAmt)});
     }
-    if(covData.cash.length){
-      var cashDay = covData.cash.reduce(function(s,r){return s+(r.perDay||0);},0);
-      if(cashDay) summaryRows.push({label:th?'ค่าชดเชย/วัน':'Daily Cash', val:cashDay.toLocaleString()+' ฿', ok:true});
+    // ชดเชย
+    if(covAll.cash.length){
+      var cDay=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0);
+      if(cDay) summaryRows.push({label:th?'ค่าชดเชย/วัน':'Daily Cash', val:cDay.toLocaleString()+' ฿'});
+    }
+    // OPD
+    if(covAll.opd.length){
+      var opdAmt=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);
+      if(opdAmt) summaryRows.push({label:'OPD', val:fmtTHB(opdAmt)});
     }
     summaryRows.forEach(function(row){
       html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">';
@@ -3418,6 +3423,9 @@ function renderInsurance(){
     html += renderInsuranceAllPolicies(allPols, th);
   }
   html += '</div>';
+
+  // ── บัตรหาหมอ — AFTER policies (item 6) ──────────────────
+  html += renderStandaloneHospitalCards(th, S.insFilter);
 
   // ── Add policy button ─────────────────────────────────────
   html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
@@ -4077,7 +4085,7 @@ function openAddStandaloneCard(editIdx){
     html += '<div style="margin-bottom:6px"><img src="'+c.image+'" style="width:100%;max-height:120px;object-fit:contain;border-radius:10px;cursor:pointer" onclick="viewCardImage(\''+c.image+'\')"></div>';
     html += '<div style="font-size:11px;color:var(--t3);margin-bottom:4px">'+(th?'เลือกรูปใหม่เพื่อแทนที่':'Select new photo to replace')+'</div>';
   }
-  html += '<input id="hc2-photo" type="file" accept="image/*" capture="environment" class="inp" style="padding:6px" onchange="hcPreviewCrop(this)">';
+  html += '<input id="hc2-photo" type="file" accept="image/*" class="inp" style="padding:6px" onchange="hcPreviewCrop(this)">';
   html += '</div>';
   // Crop preview canvas (hidden until photo chosen)
   html += '<div id="hc2-crop-wrap" style="display:none;margin-top:8px">';
@@ -4229,11 +4237,14 @@ async function saveStandaloneCard(editIdx){
 
   if(!title){ toast(th?'กรุณากรอกชื่อบัตร':'Please enter card title'); return; }
 
+  // Show saving indicator
+  toast(th?'กำลังบันทึก...':'Saving...');
+
   // Resolve image: cropped dataURL > uploaded file > existing
   var imageUrl = isEdit ? (HOSP_CARDS[editIdx].image||null) : null;
 
   if(resultData){
-    // Cropped canvas → upload as blob
+    // Cropped canvas dataURL — upload as JPEG blob
     if(!S.demo && sbAuth){
       try {
         var blob = await (await fetch(resultData)).blob();
@@ -4243,12 +4254,13 @@ async function saveStandaloneCard(editIdx){
           var { data: urlData } = sbAuth.storage.from('policy-images').getPublicUrl(fn);
           if(urlData) imageUrl = urlData.publicUrl;
         }
+        if(!imageUrl) imageUrl = resultData; // fallback: keep dataURL if upload failed
       } catch(e){ console.warn('crop upload:', e); imageUrl = resultData; }
     } else {
-      imageUrl = resultData; // demo: keep as data URL
+      imageUrl = resultData; // demo: keep as data URL — shows immediately
     }
   } else if(photoFile && !resultData){
-    // No crop applied, use raw file
+    // No crop applied — use raw file
     if(!S.demo && sbAuth){
       try {
         var fn2 = 'hcard_'+Date.now()+'_'+photoFile.name.replace(/[^a-zA-Z0-9.]/g,'_');
@@ -4257,7 +4269,8 @@ async function saveStandaloneCard(editIdx){
           var { data: urlData2 } = sbAuth.storage.from('policy-images').getPublicUrl(fn2);
           if(urlData2) imageUrl = urlData2.publicUrl;
         }
-      } catch(e){ console.warn('raw upload:', e); }
+        if(!imageUrl) imageUrl = URL.createObjectURL(photoFile); // fallback
+      } catch(e){ console.warn('raw upload:', e); imageUrl = URL.createObjectURL(photoFile); }
     } else {
       imageUrl = URL.createObjectURL(photoFile);
     }
@@ -4266,14 +4279,14 @@ async function saveStandaloneCard(editIdx){
   var card = { title:title, hospital:hospital, cardNo:cardNo||'', notes:notes||'', image:imageUrl||null, profileId:profileId||null };
   if(isEdit) card.dbId = HOSP_CARDS[editIdx].dbId;
 
+  // Update in-memory store BEFORE render so thumbnail shows immediately
   if(isEdit){ HOSP_CARDS[editIdx] = card; } else { HOSP_CARDS.push(card); }
 
-  // Persist to DB
+  // Persist to DB (awaited so dbId is set before render)
   if(!S.demo && sbAuth){
-    (async function(){
-      try {
-        var db = getDbClient();
-        if(!db) return;
+    try {
+      var db = getDbClient();
+      if(db){
         var uid = (await sbAuth.auth.getUser()).data.user.id;
         var row = {
           owner_id: uid, policy_id: null, profile_id: profileId||null,
@@ -4287,13 +4300,13 @@ async function saveStandaloneCard(editIdx){
           var { data: ins } = await db.from('hospital_cards').insert(row).select('id').single();
           if(ins) HOSP_CARDS[HOSP_CARDS.length-1].dbId = ins.id;
         }
-      } catch(e){ console.warn('saveStandaloneCard DB:', e); }
-    })();
+      }
+    } catch(e){ console.warn('saveStandaloneCard DB:', e); }
   }
 
   closeModalForce();
   toast(th?(isEdit?'บันทึกบัตรแล้ว ✓':'เพิ่มบัตรหาหมอแล้ว ✓'):(isEdit?'Card saved ✓':'Card added ✓'));
-  renderInsurance();
+  renderInsurance(); // now called AFTER imageUrl is resolved
 }
 
 function deleteStandaloneCard(idx){
@@ -4431,15 +4444,31 @@ function openCoverageSummary(){
   });
 
   var catDefs = [
-    {label:th?'IPD ค่าห้อง/วัน':'IPD Room/day',       cats:['ipd_room_board']},
-    {label:'ICU',                                       cats:['icu','ipd_room_board'], icuOnly:true},
-    {label:th?'IPD วงเงินรวม':'IPD Total Limit',       cats:['ipd_total']},
-    {label:th?'ค่าผ่าตัด':'Surgery',                   cats:['ipd_surgery','ipd_surgery_room','ipd_anesthesia']},
-    {label:th?'ค่าชดเชยรายวัน':'Daily Cash',           cats:['daily_hospital_cash']},
-    {label:'OPD',                                       cats:['opd_general','opd_accident','opd_consult','opd_lab']},
-    {label:th?'โรคร้ายแรง / CI':'CI / Cancer',         cats:['critical_illness_severe','critical_illness_early','critical_illness_cancer']},
-    {label:th?'AD&D เสียชีวิต':'AD&D / Death',         cats:['accident_death']},
-    {label:th?'ยกเว้นเบี้ย':'Premium Waiver',          cats:['premium_waiver']},
+    // IPD Room
+    {label:th?'ค่าห้อง/วัน (IPD)':'Room/Day (IPD)',           cats:['ipd_room_board'],                                                       icu:false},
+    {label:'ICU',                                               cats:['icu','ipd_room_board'],                                                  icuOnly:true},
+    {label:th?'IPD วงเงินรวม (เหมาจ่าย)':'IPD Total Limit',   cats:['ipd_total'],                                                             icu:false},
+    // Surgery
+    {label:th?'ค่าผ่าตัด':'Surgery',                           cats:['ipd_surgery'],                                                           icu:false},
+    {label:th?'ห้องผ่าตัด / OR':'Surgery Room / OR',           cats:['ipd_surgery_room'],                                                      icu:false},
+    {label:th?'ค่ายาสลบ':'Anesthesia',                         cats:['ipd_anesthesia'],                                                        icu:false},
+    // Cash
+    {label:th?'ค่าชดเชยรายวัน':'Daily Cash',                   cats:['daily_hospital_cash'],                                                   icu:false},
+    // OPD
+    {label:th?'OPD ทั่วไป':'OPD General',                      cats:['opd_general'],                                                           icu:false},
+    {label:th?'OPD อุบัติเหตุ / ER':'ER / Accident OPD',       cats:['opd_accident'],                                                          icu:false},
+    {label:th?'ค่าปรึกษาแพทย์':'Consultation',                  cats:['opd_consult'],                                                           icu:false},
+    {label:th?'Lab / X-Ray OPD':'Lab / X-Ray OPD',             cats:['opd_lab'],                                                               icu:false},
+    // CI
+    {label:th?'โรคร้ายแรงระยะสุดท้าย':'Severe CI',             cats:['critical_illness_severe'],                                               icu:false},
+    {label:th?'โรคร้ายแรงระยะเริ่มต้น':'Early CI',             cats:['critical_illness_early'],                                                icu:false},
+    {label:th?'โรคมะเร็ง':'Cancer CI',                          cats:['critical_illness_cancer'],                                               icu:false},
+    // AD&D
+    {label:th?'AD&D เสียชีวิต/ทุพพลภาพ':'AD&D Death/Disability', cats:['accident_death'],                                                     icu:false},
+    {label:th?'ค่ารักษาอุบัติเหตุ':'Accident Medical',          cats:['accident_medical'],                                                      icu:false},
+    // Waiver & Life
+    {label:th?'ยกเว้นเบี้ย':'Premium Waiver',                   cats:['premium_waiver'],                                                        icu:false},
+    {label:th?'ประกันชีวิต':'Life Insurance',                    cats:['life'],                                                                  icu:false},
   ];
 
   var html = '';
@@ -4479,22 +4508,21 @@ function openCoverageSummary(){
     html += '</div>';
   });
 
-  // Hospital cards (dynamic)
-  var allCards = [];
-  pols.forEach(function(pol){
-    (pol.hospital_cards||[]).forEach(function(hc){
-      allCards.push({polName:pol.name, card:hc});
-    });
-  });
-  if(allCards.length){
-    html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.06em;margin-bottom:5px">'+(th?'\u0e1a\u0e31\u0e15\u0e23\u0e2b\u0e32\u0e2b\u0e21\u0e2d':'Hospital Cards')+'</div>';
-    allCards.forEach(function(item){
-      html += '<div style="font-size:12px;color:var(--t2);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">\u{1F3E5} <b>'+item.card.title+'</b> — '+item.card.hospital+'</div>';
+  // บัตรหาหมอ (standalone, filtered by profile)
+  var myCards = HOSP_CARDS.filter(function(c){ return !c.profileId || c.profileId === p.dbId; });
+  if(myCards.length){
+    html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.06em;margin-bottom:5px">'+(th?'บัตรหาหมอ':'Hospital Cards')+'</div>';
+    myCards.forEach(function(c){
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
+      if(c.image) html += '<img src="'+c.image+'" style="width:36px;height:26px;object-fit:cover;border-radius:5px;flex-shrink:0">';
+      html += '<div><div style="font-size:12px;color:var(--t2)">&#x1F3E5; <b>'+c.title+'</b>'+(c.hospital?' — '+c.hospital:'')+'</div>';
+      if(c.cardNo) html += '<div style="font-size:13px;font-weight:700;color:var(--teal);letter-spacing:2px;font-family:monospace">'+c.cardNo+'</div>';
+      html += '</div></div>';
     });
     html += '</div>';
   }
 
-  openModal(th?'\u0e20\u0e32\u0e1e\u0e23\u0e27\u0e21\u0e04\u0e27\u0e32\u0e21\u0e04\u0e38\u0e49\u0e21\u0e04\u0e23\u0e2d\u0e07':'Coverage Summary', html);
+  openModal(th?'สรุปความคุ้มครอง':'Coverage Summary', html);
 }
 
 
