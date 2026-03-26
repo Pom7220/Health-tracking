@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.7.9';
+var APP_VERSION = '2.8.0';
 var APP_DATE = '26 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
@@ -3298,7 +3298,7 @@ function renderInsurance(){
   html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;opacity:'+(S.insSearch?'1':'0.25')+';transition:.2s">&#x2715;</div>';
   html += '</div>';
 
-  // ── (4) NOTIFICATIONS + เบี้ยที่ต้องจ่ายเอง/ปี ────────────
+  // ── (4) NOTIFICATIONS + เบี้ยที่ต้องจ่ายเอง/ปี — one grouped block ──
   var activePols = allPols.filter(function(p){return p.status==='active';});
   var selfPremium = activePols.reduce(function(s,p){return s+(p.selfPaid!==false&&p.premium?(parseFloat(p.premium)||0):0);},0);
   var urgentPols = activePols.filter(function(p){return p.urgent;});
@@ -3307,18 +3307,23 @@ function renderInsurance(){
     var now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
     var diff=(p.dueMonth-m+12)%12; return diff<=2&&!isPaid(p.no,y);
   });
-  if(urgentPols.length||soonPols.length){
-    html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px;padding:8px 12px;margin-bottom:10px">';
+  var hasAlerts = urgentPols.length||soonPols.length;
+  // Single container for both alerts and premium
+  html += '<div style="margin-bottom:12px">';
+  if(hasAlerts){
+    html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px 12px '+(selfPremium?'0 0':'12px 12px')+';padding:8px 12px;">';
     urgentPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--red);padding:2px 0">&#x26A0;&#xFE0F; <b>'+p.no+'</b> '+(p.urgentMsg||(th?'ต้องการความสนใจ':'Needs attention'))+'</div>'; });
     soonPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--amber);padding:2px 0">&#x23F0; <b>'+p.no+'</b> '+(th?'เบี้ยครบกำหนดเร็วๆนี้':'Premium due soon')+'</div>'; });
     html += '</div>';
   }
   if(selfPremium>0){
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,183,77,.06);border:1px solid rgba(255,183,77,.18);border-radius:12px;padding:8px 14px;margin-bottom:12px">';
+    var premRadius = hasAlerts ? '0 0 12px 12px' : '12px';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.22);border-radius:'+premRadius+';padding:8px 14px;'+(hasAlerts?'border-top:none;':'')+'">';
     html += '<span style="font-size:12px;color:var(--t2)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-paid premium/yr')+'</span>';
     html += '<span style="font-size:15px;font-weight:800;color:var(--amber)">'+fmtTHB(selfPremium)+'</span>';
     html += '</div>';
   }
+  html += '</div>';
 
   // ── (5) สรุปความคุ้มครอง — tap to see detail ─────────────
   var covPols = activePols;
@@ -3396,14 +3401,14 @@ function renderInsurance(){
   }
   html += '</div>';
 
+  // ── บัตรหาหมอ — BEFORE policy list ──────────────────────
+  html += renderStandaloneHospitalCards(th, S.insFilter);
+
   // ── POLICY LIST ───────────────────────────────────────────
   html += '<div id="ins-policies-container">';
   if(S.insView!=='all'){ html += renderInsuranceSituation(allPols,S.insView,th); }
   else { html += renderInsuranceAllPolicies(allPols,th); }
   html += '</div>';
-
-  // ── บัตรหาหมอ — after policies ────────────────────────────
-  html += renderStandaloneHospitalCards(th, S.insFilter);
 
   // ── Add policy button ─────────────────────────────────────
   html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
@@ -4216,76 +4221,71 @@ async function saveStandaloneCard(editIdx){
 
   if(!title){ toast(th?'กรุณากรอกชื่อบัตร':'Please enter card title'); return; }
 
-  // Show saving indicator
-  toast(th?'กำลังบันทึก...':'Saving...');
+  // Step 1: determine the immediate preview image (dataURL or objectURL)
+  var previewUrl = isEdit ? (HOSP_CARDS[editIdx].image||null) : null;
+  if(resultData) previewUrl = resultData;
+  else if(photoFile) previewUrl = URL.createObjectURL(photoFile);
 
-  // Resolve image: cropped dataURL > uploaded file > existing
-  var imageUrl = isEdit ? (HOSP_CARDS[editIdx].image||null) : null;
-
-  if(resultData){
-    // Cropped canvas dataURL — upload as JPEG blob
-    if(!S.demo && sbAuth){
-      try {
-        var blob = await (await fetch(resultData)).blob();
-        var fn = 'hcard_'+Date.now()+'.jpg';
-        var { data: upData } = await sbAuth.storage.from('policy-images').upload(fn, blob, {contentType:'image/jpeg', upsert:true});
-        if(upData){
-          var { data: urlData } = sbAuth.storage.from('policy-images').getPublicUrl(fn);
-          if(urlData) imageUrl = urlData.publicUrl;
-        }
-        if(!imageUrl) imageUrl = resultData; // fallback: keep dataURL if upload failed
-      } catch(e){ console.warn('crop upload:', e); imageUrl = resultData; }
-    } else {
-      imageUrl = resultData; // demo: keep as data URL — shows immediately
-    }
-  } else if(photoFile && !resultData){
-    // No crop applied — use raw file
-    if(!S.demo && sbAuth){
-      try {
-        var fn2 = 'hcard_'+Date.now()+'_'+photoFile.name.replace(/[^a-zA-Z0-9.]/g,'_');
-        var { data: upData2 } = await sbAuth.storage.from('policy-images').upload(fn2, photoFile, {upsert:true});
-        if(upData2){
-          var { data: urlData2 } = sbAuth.storage.from('policy-images').getPublicUrl(fn2);
-          if(urlData2) imageUrl = urlData2.publicUrl;
-        }
-        if(!imageUrl) imageUrl = URL.createObjectURL(photoFile); // fallback
-      } catch(e){ console.warn('raw upload:', e); imageUrl = URL.createObjectURL(photoFile); }
-    } else {
-      imageUrl = URL.createObjectURL(photoFile);
-    }
-  }
-
-  var card = { title:title, hospital:hospital, cardNo:cardNo||'', notes:notes||'', image:imageUrl||null, profileId:profileId||null };
+  // Step 2: save with preview immediately so thumbnail shows right away
+  var card = { title:title, hospital:hospital, cardNo:cardNo||'', notes:notes||'', image:previewUrl, profileId:profileId||null };
   if(isEdit) card.dbId = HOSP_CARDS[editIdx].dbId;
-
-  // Update in-memory store BEFORE render so thumbnail shows immediately
   if(isEdit){ HOSP_CARDS[editIdx] = card; } else { HOSP_CARDS.push(card); }
 
-  // Persist to DB (awaited so dbId is set before render)
-  if(!S.demo && sbAuth){
-    try {
-      var db = getDbClient();
-      if(db){
+  closeModalForce();
+  toast(th?'บันทึกแล้ว ✓':'Saved ✓');
+  renderInsurance(); // render immediately with preview thumbnail
+
+  // Step 3: async upload to Supabase Storage in background, then update DB URL
+  (async function(){
+    var finalUrl = previewUrl; // default = keep preview (dataURL or objectURL)
+    var sourceBlob = null;
+
+    if(resultData){
+      // cropped canvas → blob
+      try { sourceBlob = await (await fetch(resultData)).blob(); } catch(e){}
+    } else if(photoFile){
+      sourceBlob = photoFile;
+    }
+
+    if(sourceBlob && !S.demo && sbAuth){
+      try {
+        var ext = (resultData || (photoFile&&photoFile.type==='image/png')) ? 'jpg' : 'jpg';
+        var fn = 'hcard_'+Date.now()+'.'+ext;
+        var { data: upData } = await sbAuth.storage.from('policy-images').upload(fn, sourceBlob, {contentType:'image/jpeg', upsert:true});
+        if(upData){
+          var { data: urlData } = sbAuth.storage.from('policy-images').getPublicUrl(fn);
+          if(urlData && urlData.publicUrl) finalUrl = urlData.publicUrl;
+        }
+      } catch(e){ console.warn('hcard upload:', e); }
+    }
+
+    // Update the card's image with final URL
+    var cardRef = isEdit ? HOSP_CARDS[editIdx] : HOSP_CARDS[HOSP_CARDS.length-1];
+    if(cardRef) cardRef.image = finalUrl;
+
+    // Persist to DB
+    if(!S.demo && sbAuth){
+      try {
+        var db = getDbClient();
+        if(!db) return;
         var uid = (await sbAuth.auth.getUser()).data.user.id;
         var row = {
           owner_id: uid, policy_id: null, profile_id: profileId||null,
           card_title: title, hospital_name: hospital||null,
           card_number: cardNo||null, notes: notes||null,
-          card_image_url: imageUrl||null
+          card_image_url: finalUrl||null
         };
         if(isEdit && card.dbId){
           await db.from('hospital_cards').update(row).eq('id', card.dbId);
         } else {
           var { data: ins } = await db.from('hospital_cards').insert(row).select('id').single();
-          if(ins) HOSP_CARDS[HOSP_CARDS.length-1].dbId = ins.id;
+          if(ins && cardRef) cardRef.dbId = ins.id;
         }
-      }
-    } catch(e){ console.warn('saveStandaloneCard DB:', e); }
-  }
-
-  closeModalForce();
-  toast(th?(isEdit?'บันทึกบัตรแล้ว ✓':'เพิ่มบัตรหาหมอแล้ว ✓'):(isEdit?'Card saved ✓':'Card added ✓'));
-  renderInsurance(); // now called AFTER imageUrl is resolved
+      } catch(e){ console.warn('saveStandaloneCard DB:', e); }
+    }
+    // Re-render only if image URL changed (public URL replaced dataURL)
+    if(finalUrl !== previewUrl) renderInsurance();
+  })();
 }
 
 function deleteStandaloneCard(idx){
