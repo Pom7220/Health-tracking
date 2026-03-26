@@ -3235,11 +3235,10 @@ function getSearchTerms(q){
 
 function renderInsurance(){
   var th = S.lang==='th';
-  if(!S.insView) S.insView='room';
+  if(!S.insView) S.insView='all';
   if(!S.insSearch) S.insSearch='';
   if(!S.insFilter) S.insFilter='all';
 
-  // Filter policies by selected person
   function filterByPerson(pols){
     if(S.insFilter==='all') return pols;
     var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
@@ -3247,25 +3246,20 @@ function renderInsurance(){
     return pols.filter(function(p){return p.holder===fp.name||p.holderId===fp.dbId;});
   }
 
-  // All active policies filtered by person
   var allPols = filterByPerson(POLICIES_DEMO.filter(function(p){return p.status==='active'||p.status==='paid_up';}));
 
-  // Search further filters by text — bilingual synonym matching (2.1 fix)
   if(S.insSearch.trim()){
     var q = S.insSearch.toLowerCase().trim();
     var searchTerms = getSearchTerms(q);
     allPols = allPols.filter(function(pol){
-      var haystack = [pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',
-        (pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' '),
-        (pol.hospital_cards||[]).map(function(c){return (c.title||'')+(c.hospital||'');}).join(' ')
-      ].join(' ').toLowerCase();
+      var haystack = [pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',(pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' ')].join(' ').toLowerCase();
       return searchTerms.some(function(term){ return haystack.indexOf(term)>=0; });
     });
   }
 
   var html = '<div class="fade">';
 
-  // ── Person filter pills ────────────────────────────────────
+  // ── (1) PROFILE PILLS ─────────────────────────────────────
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(th?'ทั้งหมด':'All')+'</div>';
   PROFILES.forEach(function(pr){
@@ -3273,69 +3267,63 @@ function renderInsurance(){
   });
   html += '</div>';
 
-  // ── Search box ────────────────────────────────────────────
-  html += '<div style="position:relative;margin-bottom:10px">';
+  // ── (2) RIDER CATEGORY FILTER — wrapped ──────────────────
+  var views = [
+    {id:'all',  icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'},
+    {id:'room', icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
+    {id:'icu',  icon:'&#x1F4C8;', label:'ICU'},
+    {id:'surg', icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'},
+    {id:'opd',  icon:'&#x1F48A;', label:'OPD'},
+    {id:'er',   icon:'&#x1F691;', label:'ER'},
+    {id:'ci',   icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'},
+    {id:'meds', icon:'&#x1F4E6;', label:th?'ยากลับบ้าน':'Meds'},
+    {id:'cash', icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'}
+  ];
+  html += '<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">';
+  views.forEach(function(v){
+    var on = S.insView===v.id;
+    html += '<div onclick="S.insView=\''+v.id+'\';renderInsurance()" ';
+    html += 'style="padding:6px 11px;border-radius:20px;font-size:12px;cursor:pointer;white-space:nowrap;';
+    html += on ? 'background:rgba(79,195,247,.2);border:1px solid rgba(79,195,247,.5);color:var(--blue);font-weight:700"' : 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--t2)"';
+    html += '>'+v.icon+' '+v.label+'</div>';
+  });
+  html += '</div>';
+
+  // ── (3) SEARCH BAR with X ─────────────────────────────────
+  html += '<div style="position:relative;margin-bottom:12px">';
+  html += '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none">&#x1F50D;</span>';
   html += '<input id="ins-search" type="text" placeholder="'+(th?'ค้นหา เช่น TLI, AIA, ค่าห้อง...':'Search e.g. TLI, AIA, room...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" ';
   html += 'oninput="insSearchChange(this.value)" ';
-  html += 'style="width:100%;box-sizing:border-box;padding:9px 36px 9px 12px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
-  if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:15px">&#x2715;</div>';
+  html += 'style="width:100%;box-sizing:border-box;padding:9px 34px 9px 32px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
+  html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;opacity:'+(S.insSearch?'1':'0.25')+';transition:.2s">&#x2715;</div>';
   html += '</div>';
 
-  // ── 3.1a IPD Workflow at TOP (always visible) ─────────────
-  var ipdPerson = (S.insFilter!=='all') ? PROFILES.find(function(x){return x.id===S.insFilter;}) : PROFILES.find(function(x){return x.id===S.pid;});
-  var ipdHolderId = ipdPerson ? ipdPerson.dbId : null;
-  var ipdAdvice = ipdHolderId && typeof getIPDAdvice === 'function' ? getIPDAdvice(ipdHolderId) : {useFirst:[],useSecond:[],dailyCash:[]};
-
-  html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.18);border-radius:16px;padding:12px 14px;margin-bottom:12px">';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">🏥 '+(th?'ขั้นตอนการเบิก IPD':'IPD Claim Workflow')+(ipdPerson?' — '+ipdPerson.nick:'')+'</div>';
-
-  // Step 1 box (same style as Step 2)
-  html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">✅ '+(th?'ขั้นที่ 1 — ตั้งแต่บาทแรก':'Step 1 — From 1st Baht')+'</div>';
-  if(ipdAdvice.useFirst && ipdAdvice.useFirst.length){
-    ipdAdvice.useFirst.forEach(function(x){
-      html += '<div style="font-size:12px;color:var(--t2);padding:2px 0">• <b>'+x.pol.insurer+' '+x.pol.no+'</b> — '+x.rider.name+'</div>';
-    });
-  } else {
-    html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ไม่มีประกันที่คุ้มครองตั้งแต่บาทแรก':'No from-1st-baht coverage')+'</div>';
+  // ── (4) NOTIFICATIONS + เบี้ยที่ต้องจ่ายเอง/ปี ────────────
+  var activePols = allPols.filter(function(p){return p.status==='active';});
+  var selfPremium = activePols.reduce(function(s,p){return s+(p.selfPaid!==false&&p.premium?(parseFloat(p.premium)||0):0);},0);
+  var urgentPols = activePols.filter(function(p){return p.urgent;});
+  var soonPols = activePols.filter(function(p){
+    if(!p.dueMonth) return false;
+    var now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
+    var diff=(p.dueMonth-m+12)%12; return diff<=2&&!isPaid(p.no,y);
+  });
+  if(urgentPols.length||soonPols.length){
+    html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px;padding:8px 12px;margin-bottom:10px">';
+    urgentPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--red);padding:2px 0">&#x26A0;&#xFE0F; <b>'+p.no+'</b> '+(p.urgentMsg||(th?'ต้องการความสนใจ':'Needs attention'))+'</div>'; });
+    soonPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--amber);padding:2px 0">&#x23F0; <b>'+p.no+'</b> '+(th?'เบี้ยครบกำหนดเร็วๆนี้':'Premium due soon')+'</div>'; });
+    html += '</div>';
   }
-  if(ipdAdvice.dailyCash && ipdAdvice.dailyCash.length){
-    ipdAdvice.dailyCash.forEach(function(x){
-      html += '<div style="font-size:12px;color:var(--teal);padding:2px 0">💵 <b>'+x.pol.insurer+'</b> '+x.rider.name+' '+x.rider.perDay.toLocaleString()+' ฿/'+(th?'วัน':'day')+'</div>';
-    });
+  if(selfPremium>0){
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,183,77,.06);border:1px solid rgba(255,183,77,.18);border-radius:12px;padding:8px 14px;margin-bottom:12px">';
+    html += '<span style="font-size:12px;color:var(--t2)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-paid premium/yr')+'</span>';
+    html += '<span style="font-size:15px;font-weight:800;color:var(--amber)">'+fmtTHB(selfPremium)+'</span>';
+    html += '</div>';
   }
-  html += '</div>';
 
-  if(ipdAdvice.useSecond && ipdAdvice.useSecond.length){
-    var s2g={};
-    ipdAdvice.useSecond.forEach(function(x){
-      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,riders:[],minDed:x.rider.deductible||999999};
-      s2g[x.pol.no].riders.push(x.rider);
-      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
-    });
-    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
-      var g=s2g[key], ded=g.minDed<999999?g.minDed:null;
-      html += '<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.2);border-radius:12px;padding:10px 12px;margin-bottom:6px">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">⚠️ <b style="font-size:12px">'+g.pol.insurer+' '+g.pol.no+'</b>';
-      if(ded) html += '<span style="font-size:10px;background:rgba(255,82,82,.2);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
-      html += '</div>';
-      html += '<div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:4px">'+(th?'ขั้นที่ 2 — หลัง Deductible':'Step 2 — After Deductible')+'</div>';
-      g.riders.forEach(function(r){ html+='<div style="font-size:12px;color:var(--t2);padding:1px 0 1px 14px">• '+r.name+'</div>'; });
-      if(ded) html += '<div style="font-size:11px;color:var(--red);margin-top:4px;padding-left:14px">➡️ '+(th?'ต้องจ่ายส่วนแรก '+ded.toLocaleString()+' ฿ ก่อน':'Pay '+ded.toLocaleString()+' ฿ deductible first')+'</div>';
-      html += '</div>';
-    });
-  }
-  html += '</div>'; // end IPD workflow box
-
-  // ── 3.1b Dynamic Coverage Summary ─────────────────────────
-  var covPols = allPols.filter(function(p){ return p.status==='active'; });
+  // ── (5) สรุปความคุ้มครอง — tap to see detail ─────────────
+  var covPols = activePols;
   if(covPols.length){
-    html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-    html += '<div style="font-size:12px;font-weight:700;color:var(--teal)">📋 '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
-    html += '<div style="font-size:11px;color:var(--t3)">'+(th?'แตะเพื่อดูรายละเอียด':'Tap for details')+' ›</div></div>';
-    // Dynamic summary rows — all major categories
-    var covAll = {room:[], icu:[], surgery:[], cash:[], ci:[], opd:[], add:[], waiver:[]};
+    var covAll={room:[],icu:[],surgery:[],cash:[],ci:[],opd:[],add:[],waiver:[]};
     covPols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
         var e={insurer:pol.insurer,no:pol.no,name:r.name,fromFirst:r.fromFirst,amount:r.amount,perDay:r.perDay,deductible:r.deductible||0};
@@ -3349,82 +3337,72 @@ function renderInsurance(){
         else if(r.cat==='premium_waiver') covAll.waiver.push(e);
       });
     });
-    var summaryRows = [];
-    // ค่าห้อง
-    if(covAll.room.length){
-      var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];
-      if(bR&&bR.perDay) summaryRows.push({label:th?'ค่าห้องสูงสุด/วัน':'Best Room/day', val:bR.perDay.toLocaleString()+' ฿'});
-    }
-    // ค่าผ่าตัด
-    if(covAll.surgery.length){
-      var sAmt=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);
-      if(sAmt) summaryRows.push({label:th?'ค่าผ่าตัดรวม':'Total Surgery', val:fmtTHB(sAmt)});
-    }
-    // CI/มะเร็ง
-    if(covAll.ci.length){
-      var ciAmt=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0);
-      if(ciAmt) summaryRows.push({label:th?'CI/มะเร็งรวม':'Total CI/Cancer', val:fmtTHB(ciAmt)});
-    }
-    // ชดเชย
-    if(covAll.cash.length){
-      var cDay=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0);
-      if(cDay) summaryRows.push({label:th?'ค่าชดเชย/วัน':'Daily Cash', val:cDay.toLocaleString()+' ฿'});
-    }
-    // OPD
-    if(covAll.opd.length){
-      var opdAmt=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);
-      if(opdAmt) summaryRows.push({label:'OPD', val:fmtTHB(opdAmt)});
-    }
-    summaryRows.forEach(function(row){
-      html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">';
-      html += '<span style="color:var(--t2)">'+row.label+'</span>';
-      html += '<span style="font-weight:700;color:var(--teal)">'+row.val+'</span></div>';
-    });
-    if(!summaryRows.length) html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ยังไม่มีข้อมูลสัญญาเพิ่มเติม':'No rider data yet')+'</div>';
+    html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--teal)">&#x1F4CB; '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
+    html += '<div style="font-size:11px;color:var(--t3)">'+(th?'แตะเพื่อดูรายละเอียด':'Tap for details')+' ›</div></div>';
+    var sr=[];
+    if(covAll.room.length){var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]; if(bR&&bR.perDay) sr.push({l:th?'ค่าห้องสูงสุด/วัน':'Best Room/day',v:bR.perDay.toLocaleString()+' ฿'});}
+    if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0); if(sA) sr.push({l:th?'ค่าผ่าตัดรวม':'Total Surgery',v:fmtTHB(sA)});}
+    if(covAll.ci.length){var cA=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0); if(cA) sr.push({l:th?'CI/มะเร็งรวม':'CI/Cancer',v:fmtTHB(cA)});}
+    if(covAll.cash.length){var cD=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0); if(cD) sr.push({l:th?'ค่าชดเชย/วัน':'Daily Cash',v:cD.toLocaleString()+' ฿'});}
+    if(covAll.opd.length){var oA=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0); if(oA) sr.push({l:'OPD',v:fmtTHB(oA)});}
+    if(!sr.length) html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ยังไม่มีข้อมูลสัญญาเพิ่มเติม':'No rider data yet')+'</div>';
+    sr.forEach(function(row){ html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span style="color:var(--t2)">'+row.l+'</span><span style="font-weight:700;color:var(--teal)">'+row.v+'</span></div>'; });
     html += '</div>';
   }
 
-  // ── Situation tabs ────────────────────────────────────────
-  // ── 3.1a: IPD Workflow always at top + Coverage Summary ────
-  html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
-  html += '<div onclick="openIPDWorkflow()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:rgba(255,82,82,.09);border:1px solid rgba(255,82,82,.22);border-radius:14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--red)">&#x1F3E5; '+(th?'ขั้นตอน IPD':'IPD Workflow')+'</div>';
-  html += '<div onclick="openCoverageSummary()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:rgba(38,217,176,.07);border:1px solid rgba(38,217,176,.2);border-radius:14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--teal)">&#x1F4CB; '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
-  html += '</div>';
-
-  var views = [
-    {id:'all',   icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'},
-    {id:'room',  icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
-    {id:'icu',   icon:'&#x1F4C8;', label:'ICU'},
-    {id:'surg',  icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'},
-    {id:'opd',   icon:'&#x1F48A;', label:'OPD'},
-    {id:'er',    icon:'&#x1F691;', label:'ER'},
-    {id:'cash',  icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'},
-    {id:'ci',    icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'},
-    {id:'meds',  icon:'&#x1F48A;', label:th?'ยากลับบ้าน':'Meds'}
-  ];
-  // Default to 'all' view on first load
-  if(!S.insView) S.insView='all';
-  html += '<div style="display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">';
-  views.forEach(function(v){
-    var on = S.insView===v.id;
-    html += '<div onclick="S.insView=\''+v.id+'\';renderInsurance()" ';
-    html += 'style="flex-shrink:0;padding:7px 12px;border-radius:20px;font-size:12px;cursor:pointer;white-space:nowrap;';
-    html += on ? 'background:rgba(79,195,247,.2);border:1px solid rgba(79,195,247,.5);color:var(--blue);font-weight:700"'
-               : 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--t2)"';
-    html += '>'+v.icon+' '+v.label+'</div>';
-  });
-  html += '</div>';
-
-  // ── SITUATION VIEW ────────────────────────────────────────
-  html += '<div id="ins-policies-container">';
-  if(S.insView !== 'all'){
-    html += renderInsuranceSituation(allPols, S.insView, th);
+  // ── (6) IPD WORKFLOW ─────────────────────────────────────
+  var ipdPerson = (S.insFilter!=='all') ? PROFILES.find(function(x){return x.id===S.insFilter;}) : PROFILES.find(function(x){return x.id===S.pid;});
+  var ipdHolderId = ipdPerson ? ipdPerson.dbId : null;
+  var ipdAdvice = ipdHolderId && typeof getIPDAdvice==='function' ? getIPDAdvice(ipdHolderId) : {useFirst:[],useSecond:[],dailyCash:[]};
+  html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.18);border-radius:16px;padding:12px 14px;margin-bottom:12px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">&#x1F3E5; '+(th?'ขั้นตอนการเบิก IPD':'IPD Claim Workflow')+(ipdPerson?' — '+ipdPerson.nick:'')+'</div>';
+  html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">&#x2705; '+(th?'ขั้นที่ 1 — ตั้งแต่บาทแรก':'Step 1 — From 1st Baht')+'</div>';
+  if(ipdAdvice.useFirst&&ipdAdvice.useFirst.length){
+    var seen1={};
+    ipdAdvice.useFirst.forEach(function(x){
+      var key=x.pol.insurer+' '+x.pol.no;
+      if(!seen1[key]){seen1[key]=1; html += '<div style="font-size:12px;color:var(--t2);padding:2px 0">• <b>'+key+'</b></div>';}
+    });
   } else {
-    html += renderInsuranceAllPolicies(allPols, th);
+    html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ไม่มีประกันที่คุ้มครองตั้งแต่บาทแรก':'No from-1st-baht coverage')+'</div>';
+  }
+  if(ipdAdvice.dailyCash&&ipdAdvice.dailyCash.length){
+    html += '<div style="font-size:11px;color:var(--teal);margin-top:4px">&#x1F4B5; '+(th?'เบิกค่าชดเชยเพิ่ม:':'+ Daily cash:')+'</div>';
+    var seen1c={};
+    ipdAdvice.dailyCash.forEach(function(x){
+      var key=x.pol.insurer+' '+x.pol.no;
+      if(!seen1c[key]){seen1c[key]=1; html += '<div style="font-size:12px;color:var(--teal);padding:1px 0 1px 10px">• <b>'+key+'</b> '+fmtTHB(x.rider.perDay)+(th?'/วัน':'/day')+'</div>';}
+    });
+  }
+  html += '</div>';
+  if(ipdAdvice.useSecond&&ipdAdvice.useSecond.length){
+    var s2g={};
+    ipdAdvice.useSecond.forEach(function(x){
+      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,minDed:x.rider.deductible||999999};
+      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
+    });
+    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
+      var g=s2g[key],ded=g.minDed<999999?g.minDed:null;
+      html += '<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.2);border-radius:12px;padding:8px 12px;margin-bottom:6px">';
+      html += '<div style="display:flex;align-items:center;gap:8px">&#x26A0;&#xFE0F; <b style="font-size:12px">'+g.pol.insurer+' '+g.pol.no+'</b>';
+      if(ded) html += '<span style="font-size:10px;background:rgba(255,82,82,.2);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
+      html += '</div>';
+      if(ded) html += '<div style="font-size:11px;color:var(--red);margin-top:4px">&#x27A1;&#xFE0F; '+(th?'ต้องจ่ายส่วนแรก '+ded.toLocaleString()+' ฿ ก่อน':'Pay '+ded.toLocaleString()+' ฿ first')+'</div>';
+      html += '</div>';
+    });
   }
   html += '</div>';
 
-  // ── บัตรหาหมอ — AFTER policies (item 6) ──────────────────
+  // ── POLICY LIST ───────────────────────────────────────────
+  html += '<div id="ins-policies-container">';
+  if(S.insView!=='all'){ html += renderInsuranceSituation(allPols,S.insView,th); }
+  else { html += renderInsuranceAllPolicies(allPols,th); }
+  html += '</div>';
+
+  // ── บัตรหาหมอ — after policies ────────────────────────────
   html += renderStandaloneHospitalCards(th, S.insFilter);
 
   // ── Add policy button ─────────────────────────────────────
@@ -3432,6 +3410,7 @@ function renderInsurance(){
   html += '<div style="height:16px"></div></div>';
   document.getElementById('pg-insurance').innerHTML = html;
 }
+
 
 // ── SITUATION VIEW: flat table by coverage type ───────────────
 function renderInsuranceSituation(pols, view, th){
