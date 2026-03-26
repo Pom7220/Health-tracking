@@ -362,10 +362,10 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.8.0';
+var APP_VERSION = '2.9.0';
 var APP_DATE = '26 Mar 2026';
 
-var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
+var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
 
 // ── DEMO DATA ────────────────────────────────────────
 
@@ -3235,101 +3235,93 @@ function getSearchTerms(q){
 
 function renderInsurance(){
   var th = S.lang==='th';
-  if(!S.insView) S.insView='all';
-  if(!S.insSearch) S.insSearch='';
-  if(!S.insFilter) S.insFilter='all';
+  if(!S.insFilter || S.insFilter==='all') S.insFilter = PROFILES[0].id;
+  if(!S.insContext) S.insContext = 'home';
+  if(!S.insSearch)  S.insSearch  = '';
+  if(!S.insView)    S.insView    = 'all';
 
-  function filterByPerson(pols){
-    if(S.insFilter==='all') return pols;
-    var fp = PROFILES.find(function(x){return x.id===S.insFilter;});
-    if(!fp) return pols;
-    return pols.filter(function(p){return p.holder===fp.name||p.holderId===fp.dbId;});
-  }
+  var pr = PROFILES.find(function(x){return x.id===S.insFilter;}) || PROFILES[0];
 
-  var allPols = filterByPerson(POLICIES_DEMO.filter(function(p){return p.status==='active'||p.status==='paid_up';}));
+  // All policies for selected profile
+  var myPols = POLICIES_DEMO.filter(function(p){
+    return (p.holder===pr.name||p.holderId===pr.dbId) && (p.status==='active'||p.status==='paid_up');
+  });
+  var activePols = myPols.filter(function(p){return p.status==='active';});
 
+  // Apply search filter (for home context)
+  var filteredPols = myPols;
   if(S.insSearch.trim()){
-    var q = S.insSearch.toLowerCase().trim();
-    var searchTerms = getSearchTerms(q);
-    allPols = allPols.filter(function(pol){
-      var haystack = [pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',(pol.riders||[]).map(function(r){return r.name+' '+(r.note||'');}).join(' ')].join(' ').toLowerCase();
-      return searchTerms.some(function(term){ return haystack.indexOf(term)>=0; });
+    var q=S.insSearch.toLowerCase().trim(), terms=getSearchTerms(q);
+    filteredPols = myPols.filter(function(pol){
+      var hay=[pol.name,pol.no,pol.insurer,pol.holder,pol.note||'',(pol.riders||[]).map(function(r){return r.name;}).join(' ')].join(' ').toLowerCase();
+      return terms.some(function(t){return hay.indexOf(t)>=0;});
     });
   }
 
   var html = '<div class="fade">';
 
-  // ── (1) PROFILE PILLS ─────────────────────────────────────
-  html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
-  html += '<div class="pp'+(S.insFilter==='all'?' on-r':'')+'" onclick="S.insFilter=\'all\';renderInsurance()" style="padding:5px 12px;font-size:12px">&#x1F46A; '+(th?'ทั้งหมด':'All')+'</div>';
-  PROFILES.forEach(function(pr){
-    html += '<div class="pp'+(S.insFilter===pr.id?' on-r':'')+'" onclick="S.insFilter=\''+pr.id+'\';renderInsurance()" style="padding:5px 12px;font-size:12px">'+pr.nick+'</div>';
-  });
-  html += '</div>';
-
-  // ── (2) RIDER CATEGORY FILTER — wrapped ──────────────────
-  var views = [
-    {id:'all',  icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'},
-    {id:'room', icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
-    {id:'icu',  icon:'&#x1F4C8;', label:'ICU'},
-    {id:'surg', icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'},
-    {id:'opd',  icon:'&#x1F48A;', label:'OPD'},
-    {id:'er',   icon:'&#x1F691;', label:'ER'},
-    {id:'ci',   icon:'&#x1F9EC;', label:th?'โรคร้าย':'CI'},
-    {id:'meds', icon:'&#x1F4E6;', label:th?'ยากลับบ้าน':'Meds'},
-    {id:'cash', icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'}
-  ];
+  // ── (1) PROFILE PILLS — always one selected, no "ทั้งหมด" ──
   html += '<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">';
-  views.forEach(function(v){
-    var on = S.insView===v.id;
-    html += '<div onclick="S.insView=\''+v.id+'\';renderInsurance()" ';
-    html += 'style="padding:6px 11px;border-radius:20px;font-size:12px;cursor:pointer;white-space:nowrap;';
-    html += on ? 'background:rgba(79,195,247,.2);border:1px solid rgba(79,195,247,.5);color:var(--blue);font-weight:700"' : 'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--t2)"';
-    html += '>'+v.icon+' '+v.label+'</div>';
+  PROFILES.forEach(function(p){
+    var on = S.insFilter===p.id;
+    html += '<div class="pp'+(on?' on-r':'')+'" onclick="S.insFilter=\''+p.id+'\';S.insContext=\'home\';renderInsurance()" style="padding:5px 14px;font-size:12px">';
+    html += '<span style="width:8px;height:8px;border-radius:50%;background:'+(on?'var(--teal)':'rgba(255,255,255,.25)')+';display:inline-block;margin-right:5px"></span>'+p.nick+'</div>';
   });
   html += '</div>';
 
-  // ── (3) SEARCH BAR with X ─────────────────────────────────
-  html += '<div style="position:relative;margin-bottom:12px">';
-  html += '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none">&#x1F50D;</span>';
-  html += '<input id="ins-search" type="text" placeholder="'+(th?'ค้นหา เช่น TLI, AIA, ค่าห้อง...':'Search e.g. TLI, AIA, room...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" ';
-  html += 'oninput="insSearchChange(this.value)" ';
-  html += 'style="width:100%;box-sizing:border-box;padding:9px 34px 9px 32px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--t1);font-size:13px;outline:none">';
-  html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;opacity:'+(S.insSearch?'1':'0.25')+';transition:.2s">&#x2715;</div>';
-  html += '</div>';
-
-  // ── (4) NOTIFICATIONS + เบี้ยที่ต้องจ่ายเอง/ปี — one grouped block ──
-  var activePols = allPols.filter(function(p){return p.status==='active';});
-  var selfPremium = activePols.reduce(function(s,p){return s+(p.selfPaid!==false&&p.premium?(parseFloat(p.premium)||0):0);},0);
-  var urgentPols = activePols.filter(function(p){return p.urgent;});
-  var soonPols = activePols.filter(function(p){
-    if(!p.dueMonth) return false;
-    var now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
-    var diff=(p.dueMonth-m+12)%12; return diff<=2&&!isPaid(p.no,y);
+  // ── (2) CONTEXT SWITCHER ──────────────────────────────────
+  var ctxs = [
+    {id:'home', icon:'&#x1F3E0;', label:th?'หน้าหลัก':'Home'},
+    {id:'opd',  icon:'&#x1F48A;', label:'OPD'},
+    {id:'ipd',  icon:'&#x1F6CF;', label:'IPD'},
+    {id:'surg', icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'}
+  ];
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">';
+  ctxs.forEach(function(c){
+    var on = S.insContext===c.id;
+    html += '<div onclick="S.insContext=\''+c.id+'\';renderInsurance()" style="text-align:center;padding:8px 4px;border-radius:12px;cursor:pointer;font-size:11px;font-weight:'+(on?'700':'400')+';';
+    html += on ? 'background:rgba(38,217,176,.15);border:1.5px solid rgba(38,217,176,.5);color:var(--teal)' : 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--t2)';
+    html += '"><div style="font-size:18px;margin-bottom:2px">'+c.icon+'</div>'+c.label+'</div>';
   });
-  var hasAlerts = urgentPols.length||soonPols.length;
-  // Single container for both alerts and premium
-  html += '<div style="margin-bottom:12px">';
-  if(hasAlerts){
-    html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px 12px '+(selfPremium?'0 0':'12px 12px')+';padding:8px 12px;">';
-    urgentPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--red);padding:2px 0">&#x26A0;&#xFE0F; <b>'+p.no+'</b> '+(p.urgentMsg||(th?'ต้องการความสนใจ':'Needs attention'))+'</div>'; });
-    soonPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--amber);padding:2px 0">&#x23F0; <b>'+p.no+'</b> '+(th?'เบี้ยครบกำหนดเร็วๆนี้':'Premium due soon')+'</div>'; });
-    html += '</div>';
-  }
-  if(selfPremium>0){
-    var premRadius = hasAlerts ? '0 0 12px 12px' : '12px';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.22);border-radius:'+premRadius+';padding:8px 14px;'+(hasAlerts?'border-top:none;':'')+'">';
-    html += '<span style="font-size:12px;color:var(--t2)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-paid premium/yr')+'</span>';
-    html += '<span style="font-size:15px;font-weight:800;color:var(--amber)">'+fmtTHB(selfPremium)+'</span>';
-    html += '</div>';
-  }
   html += '</div>';
 
-  // ── (5) สรุปความคุ้มครอง — tap to see detail ─────────────
-  var covPols = activePols;
-  if(covPols.length){
+  // ══════════════════════════════════════════════════════════
+  // CONTEXT: HOME
+  // ══════════════════════════════════════════════════════════
+  if(S.insContext==='home'){
+
+    // Alerts + Premium grouped
+    var selfPrem = activePols.reduce(function(s,p){return s+(p.selfPaid!==false&&p.premium?(parseFloat(p.premium)||0):0);},0);
+    var urgentPols = activePols.filter(function(p){return p.urgent;});
+    var soonPols   = activePols.filter(function(p){
+      if(!p.dueMonth) return false;
+      var now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
+      return (p.dueMonth-m+12)%12<=2 && !isPaid(p.no,y);
+    });
+    var hasAlerts = urgentPols.length||soonPols.length;
+    if(hasAlerts||selfPrem>0){
+      var radius = hasAlerts&&selfPrem>0 ? '' : '12px';
+      if(hasAlerts){
+        html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px 12px '+(selfPrem?'0 0':'12px 12px')+';padding:8px 12px;">';
+        urgentPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--red);padding:2px 0">&#x26A0; <b>'+p.no+'</b> '+(p.urgentMsg||(th?'ต้องการความสนใจ':'Needs attention'))+'</div>'; });
+        soonPols.forEach(function(p){
+          var daysLeft = '';
+          if(p.dueMonth){ var now=new Date(),y=now.getFullYear(),target=new Date(y,p.dueMonth-1,1); var d=Math.ceil((target-now)/86400000); daysLeft=' · '+(d>0?d+' days':'today'); }
+          html += '<div style="font-size:12px;color:var(--amber);padding:2px 0">&#x23F0; <b>'+p.no+'</b> '+(th?'เบี้ยครบกำหนด':'Premium due')+daysLeft+'</div>';
+        });
+        html += '</div>';
+      }
+      if(selfPrem>0){
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.2);border-radius:'+(hasAlerts?'0 0 12px 12px':'12px')+';padding:8px 14px;'+(hasAlerts?'border-top:none;':'')+'">';
+        html += '<span style="font-size:12px;color:var(--t2)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-paid/yr')+'</span>';
+        html += '<span style="font-size:15px;font-weight:800;color:var(--amber)">'+fmtTHB(selfPrem)+'</span></div>';
+      }
+      html += '<div style="height:10px"></div>';
+    }
+
+    // Coverage summary (inline, tap for detail)
     var covAll={room:[],icu:[],surgery:[],cash:[],ci:[],opd:[],add:[],waiver:[]};
-    covPols.forEach(function(pol){
+    activePols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
         var e={insurer:pol.insurer,no:pol.no,name:r.name,fromFirst:r.fromFirst,amount:r.amount,perDay:r.perDay,deductible:r.deductible||0};
         if(r.cat==='ipd_room_board') covAll.room.push(e);
@@ -3342,78 +3334,334 @@ function renderInsurance(){
         else if(r.cat==='premium_waiver') covAll.waiver.push(e);
       });
     });
-    html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-    html += '<div style="font-size:12px;font-weight:700;color:var(--teal)">&#x1F4CB; '+(th?'สรุปความคุ้มครอง':'Coverage Summary')+'</div>';
-    html += '<div style="font-size:11px;color:var(--t3)">'+(th?'แตะเพื่อดูรายละเอียด':'Tap for details')+' ›</div></div>';
     var sr=[];
-    if(covAll.room.length){var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]; if(bR&&bR.perDay) sr.push({l:th?'ค่าห้องสูงสุด/วัน':'Best Room/day',v:bR.perDay.toLocaleString()+' ฿'});}
-    if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0); if(sA) sr.push({l:th?'ค่าผ่าตัดรวม':'Total Surgery',v:fmtTHB(sA)});}
-    if(covAll.ci.length){var cA=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0); if(cA) sr.push({l:th?'CI/มะเร็งรวม':'CI/Cancer',v:fmtTHB(cA)});}
-    if(covAll.cash.length){var cD=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0); if(cD) sr.push({l:th?'ค่าชดเชย/วัน':'Daily Cash',v:cD.toLocaleString()+' ฿'});}
-    if(covAll.opd.length){var oA=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0); if(oA) sr.push({l:'OPD',v:fmtTHB(oA)});}
-    if(!sr.length) html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ยังไม่มีข้อมูลสัญญาเพิ่มเติม':'No rider data yet')+'</div>';
-    sr.forEach(function(row){ html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span style="color:var(--t2)">'+row.l+'</span><span style="font-weight:700;color:var(--teal)">'+row.v+'</span></div>'; });
+    if(covAll.room.length){var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];if(bR&&bR.perDay)sr.push({l:th?'ค่าห้อง/วัน':'Room/day',v:bR.perDay.toLocaleString()+' ฿'});}
+    if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(sA)sr.push({l:th?'ค่าผ่าตัดรวม':'Surgery',v:fmtTHB(sA)});}
+    if(covAll.ci.length){var cA=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0);if(cA)sr.push({l:'CI/มะเร็ง',v:fmtTHB(cA)});}
+    if(covAll.cash.length){var cD=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0);if(cD)sr.push({l:th?'ชดเชย/วัน':'Daily cash',v:cD.toLocaleString()+' ฿'});}
+    if(covAll.opd.length){var oA=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(oA)sr.push({l:'OPD',v:fmtTHB(oA)});}
+    if(sr.length){
+      html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.05);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:12px;font-weight:700;color:var(--teal)">&#x1F4CB; '+(th?'สรุปความคุ้มครอง':'Coverage')+'</span><span style="font-size:11px;color:var(--t3)">'+(th?'แตะเพื่อดูรายละเอียด':'Tap for details')+' ›</span></div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px">';
+      sr.forEach(function(row){
+        html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:1px 0"><span style="color:var(--t2)">'+row.l+'</span><span style="font-weight:700;color:var(--teal)">'+row.v+'</span></div>';
+      });
+      html += '</div></div>';
+    }
+
+    // Patient cards for this profile
+    html += renderPatientCardStrip(pr, th);
+
+    // Category filter + policy list (browse mode)
+    var views=[
+      {id:'all',  icon:'&#x1F4CB;', label:th?'ทั้งหมด':'All'},
+      {id:'room', icon:'&#x1F6CF;', label:th?'ค่าห้อง':'Room'},
+      {id:'icu',  icon:'&#x1F4C8;', label:'ICU'},
+      {id:'surg', icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surg'},
+      {id:'opd',  icon:'&#x1F48A;', label:'OPD'},
+      {id:'er',   icon:'&#x1F691;', label:'ER'},
+      {id:'ci',   icon:'&#x1F9EC;', label:'CI'},
+      {id:'cash', icon:'&#x1F4B5;', label:th?'ชดเชย':'Cash'}
+    ];
+    html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">';
+    views.forEach(function(v){
+      var on=S.insView===v.id;
+      html += '<div onclick="S.insView=\''+v.id+'\';renderInsurance()" style="padding:5px 10px;border-radius:20px;font-size:11px;cursor:pointer;white-space:nowrap;';
+      html += on?'background:rgba(79,195,247,.2);border:1px solid rgba(79,195,247,.5);color:var(--blue);font-weight:700':'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--t2)';
+      html += '">'+v.icon+' '+v.label+'</div>';
+    });
     html += '</div>';
+
+    // Search
+    html += '<div style="position:relative;margin-bottom:10px">';
+    html += '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none">&#x1F50D;</span>';
+    html += '<input id="ins-search" type="text" placeholder="'+(th?'ค้นหา...':'Search...')+'" value="'+S.insSearch.replace(/"/g,'&quot;')+'" oninput="insSearchChange(this.value)" style="width:100%;box-sizing:border-box;padding:8px 30px 8px 30px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--t1);font-size:13px;outline:none">';
+    html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:14px;opacity:'+(S.insSearch?'1':'0.3')+'">&#x2715;</div>';
+    html += '</div>';
+
+    html += '<div id="ins-policies-container">';
+    if(S.insView!=='all') html += renderInsuranceSituation(filteredPols, S.insView, th);
+    else html += renderInsuranceAllPolicies(filteredPols, th);
+    html += '</div>';
+    html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
+
   }
 
-  // ── (6) IPD WORKFLOW ─────────────────────────────────────
-  var ipdPerson = (S.insFilter!=='all') ? PROFILES.find(function(x){return x.id===S.insFilter;}) : PROFILES.find(function(x){return x.id===S.pid;});
-  var ipdHolderId = ipdPerson ? ipdPerson.dbId : null;
-  var ipdAdvice = ipdHolderId && typeof getIPDAdvice==='function' ? getIPDAdvice(ipdHolderId) : {useFirst:[],useSecond:[],dailyCash:[]};
-  html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.18);border-radius:16px;padding:12px 14px;margin-bottom:12px">';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">&#x1F3E5; '+(th?'ขั้นตอนการเบิก IPD':'IPD Claim Workflow')+(ipdPerson?' — '+ipdPerson.nick:'')+'</div>';
-  html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">&#x2705; '+(th?'ขั้นที่ 1 — ตั้งแต่บาทแรก':'Step 1 — From 1st Baht')+'</div>';
-  if(ipdAdvice.useFirst&&ipdAdvice.useFirst.length){
+  // ══════════════════════════════════════════════════════════
+  // CONTEXT: OPD
+  // ══════════════════════════════════════════════════════════
+  else if(S.insContext==='opd'){
+
+    // Patient cards — show at reception
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F3E5; '+(th?'บัตรหาหมอ — แสดงที่เคาน์เตอร์':'Patient cards — show at reception')+'</div>';
+    html += renderPatientCardStrip(pr, th, true);
+
+    // OPD coverage table
+    var opdRows = [];
+    activePols.forEach(function(pol){
+      (pol.riders||[]).forEach(function(r){
+        if(['opd_general','opd_accident','opd_consult','opd_lab'].indexOf(r.cat)>=0){
+          var val = r.amount ? fmtTHB(r.amount)+(r.cat==='opd_general'?'/visit':'') : (r.perDay?fmtTHB(r.perDay)+'/day':'ตามจริง');
+          opdRows.push({insurer:pol.insurer, no:pol.no, name:r.name, val:val, fromFirst:r.fromFirst});
+        }
+      });
+    });
+    if(opdRows.length){
+      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin:10px 0 6px">&#x1F48A; OPD Coverage</div>';
+      html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden">';
+      opdRows.forEach(function(r,i){
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'\">';
+        html += '<div><div style="font-size:12px;font-weight:600;color:var(--t1)"><span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:6px;padding:1px 5px;margin-right:4px">'+r.insurer+'</span>'+r.name+'</div>';
+        if(!r.fromFirst) html += '<div style="font-size:10px;color:var(--amber)">&#x26A0; deductible applies</div>';
+        html += '</div><span style="font-size:13px;font-weight:700;color:var(--teal)">'+r.val+'</span></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="text-align:center;padding:20px;color:var(--t3);font-size:12px">'+(th?'ไม่พบความคุ้มครอง OPD':'No OPD coverage found')+'</div>';
+    }
+
+    // Claim tip
+    var noDeductOPD = opdRows.filter(function(r){return r.fromFirst;});
+    if(noDeductOPD.length){
+      html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-top:10px">';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">&#x2705; '+(th?'แนะนำ — ไม่มี Deductible':'Recommended — no deductible')+'</div>';
+      noDeductOPD.forEach(function(r){
+        html += '<div style="font-size:12px;color:var(--t2)">• <b>'+r.insurer+' '+r.no+'</b> — '+r.name+'</div>';
+      });
+      html += '</div>';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // CONTEXT: IPD
+  // ══════════════════════════════════════════════════════════
+  else if(S.insContext==='ipd'){
+
+    // Room coverage
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F6CF; '+(th?'เลือกห้องพัก':'Choose room')+'</div>';
+    var roomRows=[];
+    activePols.forEach(function(pol){
+      (pol.riders||[]).forEach(function(r){
+        if(r.cat==='ipd_room_board'){roomRows.push({pol:pol,r:r});}
+        if(r.cat==='ipd_total'){roomRows.push({pol:pol,r:r,isTotal:true});}
+      });
+    });
+    roomRows.sort(function(a,b){return (b.r.fromFirst?1:0)-(a.r.fromFirst?1:0) || (b.r.perDay||0)-(a.r.perDay||0);});
+    if(roomRows.length){
+      html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;margin-bottom:10px">';
+      roomRows.forEach(function(x,i){
+        var valStr = x.r.perDay ? x.r.perDay.toLocaleString()+' ฿/คืน' : (x.r.amount?fmtTHB(x.r.amount)+' รวม':'');
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'\">';
+        html += '<div><span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:6px;padding:1px 5px;margin-right:4px">'+x.pol.insurer+'</span>';
+        html += '<span style="font-size:12px;font-weight:600;color:var(--t1)">'+x.r.name+'</span>';
+        if(x.r.fromFirst&&!x.r.hasDeductible) html += ' <span style="font-size:9px;background:rgba(105,240,174,.15);color:var(--green);border-radius:4px;padding:1px 4px">บาทแรก</span>';
+        if(x.r.hasDeductible&&x.r.deductible) html += '<div style="font-size:10px;color:var(--amber)">หลังหัก '+x.r.deductible.toLocaleString()+' ฿</div>';
+        html += '</div><span style="font-size:14px;font-weight:800;color:var(--teal)">'+valStr+'</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // Daily cash bonus
+    var cashRows=[];
+    activePols.forEach(function(pol){(pol.riders||[]).forEach(function(r){if(r.cat==='daily_hospital_cash')cashRows.push({pol:pol,r:r});});});
+    if(cashRows.length){
+      var totalCash = cashRows.reduce(function(s,x){return s+(x.r.perDay||0);},0);
+      html += '<div style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:12px;padding:8px 12px;margin-bottom:10px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--t2)">&#x1F4B5; '+(th?'ค่าชดเชยรายวันรวม':'Total daily cash bonus')+'</span><span style="font-size:15px;font-weight:800;color:var(--teal)">+'+totalCash.toLocaleString()+' ฿/วัน</span></div>';
+      cashRows.forEach(function(x){html += '<div style="font-size:11px;color:var(--t3)">• '+x.pol.insurer+' '+x.pol.no+' — '+x.r.name+'</div>';});
+      html += '</div>';
+    }
+
+    // ICU coverage
+    var icuRows=[];
+    activePols.forEach(function(pol){(pol.riders||[]).forEach(function(r){if(r.cat==='icu'||/ICU|ICC/i.test(r.name||''))icuRows.push({pol:pol,r:r});});});
+    if(icuRows.length){
+      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F4C8; ICU</div>';
+      html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:0;overflow:hidden;margin-bottom:10px">';
+      icuRows.forEach(function(x,i){
+        var val = x.r.perDay?x.r.perDay.toLocaleString()+' ฿/วัน':(x.r.amount?fmtTHB(x.r.amount):'included');
+        html += '<div style="display:flex;justify-content:space-between;padding:8px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'">';
+        html += '<span style="font-size:12px;color:var(--t2)"><b>'+x.pol.insurer+'</b> '+x.r.name+'</span><span style="font-size:12px;font-weight:700;color:var(--teal)">'+val+'</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // Claim order (single list, no duplication)
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:8px">&#x1F4CB; '+(th?'ลำดับการเบิก':'Claim order')+'</div>';
+    var advice = getIPDAdvice(pr.dbId);
+    var claimSteps = [];
+    // Step 1: from 1st baht (deduplicated by policy)
     var seen1={};
-    ipdAdvice.useFirst.forEach(function(x){
+    (advice.useFirst||[]).forEach(function(x){
       var key=x.pol.insurer+' '+x.pol.no;
-      if(!seen1[key]){seen1[key]=1; html += '<div style="font-size:12px;color:var(--t2);padding:2px 0">• <b>'+key+'</b></div>';}
+      if(!seen1[key]){seen1[key]=1; claimSteps.push({step:1,insurer:x.pol.insurer,no:x.pol.no,note:th?'ตั้งแต่บาทแรก — ไม่มี deductible':'from 1st baht — no deductible',color:'green'});}
     });
-  } else {
-    html += '<div style="font-size:12px;color:var(--t3)">'+(th?'ไม่มีประกันที่คุ้มครองตั้งแต่บาทแรก':'No from-1st-baht coverage')+'</div>';
-  }
-  if(ipdAdvice.dailyCash&&ipdAdvice.dailyCash.length){
-    html += '<div style="font-size:11px;color:var(--teal);margin-top:4px">&#x1F4B5; '+(th?'เบิกค่าชดเชยเพิ่ม:':'+ Daily cash:')+'</div>';
-    var seen1c={};
-    ipdAdvice.dailyCash.forEach(function(x){
+    // Daily cash — add alongside step 1
+    var seenC={};
+    (advice.dailyCash||[]).forEach(function(x){
       var key=x.pol.insurer+' '+x.pol.no;
-      if(!seen1c[key]){seen1c[key]=1; html += '<div style="font-size:12px;color:var(--teal);padding:1px 0 1px 10px">• <b>'+key+'</b> '+fmtTHB(x.rider.perDay)+(th?'/วัน':'/day')+'</div>';}
+      if(!seenC[key]){seenC[key]=1; claimSteps.push({step:1,insurer:x.pol.insurer,no:x.pol.no,note:(th?'เบิกค่าชดเชย ':'Daily cash ')+fmtTHB(x.rider.perDay)+'/day',color:'teal',cash:true});}
     });
-  }
-  html += '</div>';
-  if(ipdAdvice.useSecond&&ipdAdvice.useSecond.length){
+    // Step 2: after deductible, sorted by amount
     var s2g={};
-    ipdAdvice.useSecond.forEach(function(x){
-      if(!s2g[x.pol.no]) s2g[x.pol.no]={pol:x.pol,minDed:x.rider.deductible||999999};
-      if((x.rider.deductible||999999)<s2g[x.pol.no].minDed) s2g[x.pol.no].minDed=x.rider.deductible||999999;
+    (advice.useSecond||[]).forEach(function(x){
+      if(!s2g[x.pol.no]){s2g[x.pol.no]={insurer:x.pol.insurer,no:x.pol.no,ded:x.rider.deductible||0};}
     });
-    Object.keys(s2g).sort(function(a,b){return s2g[a].minDed-s2g[b].minDed;}).forEach(function(key){
-      var g=s2g[key],ded=g.minDed<999999?g.minDed:null;
-      html += '<div style="background:rgba(255,183,77,.07);border:1px solid rgba(255,183,77,.2);border-radius:12px;padding:8px 12px;margin-bottom:6px">';
-      html += '<div style="display:flex;align-items:center;gap:8px">&#x26A0;&#xFE0F; <b style="font-size:12px">'+g.pol.insurer+' '+g.pol.no+'</b>';
-      if(ded) html += '<span style="font-size:10px;background:rgba(255,82,82,.2);color:var(--red);padding:2px 7px;border-radius:20px">Deductible '+ded.toLocaleString()+' ฿</span>';
-      html += '</div>';
-      if(ded) html += '<div style="font-size:11px;color:var(--red);margin-top:4px">&#x27A1;&#xFE0F; '+(th?'ต้องจ่ายส่วนแรก '+ded.toLocaleString()+' ฿ ก่อน':'Pay '+ded.toLocaleString()+' ฿ first')+'</div>';
-      html += '</div>';
+    Object.keys(s2g).sort(function(a,b){return s2g[a].ded-s2g[b].ded;}).forEach(function(key){
+      var g=s2g[key]; claimSteps.push({step:2,insurer:g.insurer,no:g.no,note:(th?'หลังหัก ':'after ')+g.ded.toLocaleString()+' ฿ deductible',color:'amber'});
     });
+    if(claimSteps.length){
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      claimSteps.forEach(function(cs){
+        var bg = cs.color==='green'?'rgba(105,240,174,.07)':cs.color==='teal'?'rgba(38,217,176,.07)':'rgba(255,183,77,.07)';
+        var bd = cs.color==='green'?'rgba(105,240,174,.25)':cs.color==='teal'?'rgba(38,217,176,.25)':'rgba(255,183,77,.25)';
+        var tc = cs.color==='green'?'var(--green)':cs.color==='teal'?'var(--teal)':'var(--amber)';
+        var icon = cs.step===1?'&#x2705;':'&#x26A0;&#xFE0F;';
+        html += '<div style="background:'+bg+';border:1px solid '+bd+';border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:10px">';
+        html += '<div style="width:24px;height:24px;border-radius:50%;background:'+bg+';border:1.5px solid '+bd+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:'+tc+';flex-shrink:0">'+cs.step+'</div>';
+        html += '<div><div style="font-size:13px;font-weight:700;color:var(--t1)">'+cs.insurer+' '+cs.no+'</div>';
+        html += '<div style="font-size:11px;color:var(--t3)">'+cs.note+'</div></div></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--t3);text-align:center;padding:12px">'+(th?'กรุณาเพิ่ม rider ค่าห้องให้กรมธรรม์ก่อน':'Add room/board riders to your policies first')+'</div>';
+    }
   }
-  html += '</div>';
 
-  // ── บัตรหาหมอ — BEFORE policy list ──────────────────────
-  html += renderStandaloneHospitalCards(th, S.insFilter);
+  // ══════════════════════════════════════════════════════════
+  // CONTEXT: SURGERY
+  // ══════════════════════════════════════════════════════════
+  else if(S.insContext==='surg'){
 
-  // ── POLICY LIST ───────────────────────────────────────────
-  html += '<div id="ins-policies-container">';
-  if(S.insView!=='all'){ html += renderInsuranceSituation(allPols,S.insView,th); }
-  else { html += renderInsuranceAllPolicies(allPols,th); }
-  html += '</div>';
+    // Surgery coverage
+    var surgRows=[], orRows=[], aneRows=[], medRows=[], ciRows=[];
+    activePols.forEach(function(pol){
+      (pol.riders||[]).forEach(function(r){
+        if(r.cat==='ipd_surgery') surgRows.push({pol:pol,r:r});
+        else if(r.cat==='ipd_surgery_room') orRows.push({pol:pol,r:r});
+        else if(r.cat==='ipd_anesthesia') aneRows.push({pol:pol,r:r});
+        else if(r.cat==='opd_lab'||r.cat==='other') medRows.push({pol:pol,r:r});
+        else if(['critical_illness_severe','critical_illness_early','critical_illness_cancer'].indexOf(r.cat)>=0) ciRows.push({pol:pol,r:r});
+      });
+    });
 
-  // ── Add policy button ─────────────────────────────────────
-  html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
-  html += '<div style="height:16px"></div></div>';
+    function renderRiderGroup(label, icon, rows, emptyTh, emptyEn){
+      if(!rows.length) return '<div style="font-size:12px;color:var(--t3);padding:4px 0">'+icon+' '+(th?emptyTh:emptyEn)+'</div>';
+      var h = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:5px">'+icon+' '+label+'</div>';
+      h += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:10px">';
+      rows.forEach(function(x,i){
+        var val=x.r.amount?fmtTHB(x.r.amount):(x.r.perDay?x.r.perDay.toLocaleString()+' ฿/วัน':'included');
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'">';
+        h += '<div><span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:5px;padding:1px 5px;margin-right:4px">'+x.pol.insurer+'</span>';
+        h += '<span style="font-size:12px;color:var(--t1)">'+x.r.name+'</span></div>';
+        h += '<span style="font-size:13px;font-weight:700;color:var(--teal)">'+val+'</span></div>';
+      });
+      h += '</div>';
+      return h;
+    }
+
+    var surgTotal = surgRows.reduce(function(s,x){return s+(x.r.amount||0);},0);
+    if(surgTotal>0){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.2);border-radius:12px;padding:10px 14px;margin-bottom:10px">';
+      html += '<span style="font-size:12px;color:var(--t2)">&#x1FA79; '+(th?'วงเงินผ่าตัดรวม':'Total surgery limit')+'</span>';
+      html += '<span style="font-size:16px;font-weight:800;color:var(--teal)">'+fmtTHB(surgTotal)+'</span></div>';
+    }
+    html += renderRiderGroup(th?'ค่าผ่าตัด':'Surgery','&#x1FA79;',surgRows,'ไม่พบ rider ค่าผ่าตัด','No surgery riders');
+    html += renderRiderGroup('OR / Surgery Room','&#x1F3E5;',orRows,'','');
+    html += renderRiderGroup(th?'ค่ายาสลบ':'Anaesthesia','&#x1F489;',aneRows,'','');
+
+    // Post-discharge meds
+    if(medRows.length) html += renderRiderGroup(th?'ยากลับบ้าน':'Take-home meds','&#x1F48A;',medRows,'','');
+
+    // CI lump sum
+    if(ciRows.length){
+      var ciTotal = ciRows.reduce(function(s,x){return s+(x.r.amount||0);},0);
+      if(ciTotal>0){
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(156,39,176,.06);border:1px solid rgba(156,39,176,.2);border-radius:12px;padding:10px 14px;margin-bottom:10px">';
+        html += '<span style="font-size:12px;color:var(--t2)">&#x1F9EC; '+(th?'CI / มะเร็ง (lump sum)':'CI / Cancer lump sum')+'</span>';
+        html += '<span style="font-size:16px;font-weight:800;color:var(--violet)">'+fmtTHB(ciTotal)+'</span></div>';
+      }
+    }
+
+    // Claim order (surgery-specific)
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:8px">&#x1F4CB; '+(th?'ลำดับการเบิก':'Claim order')+'</div>';
+    var surgAdvice = getIPDAdvice(pr.dbId); // reuse IPD logic — same deductible logic applies
+    var surgSteps = [];
+    var ss1={};
+    (surgAdvice.useFirst||[]).forEach(function(x){var k=x.pol.insurer+' '+x.pol.no; if(!ss1[k]){ss1[k]=1;surgSteps.push({step:1,insurer:x.pol.insurer,no:x.pol.no,note:th?'จากบาทแรก':'from 1st baht',color:'green'});}});
+    var sg2={};
+    (surgAdvice.useSecond||[]).forEach(function(x){if(!sg2[x.pol.no]){sg2[x.pol.no]={insurer:x.pol.insurer,no:x.pol.no,ded:x.rider.deductible||0};}});
+    Object.keys(sg2).sort(function(a,b){return sg2[a].ded-sg2[b].ded;}).forEach(function(k){var g=sg2[k]; surgSteps.push({step:2,insurer:g.insurer,no:g.no,note:(th?'หลังหัก ':'after ')+g.ded.toLocaleString()+' ฿',color:'amber'});});
+    if(surgSteps.length){
+      html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+      surgSteps.forEach(function(cs){
+        var bg=cs.color==='green'?'rgba(105,240,174,.07)':'rgba(255,183,77,.07)';
+        var bd=cs.color==='green'?'rgba(105,240,174,.25)':'rgba(255,183,77,.25)';
+        var tc=cs.color==='green'?'var(--green)':'var(--amber)';
+        html += '<div style="background:'+bg+';border:1px solid '+bd+';border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:10px">';
+        html += '<div style="width:22px;height:22px;border-radius:50%;background:'+bg+';border:1.5px solid '+bd+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:'+tc+';flex-shrink:0">'+cs.step+'</div>';
+        html += '<div><div style="font-size:13px;font-weight:700;color:var(--t1)">'+cs.insurer+' '+cs.no+'</div><div style="font-size:11px;color:var(--t3)">'+cs.note+'</div></div></div>';
+      });
+      html += '</div>';
+    }
+  }
+
+  html += '<div style="height:20px"></div></div>';
   document.getElementById('pg-insurance').innerHTML = html;
+}
+
+// ── Patient card strip — reusable renderer ─────────────────────
+function renderPatientCardStrip(pr, th, fullView){
+  var myCards = HOSP_CARDS.filter(function(c){return !c.profileId||c.profileId===pr.dbId;});
+  var html = '';
+  if(fullView){
+    // Full-size cards for OPD context
+    if(!myCards.length){
+      html += '<div style="text-align:center;padding:16px;color:var(--t3);font-size:12px;background:rgba(255,255,255,.04);border-radius:12px;border:1px dashed rgba(255,255,255,.15);margin-bottom:10px">'+(th?'ยังไม่มีบัตรหาหมอ':'No patient cards yet')+'<br><button onclick="openAddStandaloneCard()" style="margin-top:8px;padding:5px 12px;background:rgba(38,217,176,.1);border:1px solid rgba(38,217,176,.3);color:var(--teal);border-radius:8px;cursor:pointer;font-size:11px">+ '+(th?'เพิ่มบัตร':'Add')+'</button></div>';
+      return html;
+    }
+    myCards.forEach(function(c){
+      var idx = HOSP_CARDS.indexOf(c);
+      html += '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 12px;margin-bottom:8px">';
+      html += '<div style="display:flex;align-items:center;gap:10px">';
+      if(c.image){
+        html += '<img src="'+c.image+'" onclick="viewCardImage(\''+c.image+'\')" style="width:80px;height:52px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">';
+      } else {
+        html += '<div onclick="openEditStandaloneCard('+idx+')" style="width:80px;height:52px;background:rgba(38,217,176,.07);border:1px dashed rgba(38,217,176,.3);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:20px">&#x1F4F7;</div>';
+      }
+      html += '<div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--t1)">'+c.title+'</div>';
+      if(c.hospital) html += '<div style="font-size:11px;color:var(--t3)">&#x1F3E5; '+c.hospital+'</div>';
+      if(c.cardNo) html += '<div style="font-size:17px;font-weight:700;color:var(--teal);letter-spacing:2px;font-family:monospace;margin-top:2px">'+c.cardNo+'</div>';
+      if(c.notes) html += '<div style="font-size:11px;color:var(--amber)">'+c.notes+'</div>';
+      html += '</div></div></div>';
+    });
+    return html;
+  }
+  // Compact strip for home context
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F3E5; '+(th?'บัตรหาหมอ':'Patient cards')+'<button onclick="openAddStandaloneCard()" style="margin-left:8px;padding:2px 8px;background:rgba(38,217,176,.1);border:1px solid rgba(38,217,176,.3);color:var(--teal);border-radius:6px;cursor:pointer;font-size:10px">+</button></div>';
+  if(!myCards.length){
+    html += '<div style="font-size:12px;color:var(--t3);padding:4px 0 8px">'+(th?'ยังไม่มีบัตรหาหมอ':'No patient cards yet')+'</div>';
+    return html;
+  }
+  html += '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;scrollbar-width:none">';
+  myCards.forEach(function(c){
+    var idx = HOSP_CARDS.indexOf(c);
+    html += '<div onclick="openEditStandaloneCard('+idx+')" style="flex-shrink:0;width:120px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;cursor:pointer">';
+    if(c.image){
+      html += '<img src="'+c.image+'" onclick="event.stopPropagation();viewCardImage(\''+c.image+'\')" style="width:100%;height:48px;object-fit:cover;border-radius:6px;margin-bottom:4px">';
+    } else {
+      html += '<div style="width:100%;height:48px;background:rgba(38,217,176,.07);border:1px dashed rgba(38,217,176,.3);border-radius:6px;display:flex;align-items:center;justify-content:center;margin-bottom:4px;font-size:18px">&#x1F4F7;</div>';
+    }
+    html += '<div style="font-size:11px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.title+'</div>';
+    if(c.cardNo) html += '<div style="font-size:12px;font-weight:700;color:var(--teal);font-family:monospace;letter-spacing:1px;margin-top:1px">'+c.cardNo+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+
 }
 
 
