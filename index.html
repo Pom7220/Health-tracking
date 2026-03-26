@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.7.7';
+var APP_VERSION = '2.7.8';
 var APP_DATE = '26 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'all', lang:'th', drillMetric:null, insView:'room', insSearch:'' };
@@ -3281,6 +3281,9 @@ function renderInsurance(){
   if(S.insSearch) html += '<div onclick="S.insSearch=\'\';renderInsurance()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--t3);font-size:15px">&#x2715;</div>';
   html += '</div>';
 
+  // ── 3.4: STANDALONE บัตรหาหมอ — BEFORE insurance policies ──
+  html += renderStandaloneHospitalCards(th, S.insFilter);
+
   // ── 3.1a IPD Workflow at TOP (always visible) ─────────────
   var ipdPerson = (S.insFilter!=='all') ? PROFILES.find(function(x){return x.id===S.insFilter;}) : PROFILES.find(function(x){return x.id===S.pid;});
   var ipdHolderId = ipdPerson ? ipdPerson.dbId : null;
@@ -3415,9 +3418,6 @@ function renderInsurance(){
     html += renderInsuranceAllPolicies(allPols, th);
   }
   html += '</div>';
-
-  // ── 3.4: STANDALONE บัตรหาหมอ section ───────────────────
-  html += renderStandaloneHospitalCards(th);
 
   // ── Add policy button ─────────────────────────────────────
   html += '<button class="btn btn-primary" onclick="openModal(\'add\',addInsuranceHTML())" style="margin-top:10px;width:100%">+ '+(th?'เพิ่มกรมธรรม์':'Add Policy')+'</button>';
@@ -3651,17 +3651,6 @@ function renderInsuranceAllPolicies(pols, th){
       });
       // Add more button
       html+='<div onclick="uploadCardImage(\''+pol.no+'\')" style="width:52px;height:52px;border-radius:8px;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:18px">+</div>';
-      html+='</div>';
-    }
-
-    // ── 3.4 Hospital cards display ─────────────────────────
-    var hcards = pol.hospital_cards||[];
-    if(hcards.length){
-      html+='<div style="border-top:1px solid rgba(255,255,255,.07);padding-top:8px;margin-bottom:8px">';
-      html+='<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--teal);letter-spacing:.06em;margin-bottom:5px">&#x1F3E5; '+(th?'บัตรหาหมอ':'Hospital Cards')+' ('+hcards.length+')</div>';
-      hcards.forEach(function(hc){
-        html+='<div style="font-size:12px;color:var(--t2);padding:3px 0">• <b>'+hc.title+'</b>'+(hc.hospital?' — '+hc.hospital:'')+'</div>';
-      });
       html+='</div>';
     }
 
@@ -3927,24 +3916,6 @@ function editPolicy(policyNo){
   html += '<button class="btn btn-secondary" onclick="addRiderToPolicy(&quot;'+policyNo+'&quot;)" style="margin-top:6px;font-size:12px">+ '+(th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider')+'</button>';
   html += '</div>';
 
-  // ── 3.4B: บัตรหาหมอ (Hospital Cards) multi-card section ──
-  var cards = pol.hospital_cards||[];
-  html += '<div style="margin-top:14px">';
-  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);margin-bottom:8px">&#x1F3E5; '+(th?'บัตรหาหมอ':'Hospital Cards')+(cards.length?' ('+cards.length+')':'')+'</div>';
-  if(cards.length){
-    cards.forEach(function(card, ci){
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.15);border-radius:10px;padding:8px 12px;margin-bottom:6px">';
-      html += '<div><div style="font-size:13px;font-weight:600">&#x1F3E5; '+card.title+'</div>';
-      html += '<div style="font-size:11px;color:var(--t2)">'+card.hospital+(card.cardNo?' · '+card.cardNo:'')+'</div>';
-      if(card.notes) html += '<div style="font-size:10px;color:var(--t3)">'+card.notes+'</div>';
-      html += '</div>';
-      html += '<button onclick="deleteHospitalCard(&quot;'+policyNo+'&quot;,'+ci+')" style="background:rgba(255,82,82,.15);border:1px solid rgba(255,82,82,.25);color:var(--red);border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer">&#x1F5D1;</button>';
-      html += '</div>';
-    });
-  }
-  html += '<button onclick="openAddHospitalCard(&quot;'+policyNo+'&quot;)" style="width:100%;padding:9px;background:rgba(38,217,176,.08);border:1px dashed rgba(38,217,176,.35);color:var(--teal);border-radius:10px;font-size:13px;cursor:pointer;margin-top:2px">+ '+(th?'เพิ่มบัตรหาหมอ':'Add Hospital Card')+'</button>';
-  html += '</div>';
-
   html += '<div style="display:flex;gap:10px;margin-top:16px">';
   html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
   html += '<button class="btn btn-primary" onclick="saveEditPolicyFull(&quot;'+policyNo+'&quot;)" style="flex:2">'+(th?'บันทึก':'Save Changes')+'</button>';
@@ -4007,40 +3978,55 @@ async function loadHospitalCardsFromDB(){
   } catch(e){ console.warn('loadHospitalCardsFromDB:', e); }
 }
 
-// Render the standalone บัตรหาหมอ section inside Insurance tab
-function renderStandaloneHospitalCards(th){
+// Render the standalone บัตรหาหมอ section — profile-filtered, shown BEFORE policies
+function renderStandaloneHospitalCards(th, profileFilter){
+  // Filter by selected profile
+  var visibleCards = HOSP_CARDS;
+  if(profileFilter && profileFilter !== 'all'){
+    var pr = PROFILES.find(function(p){ return p.id === profileFilter; });
+    visibleCards = HOSP_CARDS.filter(function(c){
+      return !c.profileId || c.profileId === (pr ? pr.dbId : profileFilter);
+    });
+  }
+
   var html = '';
   html += '<div style="background:rgba(38,217,176,.05);border:1px solid rgba(38,217,176,.2);border-radius:16px;padding:12px 14px;margin-bottom:14px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--teal)">&#x1F3E5; '+(th?'บัตรหาหมอ':'Hospital Cards');
-  if(HOSP_CARDS.length) html += ' <span style="font-size:11px;background:rgba(38,217,176,.15);color:var(--teal);border-radius:20px;padding:1px 7px">'+HOSP_CARDS.length+'</span>';
+  if(visibleCards.length) html += ' <span style="font-size:11px;background:rgba(38,217,176,.15);color:var(--teal);border-radius:20px;padding:1px 7px">'+visibleCards.length+'</span>';
   html += '</div>';
   html += '<div onclick="openAddStandaloneCard()" style="font-size:11px;color:var(--teal);cursor:pointer;padding:4px 10px;border-radius:20px;border:1px solid rgba(38,217,176,.3)">+ '+(th?'เพิ่มบัตร':'Add')+'</div>';
   html += '</div>';
 
-  if(!HOSP_CARDS.length){
-    html += '<div style="font-size:12px;color:var(--t3);text-align:center;padding:10px 0">'+(th?'ยังไม่มีบัตรหาหมอ — กดเพิ่มบัตร':'No hospital cards yet')+'</div>';
+  if(!visibleCards.length){
+    html += '<div style="font-size:12px;color:var(--t3);text-align:center;padding:10px 0">'+(th?'ยังไม่มีบัตรหาหมอ — กดเพิ่มบัตร':'No hospital cards yet — tap Add')+'</div>';
   } else {
     html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    HOSP_CARDS.forEach(function(c, idx){
+    visibleCards.forEach(function(c){
+      var idx = HOSP_CARDS.indexOf(c);
+      var pr = PROFILES.find(function(p){ return p.dbId === c.profileId; });
       html += '<div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px">';
       // Card photo thumbnail or placeholder
       if(c.image){
-        html += '<img src="'+c.image+'" onclick="viewCardImage(\''+c.image+'\')" style="width:52px;height:36px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">';
+        html += '<img src="'+c.image+'" onclick="viewCardImage(\''+c.image+'\')" style="width:56px;height:40px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.3)">';
       } else {
-        html += '<div onclick="openHospCardPhoto('+idx+')" style="width:52px;height:36px;border-radius:8px;background:rgba(38,217,176,.08);border:1px dashed rgba(38,217,176,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:16px">&#x1F4F7;</div>';
+        html += '<div onclick="openHospCardPhoto('+idx+')" style="width:56px;height:40px;border-radius:8px;background:rgba(38,217,176,.08);border:1px dashed rgba(38,217,176,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:18px">&#x1F4F7;</div>';
       }
       // Card info
       html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.title+'</div>';
-      if(c.hospital) html += '<div style="font-size:11px;color:var(--t3)">&#x1F3E5; '+c.hospital+'</div>';
-      if(c.cardNo)   html += '<div style="font-size:11px;color:var(--t3);font-family:monospace">'+c.cardNo+'</div>';
-      if(c.notes)    html += '<div style="font-size:11px;color:var(--amber)">'+c.notes+'</div>';
+      html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+      html += '<span style="font-size:13px;font-weight:700;color:var(--t1)">'+c.title+'</span>';
+      if(pr) html += '<span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:10px;padding:1px 6px">'+pr.nick+'</span>';
+      html += '</div>';
+      if(c.hospital) html += '<div style="font-size:11px;color:var(--t3);margin-top:1px">&#x1F3E5; '+c.hospital+'</div>';
+      // Card number — BIG font as requested
+      if(c.cardNo) html += '<div style="font-size:16px;font-weight:700;color:var(--teal);letter-spacing:2px;margin-top:3px;font-family:monospace">'+c.cardNo+'</div>';
+      if(c.notes)  html += '<div style="font-size:11px;color:var(--amber);margin-top:1px">'+c.notes+'</div>';
       html += '</div>';
       // Actions
-      html += '<div style="display:flex;gap:6px;flex-shrink:0">';
-      html += '<div onclick="openEditStandaloneCard('+idx+')" style="font-size:18px;cursor:pointer;opacity:.7">&#x270F;&#xFE0F;</div>';
-      html += '<div onclick="deleteStandaloneCard('+idx+')" style="font-size:18px;cursor:pointer;opacity:.7">&#x1F5D1;&#xFE0F;</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">';
+      html += '<div onclick="openEditStandaloneCard('+idx+')" style="font-size:18px;cursor:pointer;opacity:.7;text-align:center">&#x270F;&#xFE0F;</div>';
+      html += '<div onclick="deleteStandaloneCard('+idx+')" style="font-size:18px;cursor:pointer;opacity:.7;text-align:center">&#x1F5D1;&#xFE0F;</div>';
       html += '</div>';
       html += '</div>';
     });
@@ -4050,25 +4036,63 @@ function renderStandaloneHospitalCards(th){
   return html;
 }
 
-// Open add/edit form for standalone hospital card
+// Open add/edit form — with profile picker and crop-before-save
 function openAddStandaloneCard(editIdx){
   var th = S.lang==='th';
   var isEdit = (editIdx !== undefined && editIdx !== null);
   var c = isEdit ? HOSP_CARDS[editIdx] : {};
+  // Default profile = currently selected filter or current profile
+  var defaultProfileId = c.profileId || null;
+  if(!defaultProfileId && S.insFilter !== 'all'){
+    var fp = PROFILES.find(function(p){ return p.id === S.insFilter; });
+    if(fp) defaultProfileId = fp.dbId;
+  }
+  if(!defaultProfileId){
+    var cp = PROFILES.find(function(p){ return p.id === S.pid; });
+    if(cp) defaultProfileId = cp.dbId;
+  }
+
   var html = '';
+  // Profile selector
+  html += '<div class="fg"><label class="lbl">&#x1F464; '+(th?'สำหรับ (ใครเป็นเจ้าของบัตร)':'For (Card Owner)')+'</label>';
+  html += '<select id="hc2-profile" class="inp">';
+  PROFILES.forEach(function(p){
+    html += '<option value="'+p.dbId+'"'+(p.dbId===defaultProfileId?' selected':'')+'>'+p.name+' ('+p.nick+')</option>';
+  });
+  html += '</select></div>';
+
   html += '<div class="fg"><label class="lbl">'+(th?'ชื่อบัตร':'Card Title')+'</label>';
   html += '<input id="hc2-title" class="inp" placeholder="'+(th?'บัตรโรงพยาบาลพระราม 9':'Hospital Rama 9 Card')+'" value="'+(c.title||'')+'"></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'โรงพยาบาล / คลินิก':'Hospital / Clinic')+'</label>';
   html += '<input id="hc2-hospital" class="inp" placeholder="'+(th?'โรงพยาบาลพระราม 9':'Rama 9 Hospital')+'" value="'+(c.hospital||'')+'"></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'เลขบัตร (ถ้ามี)':'Card Number')+'</label>';
-  html += '<input id="hc2-cardno" class="inp" placeholder="XXXXXXXXXX" value="'+(c.cardNo||'')+'"></div>';
+  html += '<input id="hc2-cardno" class="inp" placeholder="XXXXXXXXXX" style="font-size:16px;letter-spacing:2px;font-family:monospace" value="'+(c.cardNo||'')+'"></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ (เช่น OPD, ทันตกรรม)':'Notes')+'</label>';
   html += '<input id="hc2-notes" class="inp" placeholder="'+(th?'เช่น ทันตกรรม, ผู้ป่วยนอก':'e.g. Dental, OPD')+'" value="'+(c.notes||'')+'"></div>';
+
+  // Photo section — show current + new upload + crop preview
+  html += '<div class="fg">';
+  html += '<label class="lbl">&#x1F4F7; '+(th?'รูปบัตร':'Card Photo')+'</label>';
   if(isEdit && c.image){
-    html += '<div style="margin:8px 0"><img src="'+c.image+'" style="width:100%;max-height:140px;object-fit:contain;border-radius:10px"></div>';
+    html += '<div style="margin-bottom:6px"><img src="'+c.image+'" style="width:100%;max-height:120px;object-fit:contain;border-radius:10px;cursor:pointer" onclick="viewCardImage(\''+c.image+'\')"></div>';
+    html += '<div style="font-size:11px;color:var(--t3);margin-bottom:4px">'+(th?'เลือกรูปใหม่เพื่อแทนที่':'Select new photo to replace')+'</div>';
   }
-  html += '<div class="fg"><label class="lbl">&#x1F4F7; '+(th?'ถ่ายรูปบัตร (ถ้ามี)':'Card Photo (optional)')+'</label>';
-  html += '<input id="hc2-photo" type="file" accept="image/*" capture="environment" class="inp" style="padding:6px"></div>';
+  html += '<input id="hc2-photo" type="file" accept="image/*" capture="environment" class="inp" style="padding:6px" onchange="hcPreviewCrop(this)">';
+  html += '</div>';
+  // Crop preview canvas (hidden until photo chosen)
+  html += '<div id="hc2-crop-wrap" style="display:none;margin-top:8px">';
+  html += '<div style="font-size:12px;color:var(--teal);margin-bottom:6px;font-weight:600">&#x2702;&#xFE0F; '+(th?'ตัดรูป (ลากปรับขอบเขต)':'Crop (drag to adjust)')+'</div>';
+  html += '<div style="position:relative;display:inline-block;width:100%">';
+  html += '<canvas id="hc2-canvas" style="width:100%;border-radius:10px;border:2px solid var(--teal);cursor:crosshair;touch-action:none"></canvas>';
+  html += '<div id="hc2-crop-box" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none;box-sizing:border-box"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px">';
+  html += '<button onclick="hcApplyCrop()" style="flex:1;padding:8px;background:rgba(38,217,176,.15);border:1px solid rgba(38,217,176,.4);color:var(--teal);border-radius:10px;cursor:pointer;font-size:13px">&#x2705; '+(th?'ยืนยันการตัด':'Confirm Crop')+'</button>';
+  html += '<button onclick="hcSkipCrop()" style="flex:1;padding:8px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:var(--t2);border-radius:10px;cursor:pointer;font-size:13px">'+(th?'ไม่ตัด ใช้รูปเต็ม':'Skip Crop')+'</button>';
+  html += '</div></div>';
+  // Hidden result data URL
+  html += '<input type="hidden" id="hc2-result-data">';
+
   html += '<div style="display:flex;gap:10px;margin-top:12px">';
   html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
   if(isEdit){
@@ -4080,6 +4104,116 @@ function openAddStandaloneCard(editIdx){
   openModal(th?(isEdit?'แก้ไขบัตรหาหมอ':'เพิ่มบัตรหาหมอ'):(isEdit?'Edit Hospital Card':'Add Hospital Card'), html);
 }
 
+// ── Crop support for hospital card photos ────────────────────
+var _hcCropState = { img:null, sx:0, sy:0, sw:0, sh:0, dragging:false, resizing:false, handle:'', startX:0, startY:0, origBox:{} };
+
+function hcPreviewCrop(input){
+  var file = input.files[0]; if(!file) return;
+  var wrap = document.getElementById('hc2-crop-wrap');
+  var canvas = document.getElementById('hc2-canvas');
+  if(!wrap || !canvas) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      _hcCropState.img = img;
+      var maxW = canvas.parentElement.clientWidth || 320;
+      var scale = maxW / img.width;
+      canvas.width  = img.width;
+      canvas.height = img.height;
+      canvas.style.height = Math.round(img.height * scale)+'px';
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      // Default crop box = full image with 10% padding
+      var pad = Math.round(Math.min(img.width, img.height) * 0.05);
+      _hcCropState.sx = pad; _hcCropState.sy = pad;
+      _hcCropState.sw = img.width - pad*2; _hcCropState.sh = img.height - pad*2;
+      hcDrawCropBox();
+      wrap.style.display = 'block';
+      // Touch/mouse events for dragging crop box
+      canvas.onmousedown = hcCropStart; canvas.onmousemove = hcCropMove; canvas.onmouseup = hcCropEnd;
+      canvas.ontouchstart = function(ev){ hcCropStart(ev.touches[0]); ev.preventDefault(); };
+      canvas.ontouchmove  = function(ev){ hcCropMove(ev.touches[0]);  ev.preventDefault(); };
+      canvas.ontouchend   = hcCropEnd;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function hcDrawCropBox(){
+  var canvas = document.getElementById('hc2-canvas');
+  var box    = document.getElementById('hc2-crop-box');
+  if(!canvas || !box) return;
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = rect.width  / canvas.width;
+  var scaleY = rect.height / canvas.height;
+  var s = _hcCropState;
+  box.style.left   = Math.round(s.sx * scaleX)+'px';
+  box.style.top    = Math.round(s.sy * scaleY)+'px';
+  box.style.width  = Math.round(s.sw * scaleX)+'px';
+  box.style.height = Math.round(s.sh * scaleY)+'px';
+}
+
+function hcCropStart(ev){
+  var canvas = document.getElementById('hc2-canvas');
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = canvas.width  / rect.width;
+  var scaleY = canvas.height / rect.height;
+  var mx = (ev.clientX - rect.left) * scaleX;
+  var my = (ev.clientY - rect.top)  * scaleY;
+  var s = _hcCropState;
+  s.startX = mx; s.startY = my;
+  s.origBox = {sx:s.sx, sy:s.sy, sw:s.sw, sh:s.sh};
+  // Check if inside box → drag; else → new box
+  if(mx>=s.sx && mx<=s.sx+s.sw && my>=s.sy && my<=s.sy+s.sh){
+    s.dragging = true;
+  } else {
+    s.sx=mx; s.sy=my; s.sw=1; s.sh=1; s.dragging=false; s.resizing=true;
+  }
+}
+function hcCropMove(ev){
+  var canvas = document.getElementById('hc2-canvas');
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = canvas.width  / rect.width;
+  var scaleY = canvas.height / rect.height;
+  var mx = (ev.clientX - rect.left) * scaleX;
+  var my = (ev.clientY - rect.top)  * scaleY;
+  var s = _hcCropState;
+  var dx = mx - s.startX, dy = my - s.startY;
+  if(s.dragging){
+    s.sx = Math.max(0, Math.min(s.origBox.sx + dx, canvas.width  - s.sw));
+    s.sy = Math.max(0, Math.min(s.origBox.sy + dy, canvas.height - s.sh));
+  } else if(s.resizing){
+    s.sw = Math.max(20, Math.min(mx - s.sx, canvas.width  - s.sx));
+    s.sh = Math.max(20, Math.min(my - s.sy, canvas.height - s.sy));
+  }
+  hcDrawCropBox();
+}
+function hcCropEnd(){ _hcCropState.dragging = false; _hcCropState.resizing = false; }
+
+function hcApplyCrop(){
+  var s = _hcCropState;
+  if(!s.img) return;
+  var out = document.createElement('canvas');
+  out.width = s.sw; out.height = s.sh;
+  out.getContext('2d').drawImage(s.img, s.sx, s.sy, s.sw, s.sh, 0, 0, s.sw, s.sh);
+  document.getElementById('hc2-result-data').value = out.toDataURL('image/jpeg', 0.85);
+  document.getElementById('hc2-crop-wrap').style.display = 'none';
+  toast(S.lang==='th'?'ตัดรูปแล้ว ✓':'Cropped ✓');
+}
+function hcSkipCrop(){
+  // Use full image as-is
+  var s = _hcCropState;
+  if(!s.img) return;
+  var out = document.createElement('canvas');
+  out.width = s.img.width; out.height = s.img.height;
+  out.getContext('2d').drawImage(s.img, 0, 0);
+  document.getElementById('hc2-result-data').value = out.toDataURL('image/jpeg', 0.85);
+  document.getElementById('hc2-crop-wrap').style.display = 'none';
+  toast(S.lang==='th'?'ใช้รูปเต็ม ✓':'Full image used ✓');
+}
+
 function openEditStandaloneCard(idx){ openAddStandaloneCard(idx); }
 
 async function saveStandaloneCard(editIdx){
@@ -4089,33 +4223,50 @@ async function saveStandaloneCard(editIdx){
   var hospital = (document.getElementById('hc2-hospital').value||'').trim();
   var cardNo   = (document.getElementById('hc2-cardno').value||'').trim();
   var notes    = (document.getElementById('hc2-notes').value||'').trim();
-  var photoFile = document.getElementById('hc2-photo').files[0];
+  var profileId= document.getElementById('hc2-profile').value || null;
+  var resultData = (document.getElementById('hc2-result-data').value||'').trim();
+  var photoFile  = document.getElementById('hc2-photo').files[0];
+
   if(!title){ toast(th?'กรุณากรอกชื่อบัตร':'Please enter card title'); return; }
 
-  // Handle photo upload to Supabase Storage if provided
+  // Resolve image: cropped dataURL > uploaded file > existing
   var imageUrl = isEdit ? (HOSP_CARDS[editIdx].image||null) : null;
-  if(photoFile && !S.demo && sbAuth){
-    try {
-      var fn = 'hcard_'+Date.now()+'_'+photoFile.name.replace(/[^a-zA-Z0-9.]/g,'_');
-      var { data: upData } = await sbAuth.storage.from('policy-images').upload(fn, photoFile, {upsert:true});
-      if(upData){
-        var { data: urlData } = sbAuth.storage.from('policy-images').getPublicUrl(fn);
-        if(urlData) imageUrl = urlData.publicUrl;
-      }
-    } catch(e){ console.warn('card photo upload:', e); }
-  } else if(photoFile){
-    // Demo mode: use object URL
-    imageUrl = URL.createObjectURL(photoFile);
+
+  if(resultData){
+    // Cropped canvas → upload as blob
+    if(!S.demo && sbAuth){
+      try {
+        var blob = await (await fetch(resultData)).blob();
+        var fn = 'hcard_'+Date.now()+'.jpg';
+        var { data: upData } = await sbAuth.storage.from('policy-images').upload(fn, blob, {contentType:'image/jpeg', upsert:true});
+        if(upData){
+          var { data: urlData } = sbAuth.storage.from('policy-images').getPublicUrl(fn);
+          if(urlData) imageUrl = urlData.publicUrl;
+        }
+      } catch(e){ console.warn('crop upload:', e); imageUrl = resultData; }
+    } else {
+      imageUrl = resultData; // demo: keep as data URL
+    }
+  } else if(photoFile && !resultData){
+    // No crop applied, use raw file
+    if(!S.demo && sbAuth){
+      try {
+        var fn2 = 'hcard_'+Date.now()+'_'+photoFile.name.replace(/[^a-zA-Z0-9.]/g,'_');
+        var { data: upData2 } = await sbAuth.storage.from('policy-images').upload(fn2, photoFile, {upsert:true});
+        if(upData2){
+          var { data: urlData2 } = sbAuth.storage.from('policy-images').getPublicUrl(fn2);
+          if(urlData2) imageUrl = urlData2.publicUrl;
+        }
+      } catch(e){ console.warn('raw upload:', e); }
+    } else {
+      imageUrl = URL.createObjectURL(photoFile);
+    }
   }
 
-  var card = { title:title, hospital:hospital, cardNo:cardNo||'', notes:notes||'', image:imageUrl||null };
+  var card = { title:title, hospital:hospital, cardNo:cardNo||'', notes:notes||'', image:imageUrl||null, profileId:profileId||null };
+  if(isEdit) card.dbId = HOSP_CARDS[editIdx].dbId;
 
-  if(isEdit){
-    card.dbId = HOSP_CARDS[editIdx].dbId;
-    HOSP_CARDS[editIdx] = card;
-  } else {
-    HOSP_CARDS.push(card);
-  }
+  if(isEdit){ HOSP_CARDS[editIdx] = card; } else { HOSP_CARDS.push(card); }
 
   // Persist to DB
   if(!S.demo && sbAuth){
@@ -4125,7 +4276,7 @@ async function saveStandaloneCard(editIdx){
         if(!db) return;
         var uid = (await sbAuth.auth.getUser()).data.user.id;
         var row = {
-          owner_id: uid, policy_id: null,
+          owner_id: uid, policy_id: null, profile_id: profileId||null,
           card_title: title, hospital_name: hospital||null,
           card_number: cardNo||null, notes: notes||null,
           card_image_url: imageUrl||null
@@ -4149,7 +4300,6 @@ function deleteStandaloneCard(idx){
   var th = S.lang==='th';
   var c = HOSP_CARDS[idx];
   if(!confirm(th?'ลบบัตร "'+c.title+'" ใช่ไหม?':'Delete card "'+c.title+'"?')) return;
-  // Delete from DB
   if(!S.demo && sbAuth && c.dbId){
     (async function(){
       try { await getDbClient().from('hospital_cards').delete().eq('id', c.dbId); }
@@ -4161,63 +4311,14 @@ function deleteStandaloneCard(idx){
   renderInsurance();
 }
 
-function openHospCardPhoto(idx){
-  // Trigger the edit modal focused on photo
-  openEditStandaloneCard(idx);
-}
+function openHospCardPhoto(idx){ openEditStandaloneCard(idx); }
 
-// ── 3.4 HOSPITAL CARDS (บัตรหาหมอ) multi-card management (policy-attached) ─────
-function openAddHospitalCard(policyNo){
-  var th = S.lang==='th';
-  var html = '';
-  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อบัตร (เช่น บัตรโรงพยาบาลพระราม9)':'Card Title')+'</label><input id="hc-title" class="inp" placeholder="'+(th?'บัตรโรงพยาบาลพระราม 9':'Hospital Rama 9 Card')+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อโรงพยาบาล/คลินิก':'Hospital / Clinic')+'</label><input id="hc-hospital" class="inp" placeholder="'+(th?'โรงพยาบาลพระราม 9':'Rama 9 Hospital')+'"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'เลขบัตร (ถ้ามี)':'Card Number (optional)')+'</label><input id="hc-cardno" class="inp" placeholder="XXXXXXXXXX"></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ (เช่น OPD, ฉุกเฉิน)':'Notes (e.g. OPD, Emergency)')+'</label><input id="hc-notes" class="inp" placeholder="'+(th?'บัตรทอง OPD':'Gold card OPD')+'"></div>';
-  html += '<div style="display:flex;gap:10px;margin-top:12px">';
-  html += '<button class="btn btn-secondary" onclick="editPolicy(\''+policyNo+'\')" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
-  html += '<button class="btn btn-primary" onclick="saveHospitalCard(\''+policyNo+'\')" style="flex:2">+ '+(th?'เพิ่มบัตร':'Add Card')+'</button>';
-  html += '</div>';
-  openModal((th?'เพิ่มบัตรหาหมอ — ':'Add Hospital Card — ')+policyNo, html);
-}
+// Legacy policy-attached card functions (kept for backward compat, no longer exposed in UI)
+function openAddHospitalCard(policyNo){}  // disabled — use standalone
+function saveHospitalCard(policyNo){}     // disabled — use standalone
+function deleteHospitalCard(policyNo, idx){}  // disabled — use standalone
 
-function saveHospitalCard(policyNo){
-  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
-  if(!pol) return;
-  var title    = (document.getElementById('hc-title').value||'').trim();
-  var hospital = (document.getElementById('hc-hospital').value||'').trim();
-  var cardNo   = (document.getElementById('hc-cardno').value||'').trim();
-  var notes    = (document.getElementById('hc-notes').value||'').trim();
-  if(!title){ toast(S.lang==='th'?'กรุณากรอกชื่อบัตร':'Please enter card title'); return; }
-  if(!pol.hospital_cards) pol.hospital_cards = [];
-  pol.hospital_cards.push({title:title, hospital:hospital, cardNo:cardNo||null, notes:notes||null});
-  // Save to DB if connected
-  if(!S.demo && sbAuth){
-    (async function(){
-      try {
-        var db = getDbClient();
-        var {data:polRow} = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
-        if(polRow){
-          await db.from('hospital_cards').insert({
-            policy_id: polRow.id,
-            card_title: title, hospital_name: hospital,
-            card_number: cardNo||null, notes: notes||null
-          });
-        }
-      } catch(e){ console.warn('saveHospitalCard DB:', e); }
-    })();
-  }
-  toast(S.lang==='th'?'เพิ่มบัตรหาหมอแล้ว ✓':'Hospital card added ✓');
-  editPolicy(policyNo);
-}
 
-function deleteHospitalCard(policyNo, idx){
-  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
-  if(!pol||!pol.hospital_cards) return;
-  pol.hospital_cards.splice(idx, 1);
-  toast(S.lang==='th'?'ลบบัตรแล้ว':'Card removed');
-  editPolicy(policyNo);
-}
 
 function addRiderToPolicy(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
