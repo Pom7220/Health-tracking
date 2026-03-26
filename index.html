@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.1';
+var APP_VERSION = '2.9.2';
 var APP_DATE = '27 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
@@ -2612,7 +2612,7 @@ var POLICIES_DEMO = [
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
       {code:'HFD-DR', name:'แพทย์เยี่ยม/ปรึกษา 365 วัน/ครั้ง', cat:'opd_consult', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
-      {code:'HFD-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'opd_general', amount:20000, fromFirst:false,
+      {code:'HFD-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'ipd_discharge_meds', amount:20000, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'20,000/ครั้ง สูงสุด 7 วัน'},
       {code:'HFD-ER', name:'OPD ฉุกเฉิน ภายใน 24 ชม.', cat:'opd_accident', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
@@ -2712,7 +2712,7 @@ var POLICIES_DEMO = [
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
       {code:'HFD-K-DR', name:'แพทย์เยี่ยม/ปรึกษา', cat:'opd_consult', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง 365 วัน/ครั้ง'},
-      {code:'HFD-K-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'opd_general', amount:20000, fromFirst:false,
+      {code:'HFD-K-POST', name:'ยากลับบ้าน หลัง Discharge', cat:'ipd_discharge_meds', amount:20000, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'20,000/ครั้ง สูงสุด 7 วัน'},
       {code:'HFD-K-ER', name:'IPD ฉุกเฉิน OPD ภายใน 24 ชม.', cat:'opd_accident', amount:null, fromFirst:false,
        hasDeductible:true, deductible:50000, note:'ตามจริง'},
@@ -3503,7 +3503,13 @@ function renderInsurance(){
       });
     });
     var sr=[];
-    if(covAll.room.length){var bR=covAll.room.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]||covAll.room.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];if(bR&&bR.perDay)sr.push({l:th?'ค่าห้อง/วัน':'Room/day',v:bR.perDay.toLocaleString()+' ฿'});}
+    if(covAll.room.length){
+      // Best non-ICU room rate (exclude ICU-named riders from the room summary)
+      var nonIcuRooms = covAll.room.filter(function(r){return !/ICU|ICC/i.test(r.name||'');});
+      var bR = nonIcuRooms.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]
+             || nonIcuRooms.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];
+      if(bR&&bR.perDay) sr.push({l:th?'ค่าห้องสูงสุด/วัน':'Best Room/day',v:bR.perDay.toLocaleString()+' ฿'});
+    }
     if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(sA)sr.push({l:th?'ค่าผ่าตัดรวม':'Surgery',v:fmtTHB(sA)});}
     if(covAll.ci.length){var cA=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0);if(cA)sr.push({l:'CI/มะเร็ง',v:fmtTHB(cA)});}
     if(covAll.cash.length){var cD=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0);if(cD)sr.push({l:th?'ชดเชย/วัน':'Daily cash',v:cD.toLocaleString()+' ฿'});}
@@ -3611,7 +3617,7 @@ function renderInsurance(){
     var roomRows=[];
     activePols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
-        if(r.cat==='ipd_room_board'){roomRows.push({pol:pol,r:r});}
+        if(r.cat==='ipd_room_board' && !/ICU|ICC/i.test(r.name||'')){roomRows.push({pol:pol,r:r});}
         if(r.cat==='ipd_total'){roomRows.push({pol:pol,r:r,isTotal:true});}
       });
     });
@@ -3643,7 +3649,10 @@ function renderInsurance(){
 
     // ICU coverage
     var icuRows=[];
-    activePols.forEach(function(pol){(pol.riders||[]).forEach(function(r){if(r.cat==='icu'||/ICU|ICC/i.test(r.name||''))icuRows.push({pol:pol,r:r});});});
+    activePols.forEach(function(pol){(pol.riders||[]).forEach(function(r){
+      if(r.cat==='icu' || (r.cat==='ipd_room_board' && /ICU|ICC/i.test(r.name||'')))
+        icuRows.push({pol:pol,r:r});
+    });});
     if(icuRows.length){
       html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F4C8; ICU</div>';
       html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:0;overflow:hidden;margin-bottom:10px">';
@@ -3709,7 +3718,7 @@ function renderInsurance(){
         if(r.cat==='ipd_surgery') surgRows.push({pol:pol,r:r});
         else if(r.cat==='ipd_surgery_room') orRows.push({pol:pol,r:r});
         else if(r.cat==='ipd_anesthesia') aneRows.push({pol:pol,r:r});
-        else if(r.cat==='opd_lab'||r.cat==='other') medRows.push({pol:pol,r:r});
+        else if(['ipd_discharge_meds','opd_lab','other'].indexOf(r.cat)>=0) medRows.push({pol:pol,r:r});
         else if(['critical_illness_severe','critical_illness_early','critical_illness_cancer'].indexOf(r.cat)>=0) ciRows.push({pol:pol,r:r});
       });
     });
@@ -3842,7 +3851,7 @@ function renderInsuranceSituation(pols, view, th){
     er:   ['opd_accident','accident_medical'],           // ER = emergency/accident OPD
     cash: ['daily_hospital_cash'],
     ci:   ['critical_illness_severe','critical_illness_early','critical_illness_cancer'],
-    meds: ['opd_lab','other','opd_consult']              // ยากลับบ้าน + lab + consult (IPD support)
+    meds: ['ipd_discharge_meds','opd_lab','other','opd_consult']  // ยากลับบ้าน + lab + consult
   };
   var cats = catMap[view] || [];
   var isICU = (view==='icu');
@@ -4842,31 +4851,52 @@ function openCoverageSummary(){
   });
 
   var catDefs = [
-    // IPD Room
-    {label:th?'ค่าห้อง/วัน (IPD)':'Room/Day (IPD)',           cats:['ipd_room_board'],                                                       icu:false},
-    {label:'ICU',                                               cats:['icu','ipd_room_board'],                                                  icuOnly:true},
-    {label:th?'IPD วงเงินรวม (เหมาจ่าย)':'IPD Total Limit',   cats:['ipd_total'],                                                             icu:false},
-    // Surgery
-    {label:th?'ค่าผ่าตัด':'Surgery',                           cats:['ipd_surgery'],                                                           icu:false},
-    {label:th?'ห้องผ่าตัด / OR':'Surgery Room / OR',           cats:['ipd_surgery_room'],                                                      icu:false},
-    {label:th?'ค่ายาสลบ':'Anesthesia',                         cats:['ipd_anesthesia'],                                                        icu:false},
-    // Cash
-    {label:th?'ค่าชดเชยรายวัน':'Daily Cash',                   cats:['daily_hospital_cash'],                                                   icu:false},
-    // OPD
-    {label:th?'OPD ทั่วไป':'OPD General',                      cats:['opd_general'],                                                           icu:false},
-    {label:th?'OPD อุบัติเหตุ / ER':'ER / Accident OPD',       cats:['opd_accident'],                                                          icu:false},
-    {label:th?'ค่าปรึกษาแพทย์':'Consultation',                  cats:['opd_consult'],                                                           icu:false},
-    {label:th?'Lab / X-Ray OPD':'Lab / X-Ray OPD',             cats:['opd_lab'],                                                               icu:false},
-    // CI
-    {label:th?'โรคร้ายแรงระยะสุดท้าย':'Severe CI',             cats:['critical_illness_severe'],                                               icu:false},
-    {label:th?'โรคร้ายแรงระยะเริ่มต้น':'Early CI',             cats:['critical_illness_early'],                                                icu:false},
-    {label:th?'โรคมะเร็ง':'Cancer CI',                          cats:['critical_illness_cancer'],                                               icu:false},
-    // AD&D
-    {label:th?'AD&D เสียชีวิต/ทุพพลภาพ':'AD&D Death/Disability', cats:['accident_death'],                                                     icu:false},
-    {label:th?'ค่ารักษาอุบัติเหตุ':'Accident Medical',          cats:['accident_medical'],                                                      icu:false},
-    // Waiver & Life
-    {label:th?'ยกเว้นเบี้ย':'Premium Waiver',                   cats:['premium_waiver'],                                                        icu:false},
-    {label:th?'ประกันชีวิต':'Life Insurance',                    cats:['life'],                                                                  icu:false},
+    // ── IPD Room ────────────────────────────────────────────────
+    // ค่าห้อง: ipd_room_board riders EXCLUDING ICU-named ones
+    {label:th?'ค่าห้อง/วัน (IPD)':'Room/Day (IPD)',
+     cats:['ipd_room_board'], excludeICU:true},
+    // ICU: ipd_room_board with ICU/ICC in name, PLUS dedicated icu cat
+    {label:'ICU / CCU',
+     cats:['icu','ipd_room_board'], icuOnly:true},
+    // IPD Total (เหมาจ่าย)
+    {label:th?'IPD วงเงินรวม (เหมาจ่าย)':'IPD Total Limit',
+     cats:['ipd_total']},
+    // ── Surgery ─────────────────────────────────────────────────
+    {label:th?'ค่าผ่าตัด':'Surgery',
+     cats:['ipd_surgery']},
+    {label:th?'ห้องผ่าตัด / OR':'Surgery Room / OR',
+     cats:['ipd_surgery_room']},
+    {label:th?'ค่ายาสลบ':'Anaesthesia',
+     cats:['ipd_anesthesia']},
+    // ── Post-discharge ──────────────────────────────────────────
+    {label:th?'ยากลับบ้าน (หลัง Discharge)':'Take-home Meds',
+     cats:['ipd_discharge_meds']},
+    // ── Daily cash ──────────────────────────────────────────────
+    {label:th?'ค่าชดเชยรายวัน':'Daily Cash',
+     cats:['daily_hospital_cash']},
+    // ── OPD ─────────────────────────────────────────────────────
+    {label:th?'OPD (ผู้ป่วยนอก)':'OPD General',
+     cats:['opd_general']},
+    {label:th?'ER / อุบัติเหตุ OPD':'ER / Accident OPD',
+     cats:['opd_accident','accident_medical']},
+    {label:th?'ค่าปรึกษาแพทย์ (IPD)':'In-Hospital Consult',
+     cats:['opd_consult']},
+    {label:th?'Lab / X-Ray (IPD)':'Lab / X-Ray (IPD)',
+     cats:['opd_lab']},
+    // ── CI ──────────────────────────────────────────────────────
+    {label:th?'โรคร้ายแรงระยะสุดท้าย':'Severe CI',
+     cats:['critical_illness_severe']},
+    {label:th?'โรคร้ายแรงระยะเริ่มต้น':'Early CI',
+     cats:['critical_illness_early']},
+    {label:th?'โรคมะเร็ง':'Cancer CI',
+     cats:['critical_illness_cancer']},
+    // ── AD&D & Waiver ────────────────────────────────────────────
+    {label:th?'AD&D เสียชีวิต/ทุพพลภาพ':'AD&D',
+     cats:['accident_death']},
+    {label:th?'ยกเว้นเบี้ย':'Premium Waiver',
+     cats:['premium_waiver']},
+    {label:th?'ประกันชีวิต':'Life Insurance',
+     cats:['life']},
   ];
 
   var html = '';
@@ -4887,7 +4917,10 @@ function openCoverageSummary(){
     pols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
         if(cat.cats.indexOf(r.cat)<0) return;
-        if(cat.icuOnly && r.cat!=='icu' && !/icu|icc/i.test(r.name||'')) return;
+        // ICU section: only riders with ICU/ICC in name OR dedicated icu cat
+        if(cat.icuOnly && r.cat!=='icu' && !/ICU|ICC/i.test(r.name||'')) return;
+        // ค่าห้อง section: exclude ICU-named riders (they belong in ICU section)
+        if(cat.excludeICU && /ICU|ICC/i.test(r.name||'')) return;
         var val = r.perDay ? fmtTHB(r.perDay)+(th?'/วัน':'/day') : (r.amount ? fmtTHB(r.amount) : (th?'ตามจริง':'Actual'));
         rows.push({insurer:pol.insurer, rName:r.name, val:val, fromFirst:r.fromFirst, ded:r.deductible||0});
       });
