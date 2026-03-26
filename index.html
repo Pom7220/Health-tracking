@@ -362,8 +362,8 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.0';
-var APP_DATE = '26 Mar 2026';
+var APP_VERSION = '2.9.1';
+var APP_DATE = '27 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
 
@@ -1340,6 +1340,201 @@ function exportAllData(){
   toast(S.lang==='th'?'ส่งออกข้อมูลแล้ว':'Data exported');
 }
 
+// ── SETTINGS MODAL BUILDERS ──────────────────────────────────
+
+function addProfileHTML(){
+  var th = S.lang==='th';
+  var html = '';
+  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อเต็ม':'Full Name')+'</label><input id="np-name" class="inp" placeholder="'+(th?'ชื่อ นามสกุล':'First Last')+'"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ชื่อเล่น':'Nickname')+'</label><input id="np-nick" class="inp" placeholder="'+(th?'ชื่อเล่น':'Nickname')+'"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  html += '<div class="fg"><label class="lbl">'+(th?'เพศ':'Gender')+'</label><select id="np-gender" class="inp"><option value="Male">'+(th?'ชาย':'Male')+'</option><option value="Female">'+(th?'หญิง':'Female')+'</option></select></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'วันเกิด':'Date of Birth')+'</label><input id="np-dob" class="inp" type="date"></div>';
+  html += '</div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'กรุ๊ปเลือด':'Blood Type')+'</label><select id="np-blood" class="inp"><option value="">-</option><option>A</option><option>B</option><option>O</option><option>AB</option></select></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'โรงพยาบาลประจำ':'Primary Hospital')+'</label><input id="np-hosp" class="inp" placeholder="'+(th?'เช่น พระราม 9':'e.g. Praram 9')+'"></div>';
+  html += '<div style="display:flex;gap:10px;margin-top:12px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="saveNewProfile()" style="flex:2">+ '+(th?'เพิ่มสมาชิก':'Add Member')+'</button>';
+  html += '</div>';
+  return html;
+}
+
+function saveNewProfile(){
+  var th = S.lang==='th';
+  var name = (document.getElementById('np-name').value||'').trim();
+  var nick = (document.getElementById('np-nick').value||'').trim();
+  var gender = document.getElementById('np-gender').value;
+  var dob    = document.getElementById('np-dob').value||null;
+  var blood  = document.getElementById('np-blood').value||null;
+  var hosp   = (document.getElementById('np-hosp').value||'').trim();
+  if(!name||!nick){ toast(th?'กรุณากรอกชื่อและชื่อเล่น':'Please enter name and nickname'); return; }
+  var id = nick.toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + Date.now();
+  var newP = { id:id, dbId:null, name:name, nick:nick, gender:gender, blood:blood||null,
+               dob:dob||null, hospital:hosp||'-', avCls:'av-r', av:nick[0].toUpperCase(), color:'#4fc3f7' };
+  PROFILES.push(newP);
+  // Save to DB if connected
+  if(!S.demo && sbAuth){
+    (async function(){
+      try {
+        var db = getDbClient();
+        var uid = (await sbAuth.auth.getUser()).data.user.id;
+        var { data: ins } = await db.from('health_profiles').insert({
+          owner_id: uid, name: name, nickname: nick, gender: gender,
+          date_of_birth: dob||null, blood_type: blood||null, hospital: hosp||null
+        }).select('id').single();
+        if(ins) { newP.dbId = ins.id; console.log('Profile saved to DB:', ins.id); }
+      } catch(e){ console.warn('saveNewProfile DB:', e); }
+    })();
+  }
+  closeModalForce();
+  toast(th?'เพิ่มสมาชิกแล้ว ✓':'Member added ✓');
+  renderSettings();
+}
+
+function uploadHTML(){
+  var th = S.lang==='th';
+  var html = '';
+  html += '<div style="font-size:13px;color:var(--t2);margin-bottom:12px">'+(th?'เลือกโปรไฟล์และอัพโหลดรูปผลตรวจสุขภาพ':'Select profile and upload health report photo')+'</div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'โปรไฟล์':'Profile')+'</label><select id="up-profile" class="inp">';
+  PROFILES.forEach(function(p){ html += '<option value="'+p.id+'"'+(p.id===S.pid?' selected':'')+'>'+p.name+' ('+p.nick+')</option>'; });
+  html += '</select></div>';
+  html += '<div class="fg"><label class="lbl">&#x1F4F7; '+(th?'รูปผลตรวจสุขภาพ':'Health Report Photo')+'</label>';
+  html += '<input id="up-photo" type="file" accept="image/*" class="inp" style="padding:6px"></div>';
+  html += '<div id="up-preview" style="margin-top:8px"></div>';
+  html += '<div style="background:rgba(38,217,176,.06);border:1px solid rgba(38,217,176,.18);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:11px;color:var(--t3)">';
+  html += '&#x1F916; '+(th?'AI จะอ่านข้อมูลจากรูปและบันทึกอัตโนมัติ (ต้องการการเชื่อมต่อ)':'AI will read data from image and record automatically (requires connection)')+'</div>';
+  html += '<div style="display:flex;gap:10px;margin-top:4px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="processHealthUpload()" style="flex:2">&#x1F4F7; '+(th?'อัพโหลดและบันทึก':'Upload & Save')+'</button>';
+  html += '</div>';
+  return html;
+}
+
+async function processHealthUpload(){
+  var th = S.lang==='th';
+  var file = document.getElementById('up-photo').files[0];
+  var pid  = document.getElementById('up-profile').value;
+  if(!file){ toast(th?'กรุณาเลือกรูป':'Please select a photo'); return; }
+  var pr = PROFILES.find(function(p){return p.id===pid;});
+  toast(th?'กำลังอ่านข้อมูล...':'Reading data...');
+  // Convert to base64 and send to Claude API
+  var reader = new FileReader();
+  reader.onload = async function(e){
+    var b64 = e.target.result.split(',')[1];
+    try {
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514', max_tokens:1000,
+          messages:[{role:'user', content:[
+            {type:'image', source:{type:'base64', media_type:file.type, data:b64}},
+            {type:'text', text:'Extract health checkup data from this Thai health report. Return ONLY JSON with these keys (use null if not found): date, weight, height, systolic, diastolic, pulse, sugar, hba1c, chol, ldl, hdl, trig, wbc, rbc, hgb, hct, plt. No other text.'}
+          ]}]
+        })
+      });
+      var data = await res.json();
+      var text = data.content[0].text.replace(/```json|```/g,'').trim();
+      var hd = JSON.parse(text);
+      // Fill manual entry form with extracted data
+      closeModalForce();
+      openModal(th?'ตรวจสอบข้อมูล':'Review Data', manualEntryHTML(pr, hd));
+      toast(th?'อ่านข้อมูลสำเร็จ กรุณาตรวจสอบ':'Data extracted — please review');
+    } catch(err){
+      toast(th?'อ่านข้อมูลไม่สำเร็จ กรุณากรอกด้วยตนเอง':'Could not read data — please enter manually');
+      closeModalForce();
+      openModal(th?'บันทึกด้วยตนเอง':'Manual Entry', manualEntryHTML(pr, {}));
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function manualEntryHTML(pr, prefill){
+  var th = S.lang==='th';
+  prefill = prefill || {};
+  var today = new Date().toISOString().split('T')[0];
+  function fv(key){ return prefill[key]!==undefined&&prefill[key]!==null ? prefill[key] : ''; }
+  var html = '';
+  if(!pr) {
+    html += '<div class="fg"><label class="lbl">'+(th?'โปรไฟล์':'Profile')+'</label><select id="me-profile" class="inp">';
+    PROFILES.forEach(function(p){ html += '<option value="'+p.id+'"'+(p.id===S.pid?' selected':'')+'>'+p.name+' ('+p.nick+')</option>'; });
+    html += '</select></div>';
+  }
+  html += '<div class="fg"><label class="lbl">'+(th?'วันที่ตรวจ':'Check date')+'</label><input id="me-date" class="inp" type="date" value="'+(fv('date')||today)+'"></div>';
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.07em;margin:8px 0 4px">&#x2764; '+(th?'ความดัน & ชีพจร':'BP & Pulse')+'</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+  html += '<div class="fg"><label class="lbl">SBP</label><input id="me-sbp" class="inp" type="number" value="'+fv('systolic')+'" placeholder="120"></div>';
+  html += '<div class="fg"><label class="lbl">DBP</label><input id="me-dbp" class="inp" type="number" value="'+fv('diastolic')+'" placeholder="80"></div>';
+  html += '<div class="fg"><label class="lbl">Pulse</label><input id="me-pulse" class="inp" type="number" value="'+fv('pulse')+'" placeholder="70"></div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.07em;margin:8px 0 4px">&#x2696; '+(th?'น้ำหนัก & ส่วนสูง':'Weight & Height')+'</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html += '<div class="fg"><label class="lbl">Weight (kg)</label><input id="me-wt" class="inp" type="number" step=".1" value="'+fv('weight')+'" placeholder="65"></div>';
+  html += '<div class="fg"><label class="lbl">Height (cm)</label><input id="me-ht" class="inp" type="number" step=".1" value="'+fv('height')+'" placeholder="170"></div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.07em;margin:8px 0 4px">&#x1F9EA; '+(th?'น้ำตาล':'Blood Sugar')+'</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html += '<div class="fg"><label class="lbl">Glucose (mg/dL)</label><input id="me-sugar" class="inp" type="number" value="'+fv('sugar')+'" placeholder="90"></div>';
+  html += '<div class="fg"><label class="lbl">HbA1c (%)</label><input id="me-hba1c" class="inp" type="number" step=".1" value="'+fv('hba1c')+'" placeholder="5.5"></div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.07em;margin:8px 0 4px">&#x1FA78; '+(th?'ไขมัน':'Lipids')+'</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html += '<div class="fg"><label class="lbl">Chol</label><input id="me-chol" class="inp" type="number" value="'+fv('chol')+'" placeholder="200"></div>';
+  html += '<div class="fg"><label class="lbl">LDL</label><input id="me-ldl" class="inp" type="number" value="'+fv('ldl')+'" placeholder="130"></div>';
+  html += '<div class="fg"><label class="lbl">HDL</label><input id="me-hdl" class="inp" type="number" value="'+fv('hdl')+'" placeholder="50"></div>';
+  html += '<div class="fg"><label class="lbl">TG</label><input id="me-trig" class="inp" type="number" value="'+fv('trig')+'" placeholder="100"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:10px;margin-top:12px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-primary" onclick="saveManualEntry(null)" style="flex:2">&#x2705; '+(th?'บันทึก':'Save')+'</button>';
+  html += '</div>';
+  return html;
+}
+
+function saveManualEntry(pid){
+  var th = S.lang==='th';
+  if(!pid) pid = document.getElementById('me-profile') ? document.getElementById('me-profile').value : S.pid;
+  var pr = PROFILES.find(function(p){return p.id===pid;});
+  if(!pr){ toast('Profile not found'); return; }
+  var rec = {
+    date:    document.getElementById('me-date').value,
+    systolic:parseFloat(document.getElementById('me-sbp').value)||null,
+    diastolic:parseFloat(document.getElementById('me-dbp').value)||null,
+    pulse:   parseFloat(document.getElementById('me-pulse').value)||null,
+    weight:  parseFloat(document.getElementById('me-wt').value)||null,
+    height:  parseFloat(document.getElementById('me-ht').value)||null,
+    sugar:   parseFloat(document.getElementById('me-sugar').value)||null,
+    hba1c:   parseFloat(document.getElementById('me-hba1c').value)||null,
+    chol:    parseFloat(document.getElementById('me-chol').value)||null,
+    ldl:     parseFloat(document.getElementById('me-ldl').value)||null,
+    hdl:     parseFloat(document.getElementById('me-hdl').value)||null,
+    trig:    parseFloat(document.getElementById('me-trig').value)||null
+  };
+  if(!rec.date){ toast(th?'กรุณากรอกวันที่':'Please enter date'); return; }
+  // Add to in-memory health records
+  if(!HR[pid]) HR[pid] = [];
+  HR[pid].unshift(rec);
+  // Save to DB if connected
+  if(!S.demo && sbAuth && pr.dbId){
+    (async function(){
+      try {
+        var db = getDbClient();
+        await db.from('health_records').insert({
+          profile_id: pr.dbId,
+          check_date: rec.date,
+          systolic: rec.systolic, diastolic: rec.diastolic, pulse: rec.pulse,
+          weight: rec.weight, height: rec.height,
+          blood_sugar: rec.sugar, hba1c: rec.hba1c,
+          cholesterol: rec.chol, ldl: rec.ldl, hdl: rec.hdl, triglycerides: rec.trig
+        });
+      } catch(e){ console.warn('saveManualEntry DB:', e); }
+    })();
+  }
+  closeModalForce();
+  toast(th?'บันทึกข้อมูลสุขภาพแล้ว ✓':'Health data saved ✓');
+  renderTab('health');
+}
+
 // saveEditPolicy alias (for backward compatibility)
 function saveEditPolicy(policyNo){ saveEditPolicyFull(policyNo); }
 
@@ -2264,53 +2459,8 @@ function drawCharts(pid){
 // ── INSURANCE ─────────────────────────────────────────
 
 
-function saveManualEntry(){
-  var pid = S.pid;
-  var dateEl = document.getElementById('me-date');
-  var date = dateEl ? dateEl.value : new Date().toISOString().split('T')[0];
-  var year = parseInt(date.split('-')[0]);
-  
-  function getVal(id){ var el=document.getElementById(id); return el&&el.value?parseFloat(el.value)||el.value:null; }
-  
-  if(!HR[pid]) HR[pid]={};
-  if(!HR[pid][year]) HR[pid][year] = { age: calcAge(prof(pid).dob, year) };
-  
-  var d = HR[pid][year];
-  d.date = date;
-  d.hospital = (document.getElementById('me-hospital')||{}).value || d.hospital;
-  d.weight = getVal('me-weight') || d.weight;
-  d.height = getVal('me-height') || d.height;
-  d.bp = (document.getElementById('me-bp')||{}).value || d.bp;
-  d.pulse = getVal('me-pulse') || d.pulse;
-  d.sugar = getVal('me-sugar') || d.sugar;
-  d.hba1c = getVal('me-hba1c') || d.hba1c;
-  d.chol = getVal('me-chol') || d.chol;
-  d.ldl = getVal('me-ldl') || d.ldl;
-  d.hdl = getVal('me-hdl') || d.hdl;
-  d.trig = getVal('me-trig') || d.trig;
-  d.hb = getVal('me-hb') || d.hb;
-  d.wbc = getVal('me-wbc') || d.wbc;
-  d.creat = getVal('me-creat') || d.creat;
-  d.egfr = getVal('me-egfr') || d.egfr;
-  d.uric = getVal('me-uric') || d.uric;
-  d.sgot = getVal('me-sgot') || d.sgot;
-  d.sgpt = getVal('me-sgpt') || d.sgpt;
-  d.notes = (document.getElementById('me-notes')||{}).value || d.notes;
-  if(d.weight && d.height) d.bmi = parseFloat(bmi(d.weight, d.height));
-  
-  S.year = year;
-  closeModal();
-  
-  if(!S.demo && sbAuth){
-    saveHealthRecordToDB(pid, year, d).then(function(ok){
-      toast(ok ? (S.lang==='th'?'บันทึกข้อมูลสำเร็จ ✓':'Record saved to DB ✓') : 'Saved locally');
-      renderTab(S.tab);
-    });
-  } else {
-    toast(S.lang==='th' ? 'บันทึกแล้ว (Demo)' : 'Record saved (demo)');
-    renderTab(S.tab);
-  }
-}
+
+
 
 function quickVitalsHTML(){
   var p = prof(S.pid);
@@ -3290,24 +3440,42 @@ function renderInsurance(){
   // ══════════════════════════════════════════════════════════
   if(S.insContext==='home'){
 
-    // Alerts + Premium grouped
+    // ── Alerts + Premium — one clean joined block ─────────────
     var selfPrem = activePols.reduce(function(s,p){return s+(p.selfPaid!==false&&p.premium?(parseFloat(p.premium)||0):0);},0);
-    var urgentPols = activePols.filter(function(p){return p.urgent;});
-    var soonPols   = activePols.filter(function(p){
-      if(!p.dueMonth) return false;
-      var now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
-      return (p.dueMonth-m+12)%12<=2 && !isPaid(p.no,y);
+    var nowT = new Date();
+    var yr2  = nowT.getFullYear();
+    var alerts = [];
+
+    // Policy expiry within 90 days
+    myPols.forEach(function(p){
+      if(!p.endDate) return;
+      var exp = new Date(p.endDate);
+      var days = Math.ceil((exp - nowT) / 86400000);
+      if(days >= 0 && days <= 90)
+        alerts.push({type:'expiry', days:days, text: p.no + ' ' + (th?'หมดอายุใน':'expires in') + ' ' + days + (th?' วัน':' days') + ' (' + p.endDate + ')'});
     });
-    var hasAlerts = urgentPols.length||soonPols.length;
-    if(hasAlerts||selfPrem>0){
-      var radius = hasAlerts&&selfPrem>0 ? '' : '12px';
+
+    // Premium due within 90 days (self-paid, unpaid)
+    activePols.forEach(function(p){
+      if(!p.dueMonth || !p.selfPaid || !(p.premium>0)) return;
+      if(isPaid(p.no, yr2)) return;
+      var due = new Date(yr2, p.dueMonth-1, 15);
+      if(due < nowT) due = new Date(yr2+1, p.dueMonth-1, 15);
+      var days = Math.ceil((due - nowT) / 86400000);
+      if(days >= 0 && days <= 90)
+        alerts.push({type:'premium', days:days, text: p.no + ' ' + (th?'เบี้ยครบกำหนดใน':'premium due in') + ' ' + days + (th?' วัน':' days') + ' · ' + fmtTHB(p.premium)});
+    });
+
+    alerts.sort(function(a,b){return a.days - b.days;});
+    var hasAlerts = alerts.length > 0;
+
+    if(hasAlerts || selfPrem>0){
       if(hasAlerts){
         html += '<div style="background:rgba(255,82,82,.06);border:1px solid rgba(255,82,82,.2);border-radius:12px 12px '+(selfPrem?'0 0':'12px 12px')+';padding:8px 12px;">';
-        urgentPols.forEach(function(p){ html += '<div style="font-size:12px;color:var(--red);padding:2px 0">&#x26A0; <b>'+p.no+'</b> '+(p.urgentMsg||(th?'ต้องการความสนใจ':'Needs attention'))+'</div>'; });
-        soonPols.forEach(function(p){
-          var daysLeft = '';
-          if(p.dueMonth){ var now=new Date(),y=now.getFullYear(),target=new Date(y,p.dueMonth-1,1); var d=Math.ceil((target-now)/86400000); daysLeft=' · '+(d>0?d+' days':'today'); }
-          html += '<div style="font-size:12px;color:var(--amber);padding:2px 0">&#x23F0; <b>'+p.no+'</b> '+(th?'เบี้ยครบกำหนด':'Premium due')+daysLeft+'</div>';
+        alerts.forEach(function(a){
+          var clr = a.type==='expiry' ? 'var(--red)' : 'var(--amber)';
+          var ico = a.type==='expiry' ? '&#x23F3;' : '&#x23F0;';
+          html += '<div style="font-size:12px;color:'+clr+';padding:2px 0">'+ico+' '+a.text+'</div>';
         });
         html += '</div>';
       }
@@ -3329,7 +3497,7 @@ function renderInsurance(){
         else if(['ipd_surgery','ipd_surgery_room','ipd_anesthesia'].indexOf(r.cat)>=0) covAll.surgery.push(e);
         else if(r.cat==='daily_hospital_cash') covAll.cash.push(e);
         else if(['critical_illness_severe','critical_illness_early','critical_illness_cancer'].indexOf(r.cat)>=0) covAll.ci.push(e);
-        else if(['opd_general','opd_accident','opd_consult','opd_lab'].indexOf(r.cat)>=0) covAll.opd.push(e);
+        else if(r.cat==='opd_general') covAll.opd.push(e);   // true OPD only
         else if(r.cat==='accident_death') covAll.add.push(e);
         else if(r.cat==='premium_waiver') covAll.waiver.push(e);
       });
@@ -3397,12 +3565,12 @@ function renderInsurance(){
     html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F3E5; '+(th?'บัตรหาหมอ — แสดงที่เคาน์เตอร์':'Patient cards — show at reception')+'</div>';
     html += renderPatientCardStrip(pr, th, true);
 
-    // OPD coverage table
+    // OPD coverage — only true outpatient (opd_general)
     var opdRows = [];
     activePols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
-        if(['opd_general','opd_accident','opd_consult','opd_lab'].indexOf(r.cat)>=0){
-          var val = r.amount ? fmtTHB(r.amount)+(r.cat==='opd_general'?'/visit':'') : (r.perDay?fmtTHB(r.perDay)+'/day':'ตามจริง');
+        if(r.cat==='opd_general'){
+          var val = r.amount ? fmtTHB(r.amount)+'/visit' : (r.perDay?fmtTHB(r.perDay)+'/day':'ตามจริง');
           opdRows.push({insurer:pol.insurer, no:pol.no, name:r.name, val:val, fromFirst:r.fromFirst});
         }
       });
@@ -3613,7 +3781,8 @@ function renderInsurance(){
 
 // ── Patient card strip — reusable renderer ─────────────────────
 function renderPatientCardStrip(pr, th, fullView){
-  var myCards = HOSP_CARDS.filter(function(c){return !c.profileId||c.profileId===pr.dbId;});
+  // Show cards that belong to this profile, OR cards with no profile set (legacy — shown for all)
+  var myCards = HOSP_CARDS.filter(function(c){return c.profileId===pr.dbId || !c.profileId;});
   var html = '';
   if(fullView){
     // Full-size cards for OPD context
@@ -3667,13 +3836,13 @@ function renderInsuranceSituation(pols, view, th){
   // Map view → rider cats to include
   var catMap = {
     room: ['ipd_room_board'],
-    icu:  ['ipd_room_board'],  // we'll filter by 'ICU' in name
+    icu:  ['ipd_room_board'],  // filtered by ICU in name
     surg: ['ipd_surgery','ipd_surgery_room','ipd_anesthesia'],
-    opd:  ['opd_general','opd_consult','opd_lab'],
-    er:   ['opd_accident','accident_medical'],
+    opd:  ['opd_general'],                              // OPD = outpatient general visit only
+    er:   ['opd_accident','accident_medical'],           // ER = emergency/accident OPD
     cash: ['daily_hospital_cash'],
     ci:   ['critical_illness_severe','critical_illness_early','critical_illness_cancer'],
-    meds: ['opd_lab','other']
+    meds: ['opd_lab','other','opd_consult']              // ยากลับบ้าน + lab + consult (IPD support)
   };
   var cats = catMap[view] || [];
   var isICU = (view==='icu');
@@ -3784,35 +3953,6 @@ function renderInsuranceSituation(pols, view, th){
 function renderInsuranceAllPolicies(pols, th){
   var html = '';
   var yr2 = new Date().getFullYear();
-
-  // 90-day alerts
-  var now90=new Date(), in90d=new Date(now90.getTime()+90*24*3600000);
-  pols.forEach(function(pol){
-    if(pol.endDate){
-      var exp=new Date(pol.endDate);
-      if(exp>=now90&&exp<=in90d){
-        var days=Math.ceil((exp-now90)/86400000);
-        html+='<div style="background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.25);border-radius:10px;padding:9px 12px;margin-bottom:6px;font-size:12px;color:var(--red)">&#x23F3; '+pol.no+' '+(th?'หมดอายุใน':'expires in')+' '+days+(th?' วัน':'d')+' ('+pol.endDate+')</div>';
-      }
-    }
-    if(pol.selfPaid&&pol.premium>0&&pol.dueMonth&&pol.status==='active'&&!isPaid(pol.no,yr2)){
-      var due=new Date(yr2,pol.dueMonth-1,15);
-      if(due<now90) due=new Date(yr2+1,pol.dueMonth-1,15);
-      if(due<=in90d){
-        var days2=Math.ceil((due-now90)/86400000);
-        html+='<div style="background:rgba(255,183,77,.08);border:1px solid rgba(255,183,77,.25);border-radius:10px;padding:9px 12px;margin-bottom:6px;font-size:12px;color:var(--amber)">&#x23F0; '+pol.name+' '+(th?'เบี้ยครบกำหนดใน':'premium due in')+' '+days2+(th?' วัน':' days')+'</div>';
-      }
-    }
-  });
-
-  // Premium summary
-  var selfTotal = pols.filter(function(p){return p.selfPaid&&p.premium>0&&p.status==='active';}).reduce(function(s,p){return s+(p.premium||0);},0);
-  if(selfTotal){
-    html+='<div style="background:rgba(156,127,224,.08);border:1px solid rgba(156,127,224,.2);border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">';
-    html+='<div style="font-size:12px;color:var(--violet)">&#x1F4B0; '+(th?'เบี้ยที่ต้องจ่ายเอง/ปี':'Self-pay premium/yr')+'</div>';
-    html+='<div style="font-size:16px;font-weight:800;color:var(--teal)">'+selfTotal.toLocaleString()+' ฿</div>';
-    html+='</div>';
-  }
 
   // Policy cards
   pols.forEach(function(pol){
@@ -3985,6 +4125,40 @@ function viewPolicyImage(policyNo, idx){
     }
   },{passive:false});
   im.addEventListener('touchend',function(){if(sc<=1){sc=1;tx=0;ty=0;im.style.transform='';}},{passive:true});
+}
+
+// ── viewCardImage — fullscreen + pinch-zoom for hospital card photos ──
+function viewCardImage(imgSrc){
+  if(!imgSrc) return;
+  var ex = document.getElementById('img-fs-overlay');
+  if(ex) ex.remove();
+  var ov = document.createElement('div');
+  ov.id = 'img-fs-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:500;background:#000;display:flex;align-items:center;justify-content:center;touch-action:none';
+  ov.innerHTML = '<button onclick="document.getElementById(\'img-fs-overlay\').remove()" style="position:absolute;top:max(16px,env(safe-area-inset-top));right:16px;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:20px;width:42px;height:42px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center">&#x2715;</button>'
+    + '<img id="card-fs-img" src="'+imgSrc+'" style="max-width:100%;max-height:100vh;object-fit:contain;touch-action:none;user-select:none" draggable="false">';
+  document.body.appendChild(ov);
+  // Pinch-to-zoom + pan
+  var im = document.getElementById('card-fs-img');
+  var sc=1, lsc=1, tx=0, ty=0, stx=0, sty=0, ld=0;
+  im.addEventListener('touchstart',function(e){
+    if(e.touches.length===2){ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);lsc=sc;}
+    else if(e.touches.length===1&&sc>1){stx=e.touches[0].clientX-tx;sty=e.touches[0].clientY-ty;}
+  },{passive:true});
+  im.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    if(e.touches.length===2){
+      var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      sc=Math.min(5,Math.max(1,lsc*(d/ld)));
+      im.style.transform='scale('+sc+') translate('+tx+'px,'+ty+'px)';
+    } else if(e.touches.length===1&&sc>1){
+      tx=e.touches[0].clientX-stx;ty=e.touches[0].clientY-sty;
+      im.style.transform='scale('+sc+') translate('+tx+'px,'+ty+'px)';
+    }
+  },{passive:false});
+  im.addEventListener('touchend',function(){if(sc<=1){sc=1;tx=0;ty=0;im.style.transform='';}},{passive:true});
+  // Tap overlay background to close
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
 }
 
 function deletePolicyImage(policyNo, idx){
