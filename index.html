@@ -276,12 +276,15 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   <div class="login-card">
     <div class="login-logo">🫀</div>
     <div class="login-title">HealthVault</div>
-    <div class="login-sub" id="login-sub-txt">v2.8.0 · Personal Health & Insurance</div>
+    <div class="login-sub" id="login-sub-txt">v2.8.2 · Personal Health & Insurance</div>
     <div style="margin-bottom:8px">
       <div class="field-group"><label>Email</label><input type="email" id="login-email" placeholder="you@email.com" autocomplete="email"></div>
       <div class="field-group"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
     </div>
     <button class="btn-primary" onclick="doLogin()" id="login-btn">Sign In</button>
+    <div id="network-warn" style="display:none;font-size:11px;color:var(--amber);margin-top:8px;text-align:center;padding:8px;background:rgba(251,191,36,.08);border-radius:8px;border:1px solid rgba(251,191,36,.2)">
+      ⚠️ เปิดใน iPhone/Browser จริงเพื่อ Sign In<br>Preview นี้บล็อก external network
+    </div>
     <div style="text-align:center;margin:12px 0;color:var(--t3);font-size:12px">— or —</div>
     <button class="btn-glass" style="width:100%;margin-bottom:8px" onclick="showRegister()">Create Account</button>
     <button class="btn-glass" style="width:100%;color:var(--amber);border-color:rgba(251,191,36,.25)" onclick="launchDemo()">👁 Demo Mode</button>
@@ -367,7 +370,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 // ═══════════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://svuiphbzceatqodluvxl.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWlwaGJ6Y2VhdHFvZGx1dnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NjY4MDMsImV4cCI6MjA1ODA0MjgwM30.M6UMjBAbwv_GFMJP_bklY-BbTpXTIlHqX3IVFWHmxXM';
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.8.2';
 const SCHEMA = 'healthvault';
 
 let sb = null;
@@ -558,30 +561,29 @@ async function initSupabase() {
   }
 }
 
-async function dbGet(table, query) {
-  if (S.demoMode || !sb) return {data: [], error: null};
-  try {
-    let q = sb.from(table).select(query||'*');
-    return await q;
-  } catch(e) { return {data:[], error:e}; }
-}
-
 async function dbUpsert(table, data) {
   if (S.demoMode || !sb) { toast('⚠️ Demo mode – not saved'); return {data:null, error:'demo'}; }
-  try { return await sb.from(table).upsert(data).select(); }
+  try { return await sb.schema(SCHEMA).from(table).upsert(data).select(); }
   catch(e) { return {data:null, error:e}; }
 }
 
 async function dbInsert(table, data) {
   if (S.demoMode || !sb) { toast('⚠️ Demo mode – not saved'); return {data:null, error:'demo'}; }
-  try { return await sb.from(table).insert(data).select(); }
+  try { return await sb.schema(SCHEMA).from(table).insert(data).select(); }
   catch(e) { return {data:null, error:e}; }
 }
 
 async function dbDelete(table, id) {
   if (S.demoMode || !sb) { toast('⚠️ Demo mode'); return; }
-  try { await sb.from(table).delete().eq('id', id); }
+  try { await sb.schema(SCHEMA).from(table).delete().eq('id', id); }
   catch(e) { console.error(e); }
+}
+
+async function dbGet(table, query) {
+  if (S.demoMode || !sb) return {data: [], error: null};
+  try {
+    return await sb.schema(SCHEMA).from(table).select(query||'*');
+  } catch(e) { return {data:[], error:e}; }
 }
 
 // ── AUTH ─────────────────────────────────────────────────────────
@@ -601,7 +603,15 @@ async function doLogin() {
     launchApp();
     toast('✅ ยินดีต้อนรับกลับ!');
   } catch(e) {
-    err.textContent = e.message || 'เข้าสู่ระบบไม่สำเร็จ';
+    let msg = e.message || 'เข้าสู่ระบบไม่สำเร็จ';
+    if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
+      msg = '⚠️ เชื่อมต่อ Supabase ไม่ได้ — กรุณาตรวจสอบ internet หรือใช้ Demo Mode';
+    } else if (msg.includes('Invalid login') || msg.includes('Invalid email') || msg.includes('credentials')) {
+      msg = '❌ Email หรือ Password ไม่ถูกต้อง';
+    } else if (msg.includes('Email not confirmed')) {
+      msg = '📧 กรุณายืนยัน email ก่อน (ตรวจสอบกล่องจดหมาย)';
+    }
+    err.textContent = msg;
   }
   btn.textContent = 'Sign In'; btn.disabled = false;
 }
@@ -662,8 +672,8 @@ function launchDemo() {
 // ── DEMO DATA ─────────────────────────────────────────────────────
 function loadDemoData() {
   S.profiles = [
-    {id:'p1', full_name:'รัชพล ตัวอย่าง', date_of_birth:'1980-05-15', gender:'male', blood_type:'B+', national_id:'3100XXXXXXX', is_owner:true},
-    {id:'p2', full_name:'กนกพร ตัวอย่าง', date_of_birth:'1983-09-22', gender:'female', blood_type:'A+', national_id:'3200XXXXXXX', is_owner:false}
+    {id:'p1', full_name:'รัชพล ตัวอย่าง', nickname:'รัชพล', date_of_birth:'1980-05-15', gender:'male', blood_group:'B+', national_id:'3100XXXXXXX', relationship:'self', owner_id:'demo'},
+    {id:'p2', full_name:'กนกพร ตัวอย่าง', nickname:'กนกพร', date_of_birth:'1983-09-22', gender:'female', blood_group:'A+', national_id:'3200XXXXXXX', relationship:'spouse', owner_id:'demo'}
   ];
   S.currentProfile = S.profiles[0];
   S.healthRecords = {
@@ -731,33 +741,154 @@ function loadDemoData() {
 
 // ── DATA LOADING ─────────────────────────────────────────────────
 async function loadAppData() {
-  // Load profiles
-  const {data: profiles} = await dbGet('health_profiles', '*, profile_access(*)');
-  if (profiles && profiles.length) {
-    S.profiles = profiles;
-    S.currentProfile = profiles[0];
-  }
-  // Load policies with riders
-  const {data: policies} = await dbGet('insurance_policies', '*, policy_riders(*), policy_images(*), hospital_cards(*)');
-  if (policies && policies.length) {
-    S.policies = policies.map(p => ({
-      ...p,
-      riders: (p.policy_riders || []).map(r => ({
-        id: r.id, name: r.rider_name, cat: r.rider_category,
-        amount: r.coverage_amount, perDay: r.per_day || r.coverage_per_day,
-        fromFirst: r.covers_from_first_baht, hasDeductible: r.has_deductible,
-        deductible: r.deductible_amount
-      }))
-    }));
-  }
-  // Load health records per profile
-  for (const p of S.profiles) {
-    const {data: recs} = await sb.from('health_records').select('*').eq('profile_id', p.id).order('check_year', {ascending: false});
-    if (recs) {
-      S.healthRecords[p.id] = {};
-      recs.forEach(r => { S.healthRecords[p.id][r.check_year] = r; });
+  try {
+    // Load profiles (with error detail)
+    const {data: profiles, error: profErr} = await sb.schema(SCHEMA).from('health_profiles').select('*');
+    if (profErr) { console.error('Profiles load error:', profErr); }
+    if (profiles && profiles.length) {
+      // Sort: self first, spouse second, then others
+      const relOrder = {self:0, spouse:1, daughter_1:2, daughter_2:3, son_1:4, son_2:5};
+      profiles.sort((a,b) => (relOrder[a.relationship]??9) - (relOrder[b.relationship]??9));
+      S.profiles = profiles;
+      S.currentProfile = profiles[0];
+    } else {
+      // Create a default profile for this user if none exist
+      S.profiles = [{
+        id: 'new-profile',
+        full_name: S.user.user_metadata?.full_name || S.user.email,
+        owner_id: S.user.id, gender: 'male'
+      }];
+      S.currentProfile = S.profiles[0];
     }
+
+    // Load policies
+    const {data: policies, error: polErr} = await sb.schema(SCHEMA).from('insurance_policies').select('*');
+    if (polErr) { console.error('Policies load error:', polErr); }
+    
+    // Load riders, images, cards separately (safer than nested joins across FK types)
+    const {data: allRiders} = await sb.schema(SCHEMA).from('policy_riders').select('*');
+    const {data: allImages} = await sb.schema(SCHEMA).from('policy_images').select('*');
+    const {data: allCards} = await sb.schema(SCHEMA).from('hospital_cards').select('*');
+    
+    if (policies && policies.length) {
+      S.policies = policies.map(pol => {
+        const polRiders = (allRiders||[]).filter(r => r.policy_id === pol.id);
+        const polImages = (allImages||[]).filter(img => img.policy_number === pol.policy_number || img.policy_id === pol.id);
+        const polCards  = (allCards||[]).filter(c => c.policy_id === pol.id);
+        return {
+          ...pol,
+          riders: polRiders.map(r => ({
+            id: r.id, name: r.rider_name, cat: r.rider_category,
+            amount: r.coverage_amount, perDay: r.per_day || r.coverage_per_day,
+            fromFirst: r.covers_from_first_baht, hasDeductible: r.has_deductible,
+            deductible: r.deductible_amount, note: r.coverage_notes
+          })),
+          policy_images: polImages,
+          hospital_cards: polCards
+        };
+      });
+    }
+
+    // Load health records — map DB columns to app fields
+    for (const p of S.profiles) {
+      if (p.id === 'new-profile') continue;
+      const {data: recs, error: recErr} = await sb.schema(SCHEMA).from('health_records')
+        .select('*').eq('profile_id', p.id).order('record_year', {ascending: false});
+      if (recErr) { console.error('Records load error:', recErr); continue; }
+      if (recs) {
+        S.healthRecords[p.id] = {};
+        recs.forEach(r => {
+          // Map real DB columns → app field names
+          const mapped = mapDbRecord(r);
+          S.healthRecords[p.id][r.record_year] = mapped;
+        });
+        // Set current year to most recent record year
+        const years = Object.keys(S.healthRecords[p.id]).map(Number).sort((a,b)=>b-a);
+        if (years.length) S.currentYear = years[0];
+      }
+    }
+  } catch(e) {
+    console.error('loadAppData failed:', e);
+    toast('⚠️ โหลดข้อมูลไม่สมบูรณ์: ' + e.message);
   }
+}
+
+// Map DB column names → app field names
+function mapDbRecord(r) {
+  // Parse blood_pressure "120/80" string
+  let bps = null, bpd = null;
+  if (r.blood_pressure && r.blood_pressure !== 'N/A' && r.blood_pressure.includes('/')) {
+    const parts = r.blood_pressure.split('/');
+    bps = parseInt(parts[0]) || null;
+    bpd = parseInt(parts[1]) || null;
+  }
+  return {
+    id: r.id,
+    profile_id: r.profile_id,
+    check_year: r.record_year,
+    record_year: r.record_year,
+    check_date: r.check_date,
+    weight: r.weight_kg ? parseFloat(r.weight_kg) : null,
+    height: r.height_cm ? parseFloat(r.height_cm) : null,
+    bmi: r.bmi ? parseFloat(r.bmi) : null,
+    bp_systolic: bps,
+    bp_diastolic: bpd,
+    blood_pressure_raw: r.blood_pressure,
+    heart_rate: r.pulse_rate,
+    glucose: r.blood_sugar ? parseFloat(r.blood_sugar) : null,
+    hba1c: r.hba1c ? parseFloat(r.hba1c) : null,
+    total_cholesterol: r.cholesterol ? parseFloat(r.cholesterol) : null,
+    ldl: r.ldl ? parseFloat(r.ldl) : null,
+    hdl: r.hdl ? parseFloat(r.hdl) : null,
+    triglyceride: r.triglyceride ? parseFloat(r.triglyceride) : null,
+    hemoglobin: r.hemoglobin ? parseFloat(r.hemoglobin) : null,
+    wbc: r.wbc ? parseFloat(r.wbc) : null,
+    platelet: r.platelet ? parseFloat(r.platelet) : null,
+    creatinine: r.creatinine ? parseFloat(r.creatinine) : null,
+    bun: r.bun ? parseFloat(r.bun) : null,
+    uric_acid: r.uric_acid ? parseFloat(r.uric_acid) : null,
+    sgot: r.sgot ? parseFloat(r.sgot) : null,
+    sgpt: r.sgpt ? parseFloat(r.sgpt) : null,
+    alk_phos: r.alp ? parseFloat(r.alp) : null,
+    chest_xray: r.chest_xray || r.chest_xray_notes,
+    ekg: r.ekg_normal !== null ? (r.ekg_normal ? 'ปกติ' : 'ผิดปกติ') : null,
+    notes: r.doctor_notes || r.other_notes,
+    // Keep raw for upsert
+    _raw: r
+  };
+}
+
+// Map app fields → DB columns for insert/upsert
+function mapAppToDb(appRec, profileId, ownerId) {
+  const bpStr = (appRec.bp_systolic && appRec.bp_diastolic) ? appRec.bp_systolic+'/'+appRec.bp_diastolic : null;
+  const obj = {
+    profile_id: profileId,
+    record_year: appRec.check_year || appRec.record_year,
+    weight_kg: appRec.weight || null,
+    height_cm: appRec.height || null,
+    bmi: appRec.bmi || null,
+    blood_pressure: bpStr || appRec.blood_pressure_raw || null,
+    pulse_rate: appRec.heart_rate || null,
+    blood_sugar: appRec.glucose || null,
+    hba1c: appRec.hba1c || null,
+    cholesterol: appRec.total_cholesterol || null,
+    ldl: appRec.ldl || null,
+    hdl: appRec.hdl || null,
+    triglyceride: appRec.triglyceride || null,
+    hemoglobin: appRec.hemoglobin || null,
+    wbc: appRec.wbc || null,
+    platelet: appRec.platelet || null,
+    creatinine: appRec.creatinine || null,
+    bun: appRec.bun || null,
+    uric_acid: appRec.uric_acid || null,
+    sgot: appRec.sgot || null,
+    sgpt: appRec.sgpt || null,
+    alp: appRec.alk_phos || null,
+    chest_xray: appRec.chest_xray || null,
+    doctor_notes: appRec.notes || null,
+  };
+  if (appRec.id && !appRec.id.toString().startsWith('demo')) obj.id = appRec.id;
+  return obj;
 }
 
 // ── APP LAUNCH ────────────────────────────────────────────────────
@@ -777,7 +908,7 @@ function updateProfilePill() {
   const p = S.currentProfile;
   if (p) {
     const name = p.full_name || p.name || 'Profile';
-    document.getElementById('profile-pill').textContent = name.split(' ')[0];
+    document.getElementById('profile-pill').textContent = p.nickname || name.split(' ')[0];
   }
 }
 
@@ -850,7 +981,7 @@ function renderDashboard() {
   // Profile selector
   let profileTabs = '<div class="profile-select-row">';
   S.profiles.forEach(prof => {
-    profileTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${(prof.full_name||'').split(' ')[0]}</button>`;
+    profileTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${prof.nickname||(prof.full_name||'').split(' ')[0]}</button>`;
   });
   profileTabs += '</div>';
 
@@ -868,7 +999,7 @@ function renderDashboard() {
     ${profileTabs}
     <div class="hero-card">
       <div class="hero-name">${p.full_name||'–'}</div>
-      <div class="hero-meta">${t('age')} ${age} ${t('years')} · ${p.gender==='male'?t('male'):t('female')} · ${p.blood_type||'–'} · ID: ${p.national_id||'–'}</div>
+      <div class="hero-meta">${t('age')} ${age} ${t('years')} · ${(p.gender||'').toLowerCase()==='male'?t('male'):t('female')} · ${p.blood_group||'–'} · ID: ${p.national_id||'–'}</div>
       <div style="margin-top:8px;font-size:12px;color:var(--t3)">${t('lastCheck')}: ${years[0] ? years[0] + ' (' + (latest.check_date||years[0]) + ')' : t('noRecord')}</div>
     </div>
 
@@ -949,7 +1080,7 @@ async function saveNewProfile() {
   const nid = document.getElementById('np-id').value.trim();
   if (!name) { toast('⚠️ กรุณากรอกชื่อ'); return; }
   const {data, error} = await dbInsert('health_profiles', {
-    full_name: name, date_of_birth: dob||null, gender, blood_type: blood||null,
+    full_name: name, date_of_birth: dob||null, gender, blood_group: blood||null,
     national_id: nid||null, owner_id: S.user.id
   });
   if (error && error !== 'demo') { toast('❌ บันทึกไม่สำเร็จ: ' + error.message); return; }
@@ -974,7 +1105,7 @@ function renderHealth() {
 
   // Profile tabs
   let pTabs = '<div class="profile-select-row">';
-  S.profiles.forEach(prof => { pTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${(prof.full_name||'').split(' ')[0]}</button>`; });
+  S.profiles.forEach(prof => { pTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${prof.nickname||(prof.full_name||'').split(' ')[0]}</button>`; });
   pTabs += '</div>';
 
   const html = `
@@ -1134,36 +1265,38 @@ async function saveManualEntry() {
   const existing = (S.healthRecords[p.id]||{})[year];
   const w = parseFloat(document.getElementById('me-weight').value)||null;
   const h = parseFloat(document.getElementById('me-height').value)||null;
-  const payload = {
-    profile_id: p.id, check_year: year,
+  const bps = parseInt(document.getElementById('me-bps').value)||null;
+  const bpd = parseInt(document.getElementById('me-bpd').value)||null;
+
+  const appRec = {
+    check_year: year,
+    id: existing?.id,
     weight: w, height: h,
     bmi: (w&&h) ? parseFloat((w/((h/100)**2)).toFixed(1)) : null,
-    bp_systolic: parseInt(document.getElementById('me-bps').value)||null,
-    bp_diastolic: parseInt(document.getElementById('me-bpd').value)||null,
+    bp_systolic: bps, bp_diastolic: bpd,
     ldl: parseFloat(document.getElementById('me-ldl').value)||null,
     hdl: parseFloat(document.getElementById('me-hdl').value)||null,
     total_cholesterol: parseFloat(document.getElementById('me-tc').value)||null,
     triglyceride: parseFloat(document.getElementById('me-tg').value)||null,
     glucose: parseFloat(document.getElementById('me-glu').value)||null,
     hba1c: parseFloat(document.getElementById('me-hba1c').value)||null,
-    sgot: parseInt(document.getElementById('me-sgot').value)||null,
-    sgpt: parseInt(document.getElementById('me-sgpt').value)||null,
+    sgot: parseFloat(document.getElementById('me-sgot').value)||null,
+    sgpt: parseFloat(document.getElementById('me-sgpt').value)||null,
     creatinine: parseFloat(document.getElementById('me-creat').value)||null,
     uric_acid: parseFloat(document.getElementById('me-ua').value)||null,
-    notes: document.getElementById('me-notes').value || null,
-    owner_id: S.user.id
+    notes: document.getElementById('me-notes').value || null
   };
-  if (existing?.id) payload.id = existing.id;
 
   if (S.demoMode) {
     if (!S.healthRecords[p.id]) S.healthRecords[p.id] = {};
-    S.healthRecords[p.id][year] = {...payload, id: 'demo-'+year};
+    S.healthRecords[p.id][year] = {...appRec, id: 'demo-'+year};
   } else {
-    const {data, error} = await dbUpsert('health_records', payload);
-    if (error) { toast('❌ ' + (error.message||error)); return; }
+    const dbPayload = mapAppToDb(appRec, p.id, S.user.id);
+    const {data, error} = await sb.schema(SCHEMA).from('health_records').upsert(dbPayload, {onConflict: 'profile_id,record_year'}).select();
+    if (error) { toast('❌ ' + (error.message||JSON.stringify(error))); return; }
     if (data?.[0]) {
       if (!S.healthRecords[p.id]) S.healthRecords[p.id] = {};
-      S.healthRecords[p.id][year] = data[0];
+      S.healthRecords[p.id][year] = mapDbRecord(data[0]);
     }
   }
   closeModal();
@@ -1264,14 +1397,13 @@ async function confirmUploadedData(data) {
   const p = S.currentProfile;
   if (!p) return;
   const year = data.check_year || S.currentYear;
-  const payload = {...data, profile_id: p.id, owner_id: S.user.id, check_year: year};
-  delete payload.check_year;
-  payload.check_year = year;
+  const appRec = {...data, check_year: year};
   if (S.demoMode) {
     if (!S.healthRecords[p.id]) S.healthRecords[p.id] = {};
-    S.healthRecords[p.id][year] = {...payload, id:'demo-upload-'+year};
+    S.healthRecords[p.id][year] = {...appRec, id:'demo-upload-'+year};
   } else {
-    const {error} = await dbUpsert('health_records', payload);
+    const dbPayload = mapAppToDb(appRec, p.id, S.user.id);
+    const {error} = await sb.schema(SCHEMA).from('health_records').upsert(dbPayload, {onConflict:'profile_id,record_year'}).select();
     if (error) { toast('❌ '+error.message); return; }
   }
   closeModal(); S.currentYear = year; renderHealth(); toast('✅ บันทึกผลตรวจแล้ว!');
@@ -1288,7 +1420,7 @@ function renderTrends() {
 
   // Profile tabs + compare toggle
   let pTabs = '<div class="profile-select-row">';
-  S.profiles.forEach(prof => { pTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${(prof.full_name||'').split(' ')[0]}</button>`; });
+  S.profiles.forEach(prof => { pTabs += `<button class="profile-btn ${prof.id===p.id?'active':''}" onclick="switchProfile('${prof.id}')">${prof.nickname||(prof.full_name||'').split(' ')[0]}</button>`; });
   pTabs += `<button class="profile-btn" onclick="renderCompare()" style="border-color:var(--purple);color:var(--purple)">⚖️ ${t('compareTitle')}</button>`;
   pTabs += '</div>';
 
@@ -1980,7 +2112,7 @@ function setupPinchZoom() {
 // ─────────────────────────────────────────────────────────────────
 function renderSettings() {
   const th = S.lang === 'th';
-  const isAdmin = S.demoMode || (S.user && S.user.id === S.profiles.find(p=>p.is_owner)?.owner_id);
+  const isAdmin = S.demoMode || (S.user && S.profiles.some(p=>p.owner_id===S.user.id));
   const dbStatus = S.demoMode ? `<span style="color:var(--amber)">⚠️ ${t('demoModeActive')}</span>` : `<span style="color:var(--green)">✅ ${t('connectedDB')}</span>`;
 
   const html = `
@@ -2001,7 +2133,7 @@ function renderSettings() {
       <div class="card2" style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-size:14px;font-weight:700">${p.full_name||p.name}</div>
-          <div style="font-size:11px;color:var(--t3)">${p.gender==='male'?'ชาย':'หญิง'} · ${p.blood_type||'–'} · ${th?'เกิด':'DOB'}: ${fmtDate(p.date_of_birth)}</div>
+          <div style="font-size:11px;color:var(--t3)">${(p.gender||'').toLowerCase()==='male'?'ชาย':'หญิง'} · ${p.blood_group||'–'} · ${th?'เกิด':'DOB'}: ${fmtDate(p.date_of_birth)}</div>
           <div style="font-size:11px;color:var(--t3)">ID: ${p.national_id||'–'}</div>
         </div>
         <button class="btn-glass" onclick="editProfile('${p.id}')">✏️</button>
@@ -2062,7 +2194,7 @@ function editProfile(id) {
     <div class="field-group"><label>ชื่อ-นามสกุล</label><input id="ep-name" value="${p.full_name||p.name||''}"></div>
     <div class="field-group"><label>วันเกิด</label><input type="date" id="ep-dob" value="${p.date_of_birth||''}"></div>
     <div class="field-group"><label>เพศ</label><select id="ep-gender"><option value="male" ${p.gender==='male'?'selected':''}>ชาย</option><option value="female" ${p.gender==='female'?'selected':''}>หญิง</option></select></div>
-    <div class="field-group"><label>กรุ๊ปเลือด</label><input id="ep-blood" value="${p.blood_type||''}"></div>
+    <div class="field-group"><label>กรุ๊ปเลือด</label><input id="ep-blood" value="${p.blood_group||''}"></div>
     <div class="field-group"><label>เลขบัตรประชาชน</label><input id="ep-id" value="${p.national_id||''}"></div>
     <button class="btn-primary" onclick="saveEditProfile('${id}')">💾 ${t('save')}</button>
   `);
@@ -2074,7 +2206,7 @@ async function saveEditProfile(id) {
   p.full_name = document.getElementById('ep-name').value.trim();
   p.date_of_birth = document.getElementById('ep-dob').value || null;
   p.gender = document.getElementById('ep-gender').value;
-  p.blood_type = document.getElementById('ep-blood').value.trim() || null;
+  p.blood_group = document.getElementById('ep-blood').value.trim() || null;
   p.national_id = document.getElementById('ep-id').value.trim() || null;
   if (!S.demoMode) {
     const {error} = await dbUpsert('health_profiles', p);
@@ -2089,9 +2221,9 @@ function exportDataCSV() {
   if (!p) return;
   const recs = S.healthRecords[p.id] || {};
   const years = Object.keys(recs).sort();
-  const fields = ['check_year','weight','height','bmi','bp_systolic','bp_diastolic','glucose','hba1c','total_cholesterol','ldl','hdl','triglyceride','hemoglobin','wbc','platelet','creatinine','bun','uric_acid','sgot','sgpt'];
+  const fields = ['record_year','weight','height','bmi','bp_systolic','bp_diastolic','glucose','hba1c','total_cholesterol','ldl','hdl','triglyceride','hemoglobin','wbc','platelet','creatinine','bun','uric_acid','sgot','sgpt','alk_phos'];
   const rows = [fields.join(',')];
-  years.forEach(y => { const r = recs[y]; rows.push(fields.map(f=>r[f]||'').join(',')); });
+  years.forEach(y => { const r = recs[y]; rows.push(fields.map(f=>(r[f]!==null&&r[f]!==undefined)?r[f]:'').join(',')); });
   const csv = rows.join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -2164,17 +2296,37 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 async function init() {
   await initSupabase();
 
+  // Quick connectivity check — show warning in sandboxed preview environments
+  try {
+    const ping = await fetch('https://svuiphbzceatqodluvxl.supabase.co/auth/v1/health', {
+      method: 'GET', signal: AbortSignal.timeout(4000)
+    });
+    // Connected — hide warning
+    document.getElementById('network-warn').style.display = 'none';
+  } catch(e) {
+    // Can't reach Supabase — show warning
+    document.getElementById('network-warn').style.display = 'block';
+  }
+
   // Check existing session
   if (sb) {
     try {
-      const {data:{session}} = await sb.auth.getSession();
-      if (session?.user) {
-        S.user = session.user;
+      const {data, error} = await sb.auth.getSession();
+      if (error) throw error;
+      if (data?.session?.user) {
+        S.user = data.session.user;
+        toast('🔄 กำลังโหลด…');
         await loadAppData();
         launchApp();
         return;
       }
-    } catch(e) { console.warn('Session check failed', e); }
+    } catch(e) {
+      console.warn('Session check failed:', e.message);
+      if (e.message?.includes('fetch')) {
+        // Show login with network warning
+        document.getElementById('login-err').textContent = '⚠️ ไม่สามารถเชื่อมต่อ server — ลองใหม่อีกครั้ง หรือกด Demo Mode';
+      }
+    }
   }
 
   // Show login
