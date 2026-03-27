@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.3';
+var APP_VERSION = '2.9.4';
 var APP_DATE = '27 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
@@ -4343,18 +4343,100 @@ function editPolicy(policyNo){
   html += '<div class="fg" style="display:flex;align-items:center;gap:8px"><input id="ep-self" type="checkbox"'+(pol.selfPaid?' checked':'')+' style="width:18px;height:18px"><label class="lbl" style="margin:0">'+(th?'จ่ายเบี้ยเอง (ไม่ใช่นายจ้าง)':'Self-paid (not employer)')+'</label></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><textarea id="ep-notes" class="inp" rows="2">'+(pol.note||pol.notes||'')+'</textarea></div>';
   // Riders
-  // Riders — with delete per rider
-  html += '<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม':'Riders')+' ('+((pol.riders||[]).length)+')</div>';
-  (pol.riders||[]).forEach(function(r,i){
-    var val = r.perDay?r.perDay:r.amount||'';
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:8px">';
-    html+='<span style="flex:1;color:var(--t2)">'+r.name+'</span>';
-    html+='<span style="color:var(--teal);font-weight:700;margin-right:8px">'+(val?val.toLocaleString():'-')+' ฿</span>';
-    html+='<button onclick="confirmDeleteRider(\''+policyNo+'\','+i+')" style="background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.3);color:var(--red);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">&#x1F5D1;</button>';
-    html+='</div>';
-  });
-  html += '<button class="btn btn-secondary" onclick="addRiderToPolicy(&quot;'+policyNo+'&quot;)" style="margin-top:6px;font-size:12px">+ '+(th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider')+'</button>';
+  // ── Riders — editable with category reclassification ─────────
+  html += '<div style="margin-top:14px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--t2)">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม':'Riders')+' ('+((pol.riders||[]).length)+')</div>';
+  html += '<button onclick="addRiderToPolicy(&quot;'+policyNo+'&quot;)" style="font-size:11px;padding:3px 10px;background:rgba(38,217,176,.1);border:1px solid rgba(38,217,176,.3);color:var(--teal);border-radius:8px;cursor:pointer">+ '+(th?'เพิ่ม':'Add')+'</button>';
   html += '</div>';
+
+  // All 20 rider categories for the dropdown
+  var ALL_RIDER_CATS = [
+    ['ipd_room_board',         th?'ค่าห้อง (IPD)':'Room & Board (IPD)'],
+    ['icu',                    'ICU / CCU'],
+    ['ipd_total',              th?'IPD เหมาจ่าย':'IPD Total Limit'],
+    ['ipd_medical',            th?'ค่ารักษา IPD':'IPD Medical'],
+    ['ipd_surgery',            th?'ค่าผ่าตัด':'Surgery'],
+    ['ipd_surgery_room',       th?'ห้องผ่าตัด / OR':'Surgery Room / OR'],
+    ['ipd_anesthesia',         th?'ค่ายาสลบ':'Anaesthesia'],
+    ['ipd_discharge_meds',     th?'ยากลับบ้าน':'Take-home Meds'],
+    ['daily_hospital_cash',    th?'ค่าชดเชยรายวัน':'Daily Hospital Cash'],
+    ['opd_general',            th?'OPD ทั่วไป':'OPD General'],
+    ['opd_accident',           th?'OPD อุบัติเหตุ / ER':'ER / Accident OPD'],
+    ['opd_consult',            th?'ค่าปรึกษาแพทย์ (IPD)':'In-Hospital Consult'],
+    ['opd_lab',                'Lab / X-Ray'],
+    ['critical_illness_severe',th?'โรคร้ายแรงระยะสุดท้าย':'Severe CI'],
+    ['critical_illness_early', th?'โรคร้ายแรงระยะเริ่มต้น':'Early CI'],
+    ['critical_illness_cancer',th?'โรคมะเร็ง':'Cancer CI'],
+    ['accident_death',         th?'เสียชีวิต / AD&D':'AD&D / Death'],
+    ['accident_medical',       th?'ค่ารักษาอุบัติเหตุ':'Accident Medical'],
+    ['premium_waiver',         th?'ยกเว้นเบี้ย':'Premium Waiver'],
+    ['life',                   th?'ประกันชีวิต':'Life Insurance'],
+    ['other',                  th?'อื่นๆ':'Other'],
+  ];
+
+  // Cat color helper
+  var catColors = {
+    'ipd_room_board':'#4fc3f7','icu':'#f06292','ipd_total':'#ce93d8',
+    'ipd_surgery':'#ff8a65','ipd_surgery_room':'#ffa726','ipd_anesthesia':'#ffca28',
+    'ipd_discharge_meds':'#26c6da','daily_hospital_cash':'#66bb6a',
+    'opd_general':'#42a5f5','opd_accident':'#ef5350',
+    'opd_consult':'#ab47bc','opd_lab':'#26a69a',
+    'critical_illness_severe':'#ec407a','critical_illness_early':'#e91e63',
+    'critical_illness_cancer':'#c2185b','accident_death':'#757575',
+    'accident_medical':'#ff7043','premium_waiver':'#8d6e63',
+    'life':'#5c6bc0','other':'#78909c'
+  };
+
+  if(!(pol.riders||[]).length){
+    html += '<div style="font-size:12px;color:var(--t3);padding:8px 0">'+(th?'ยังไม่มีสัญญาเพิ่มเติม':'No riders yet')+'</div>';
+  }
+  (pol.riders||[]).forEach(function(r,i){
+    var catName = (ALL_RIDER_CATS.find(function(x){return x[0]===r.cat;})||['','Other'])[1];
+    var catColor = catColors[r.cat] || '#78909c';
+    var val = r.perDay ? r.perDay.toLocaleString()+(th?'/วัน':'/day')+' ฿' : (r.amount ? r.amount.toLocaleString()+' ฿' : '-');
+    html += '<div id="rider-row-'+policyNo+'-'+i+'" style="background:rgba(255,255,255,.04);border-radius:10px;padding:8px 10px;margin-bottom:6px">';
+    // Top row: category badge + name + value + edit + delete
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:9px;font-weight:700;background:'+catColor+'22;color:'+catColor+';border:1px solid '+catColor+'44;border-radius:5px;padding:2px 6px;white-space:nowrap;flex-shrink:0">'+catName+'</span>';
+    html += '<span style="font-size:12px;color:var(--t1);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.name+'</span>';
+    html += '<span style="font-size:12px;font-weight:700;color:var(--teal);white-space:nowrap;margin-right:4px">'+val+'</span>';
+    html += '<button onclick="toggleRiderEdit(\''+policyNo+'\','+i+')" style="background:rgba(79,195,247,.1);border:1px solid rgba(79,195,247,.3);color:var(--blue);border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer">✏️</button>';
+    html += '<button onclick="confirmDeleteRider(\''+policyNo+'\','+i+')" style="background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.3);color:var(--red);border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer">🗑</button>';
+    html += '</div>';
+    // Inline edit panel (hidden by default)
+    html += '<div id="rider-edit-'+policyNo+'-'+i+'" style="display:none;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px">';
+    // Category reclassify dropdown
+    html += '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">'+(th?'ประเภท (กดเพื่อเปลี่ยน)':'Category (tap to reclassify)')+'</label>';
+    html += '<select id="rider-cat-'+policyNo+'-'+i+'" class="inp" style="margin-top:3px;font-size:12px" onchange="previewRiderCatChange(\''+policyNo+'\','+i+',this.value)">';
+    ALL_RIDER_CATS.forEach(function(x){
+      html += '<option value="'+x[0]+'"'+(x[0]===(r.cat||'other')?' selected':'')+'>'+x[1]+'</option>';
+    });
+    html += '</select></div>';
+    // Name edit
+    html += '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">'+(th?'ชื่อสัญญา':'Rider Name')+'</label>';
+    html += '<input id="rider-name-'+policyNo+'-'+i+'" class="inp" style="margin-top:3px;font-size:12px" value="'+(r.name||'')+'"></div>';
+    // Amount / perDay
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">';
+    html += '<div><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">'+(th?'วงเงิน/ครั้ง (฿)':'Amount/claim (฿)')+'</label>';
+    html += '<input id="rider-amt-'+policyNo+'-'+i+'" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" style="margin-top:3px;font-size:12px" value="'+(r.amount?r.amount.toLocaleString():'')+'"></div>';
+    html += '<div><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">'+(th?'ต่อวัน (฿)':'Per Day (฿)')+'</label>';
+    html += '<input id="rider-pd-'+policyNo+'-'+i+'" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" style="margin-top:3px;font-size:12px" value="'+(r.perDay?r.perDay.toLocaleString():'')+'"></div>';
+    html += '</div>';
+    // Deductible + fromFirst
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+    html += '<div><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Deductible (฿)</label>';
+    html += '<input id="rider-ded-'+policyNo+'-'+i+'" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" style="margin-top:3px;font-size:12px" value="'+(r.deductible?r.deductible.toLocaleString():'')+'"></div>';
+    html += '<div style="display:flex;align-items:flex-end;padding-bottom:4px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="rider-first-'+policyNo+'-'+i+'" style="width:16px;height:16px"'+(r.fromFirst?' checked':'')+'>บาทแรก</label></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="saveRiderEdit(\''+policyNo+'\','+i+')" style="flex:2;padding:7px;background:rgba(38,217,176,.15);border:1px solid rgba(38,217,176,.4);color:var(--teal);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">&#x2705; '+(th?'บันทึก':'Save')+'</button>';
+    html += '<button onclick="toggleRiderEdit(\''+policyNo+'\','+i+')" style="flex:1;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--t3);border-radius:8px;cursor:pointer;font-size:12px">'+(th?'ยกเลิก':'Cancel')+'</button>';
+    html += '</div>';
+    html += '</div>'; // end edit panel
+    html += '</div>'; // end rider-row
+  });
+  html += '</div>'; // end riders section
 
   html += '<div style="display:flex;gap:10px;margin-top:16px">';
   html += '<button class="btn btn-secondary" onclick="confirmDeletePolicy(\''+policyNo+'\')" style="flex:1;background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F5D1; '+(th?'ลบ':'Delete')+'</button>';
@@ -4428,6 +4510,71 @@ function deletePolicy(policyNo){
 }
 
 // ── DELETE RIDER with confirmation ────────────────────────────
+// ── RIDER INLINE EDIT ─────────────────────────────────────────
+function toggleRiderEdit(policyNo, idx){
+  var panel = document.getElementById('rider-edit-'+policyNo+'-'+idx);
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+}
+
+function previewRiderCatChange(policyNo, idx, newCat){
+  // Live preview — update the category badge color on change
+  var row = document.getElementById('rider-row-'+policyNo+'-'+idx);
+  if(!row) return;
+  // Could enhance visually here if needed
+}
+
+function saveRiderEdit(policyNo, idx){
+  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+  if(!pol||!pol.riders||!pol.riders[idx]) return;
+  var th = S.lang==='th';
+
+  var catEl   = document.getElementById('rider-cat-'+policyNo+'-'+idx);
+  var nameEl  = document.getElementById('rider-name-'+policyNo+'-'+idx);
+  var amtEl   = document.getElementById('rider-amt-'+policyNo+'-'+idx);
+  var pdEl    = document.getElementById('rider-pd-'+policyNo+'-'+idx);
+  var dedEl   = document.getElementById('rider-ded-'+policyNo+'-'+idx);
+  var firstEl = document.getElementById('rider-first-'+policyNo+'-'+idx);
+  if(!catEl||!nameEl) return;
+
+  var oldCat = pol.riders[idx].cat;
+  pol.riders[idx].cat        = catEl.value;
+  pol.riders[idx].name       = nameEl.value.trim() || pol.riders[idx].name;
+  pol.riders[idx].amount     = parseFmtInput('rider-amt-'+policyNo+'-'+idx) || null;
+  pol.riders[idx].perDay     = parseFmtInput('rider-pd-'+policyNo+'-'+idx) || null;
+  pol.riders[idx].deductible = parseFmtInput('rider-ded-'+policyNo+'-'+idx) || 0;
+  pol.riders[idx].hasDeductible = pol.riders[idx].deductible > 0;
+  pol.riders[idx].fromFirst  = firstEl ? firstEl.checked : pol.riders[idx].fromFirst;
+
+  // Persist to DB if connected
+  if(!S.demo && sbAuth){
+    (async function(){
+      try {
+        var db = getDbClient();
+        var {data:polRow} = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
+        if(polRow){
+          await db.from('policy_riders')
+            .update({
+              rider_category: pol.riders[idx].cat,
+              rider_name: pol.riders[idx].name,
+              coverage_amount: pol.riders[idx].amount,
+              per_day: pol.riders[idx].perDay,
+              deductible_amount: pol.riders[idx].deductible||null,
+              has_deductible: pol.riders[idx].hasDeductible,
+              covers_from_first_baht: pol.riders[idx].fromFirst
+            })
+            .eq('policy_id', polRow.id)
+            .eq('rider_name', nameEl.value.trim() || pol.riders[idx].name);
+        }
+      } catch(e){ console.warn('saveRiderEdit DB:', e); }
+    })();
+  }
+
+  var catChanged = oldCat !== pol.riders[idx].cat;
+  toast(th ? (catChanged?'เปลี่ยนประเภทและบันทึกแล้ว ✓':'บันทึกแล้ว ✓') : (catChanged?'Category updated ✓':'Saved ✓'));
+  editPolicy(policyNo); // refresh modal to show new badge
+}
+
 function confirmDeleteRider(policyNo, riderIdx){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(!pol||!pol.riders||!pol.riders[riderIdx]) return;
