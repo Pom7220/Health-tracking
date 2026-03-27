@@ -4252,6 +4252,21 @@ function closeModalForce(){
 }
 
 // ── TOAST ─────────────────────────────────────────────────────
+// ── CUSTOM DELETE CONFIRMATION (replaces window.confirm for iOS compat) ──
+function showDeleteConfirm(title, bodyHtml, onConfirmCode){
+  var th = S.lang==='th';
+  var html = '';
+  html += '<div style="text-align:center;padding:8px 0 16px">';
+  html += '<div style="font-size:32px;margin-bottom:10px">&#x1F5D1;&#xFE0F;</div>';
+  html += '<div style="font-size:14px;color:var(--t2);line-height:1.5">'+bodyHtml+'</div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:10px">';
+  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button onclick="'+onConfirmCode+';closeModalForce()" style="flex:1;padding:12px;background:rgba(255,82,82,.2);border:1px solid rgba(255,82,82,.5);color:var(--red);border-radius:14px;font-size:14px;font-weight:600;cursor:pointer">&#x1F5D1; '+(th?'ลบ':'Delete')+'</button>';
+  html += '</div>';
+  openModal(title, html);
+}
+
 function toast(msg, duration){
   var el = document.getElementById('toast');
   el.textContent = msg;
@@ -4486,11 +4501,11 @@ function confirmDeletePolicy(policyNo){
   var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
   if(!pol) return;
   var th = S.lang==='th';
-  var msg = th
-    ? 'ลบกรมธรรม์ "'+pol.name+'" ('+policyNo+') ?\n\nการลบจะลบสัญญาเพิ่มเติมทั้งหมดด้วย ไม่สามารถกู้คืนได้'
-    : 'Delete policy "'+pol.name+'" ('+policyNo+') ?\n\nAll riders will also be deleted. This cannot be undone.';
-  if(!confirm(msg)) return;
-  deletePolicy(policyNo);
+  showDeleteConfirm(
+    th?'ลบกรมธรรม์?':'Delete Policy?',
+    (th?'"'+pol.name+'" ('+policyNo+')<br><small style="color:var(--red)">ลบสัญญาเพิ่มเติมทั้งหมดด้วย ไม่สามารถกู้คืน</small>'
+       :'"'+pol.name+'" ('+policyNo+')<br><small style="color:var(--red)">All riders deleted. Cannot undo.</small>'),
+    'deletePolicy(\''+policyNo+'\')');
 }
 
 function deletePolicy(policyNo){
@@ -4597,11 +4612,10 @@ function confirmDeleteRider(policyNo, riderIdx){
   if(!pol||!pol.riders||!pol.riders[riderIdx]) return;
   var r = pol.riders[riderIdx];
   var th = S.lang==='th';
-  var msg = th
-    ? 'ลบสัญญาเพิ่มเติม "'+r.name+'" ?\nไม่สามารถกู้คืนได้'
-    : 'Delete rider "'+r.name+'" ?\nThis cannot be undone.';
-  if(!confirm(msg)) return;
-  deleteRider(policyNo, riderIdx, r);
+  showDeleteConfirm(
+    th?'ลบสัญญาเพิ่มเติม?':'Delete Rider?',
+    '"'+r.name+'"',
+    'deleteRider(\''+policyNo+'\','+riderIdx+',POLICIES_DEMO.find(function(p){return p.no===\''+policyNo+'\';}).riders['+riderIdx+'])');
 }
 
 function deleteRider(policyNo, riderIdx, rider){
@@ -4974,9 +4988,18 @@ async function saveStandaloneCard(editIdx){
 }
 
 function deleteStandaloneCard(idx){
-  var th = S.lang==='th';
   var c = HOSP_CARDS[idx];
-  if(!confirm(th?'ลบบัตร "'+c.title+'" ใช่ไหม?':'Delete card "'+c.title+'"?')) return;
+  if(!c) return;
+  var th = S.lang==='th';
+  showDeleteConfirm(
+    th?'ลบบัตรหาหมอ?':'Delete Card?',
+    '"'+(c.title||'')+(c.cardNo?' · '+c.cardNo:'')+'"',
+    'doDeleteCard('+idx+')');
+}
+
+function doDeleteCard(idx){
+  var c = HOSP_CARDS[idx];
+  if(!c) return;
   if(!S.demo && sbAuth && c.dbId){
     (async function(){
       try { await getDbClient().from('hospital_cards').delete().eq('id', c.dbId); }
@@ -4984,7 +5007,8 @@ function deleteStandaloneCard(idx){
     })();
   }
   HOSP_CARDS.splice(idx, 1);
-  toast(th?'ลบบัตรแล้ว':'Card deleted');
+  closeModalForce();
+  toast(S.lang==='th'?'ลบบัตรแล้ว':'Card deleted');
   renderInsurance();
 }
 
