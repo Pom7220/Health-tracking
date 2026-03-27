@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.2';
+var APP_VERSION = '2.9.3';
 var APP_DATE = '27 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
@@ -3422,7 +3422,7 @@ function renderInsurance(){
   // ── (2) CONTEXT SWITCHER ──────────────────────────────────
   var ctxs = [
     {id:'home', icon:'&#x1F3E0;', label:th?'หน้าหลัก':'Home'},
-    {id:'opd',  icon:'&#x1F48A;', label:'OPD'},
+    {id:'opd',  icon:'&#x1F48A;', label:'OPD/ER'},
     {id:'ipd',  icon:'&#x1F6CF;', label:'IPD'},
     {id:'surg', icon:'&#x1FA79;', label:th?'ผ่าตัด':'Surgery'}
   ];
@@ -3504,15 +3504,19 @@ function renderInsurance(){
     });
     var sr=[];
     if(covAll.room.length){
-      // Best non-ICU room rate (exclude ICU-named riders from the room summary)
+      // Best non-ICU room from 1st baht (what you can use immediately, no deductible)
       var nonIcuRooms = covAll.room.filter(function(r){return !/ICU|ICC/i.test(r.name||'');});
-      var bR = nonIcuRooms.filter(function(r){return r.fromFirst;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]
+      var bR = nonIcuRooms.filter(function(r){return r.fromFirst&&!r.deductible;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]
              || nonIcuRooms.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];
       if(bR&&bR.perDay) sr.push({l:th?'ค่าห้องสูงสุด/วัน':'Best Room/day',v:bR.perDay.toLocaleString()+' ฿'});
     }
-    if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(sA)sr.push({l:th?'ค่าผ่าตัดรวม':'Surgery',v:fmtTHB(sA)});}
+    // Surgery: SUM of all surgery rider amounts
+    if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(sA)sr.push({l:th?'ค่าผ่าตัดรวม':'Total Surgery',v:fmtTHB(sA)});}
+    // CI: SUM of all CI/cancer rider amounts
     if(covAll.ci.length){var cA=covAll.ci.reduce(function(s,r){return s+(r.amount||0);},0);if(cA)sr.push({l:'CI/มะเร็ง',v:fmtTHB(cA)});}
+    // Cash: SUM of all daily cash riders per day
     if(covAll.cash.length){var cD=covAll.cash.reduce(function(s,r){return s+(r.perDay||0);},0);if(cD)sr.push({l:th?'ชดเชย/วัน':'Daily cash',v:cD.toLocaleString()+' ฿'});}
+    // OPD: SUM
     if(covAll.opd.length){var oA=covAll.opd.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(oA)sr.push({l:'OPD',v:fmtTHB(oA)});}
     if(sr.length){
       html += '<div onclick="openCoverageSummary()" style="background:rgba(38,217,176,.05);border:1px solid rgba(38,217,176,.18);border-radius:14px;padding:10px 14px;margin-bottom:12px;cursor:pointer">';
@@ -3571,36 +3575,49 @@ function renderInsurance(){
     html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">&#x1F3E5; '+(th?'บัตรหาหมอ — แสดงที่เคาน์เตอร์':'Patient cards — show at reception')+'</div>';
     html += renderPatientCardStrip(pr, th, true);
 
-    // OPD coverage — only true outpatient (opd_general)
-    var opdRows = [];
-    activePols.forEach(function(pol){
-      (pol.riders||[]).forEach(function(r){
-        if(r.cat==='opd_general'){
-          var val = r.amount ? fmtTHB(r.amount)+'/visit' : (r.perDay?fmtTHB(r.perDay)+'/day':'ตามจริง');
-          opdRows.push({insurer:pol.insurer, no:pol.no, name:r.name, val:val, fromFirst:r.fromFirst});
-        }
+    function buildRiderRows(cats){
+      var rows = [];
+      activePols.forEach(function(pol){
+        (pol.riders||[]).forEach(function(r){
+          if(cats.indexOf(r.cat)<0) return;
+          var val = r.amount ? fmtTHB(r.amount) : (r.perDay ? fmtTHB(r.perDay)+'/day' : 'ตามจริง');
+          rows.push({insurer:pol.insurer, no:pol.no, name:r.name, val:val, fromFirst:r.fromFirst});
+        });
       });
-    });
-    if(opdRows.length){
-      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin:10px 0 6px">&#x1F48A; OPD Coverage</div>';
-      html += '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden">';
-      opdRows.forEach(function(r,i){
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'\">';
-        html += '<div><div style="font-size:12px;font-weight:600;color:var(--t1)"><span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:6px;padding:1px 5px;margin-right:4px">'+r.insurer+'</span>'+r.name+'</div>';
-        if(!r.fromFirst) html += '<div style="font-size:10px;color:var(--amber)">&#x26A0; deductible applies</div>';
-        html += '</div><span style="font-size:13px;font-weight:700;color:var(--teal)">'+r.val+'</span></div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div style="text-align:center;padding:20px;color:var(--t3);font-size:12px">'+(th?'ไม่พบความคุ้มครอง OPD':'No OPD coverage found')+'</div>';
+      return rows;
     }
 
-    // Claim tip
-    var noDeductOPD = opdRows.filter(function(r){return r.fromFirst;});
-    if(noDeductOPD.length){
-      html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-top:10px">';
+    function renderRiderTable(rows){
+      if(!rows.length) return '<div style="font-size:12px;color:var(--t3);padding:8px 0">'+(th?'ไม่พบความคุ้มครอง':'No coverage found')+'</div>';
+      var h = '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:10px">';
+      rows.forEach(function(r,i){
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;'+(i?'border-top:1px solid rgba(255,255,255,.06)':'')+'">';
+        h += '<div><span style="font-size:10px;background:rgba(79,195,247,.15);color:var(--blue);border-radius:5px;padding:1px 5px;margin-right:4px">'+r.insurer+'</span>';
+        h += '<span style="font-size:12px;font-weight:600;color:var(--t1)">'+r.name+'</span>';
+        if(!r.fromFirst) h += '<div style="font-size:10px;color:var(--amber)">&#x26A0; deductible applies</div>';
+        h += '</div><span style="font-size:13px;font-weight:700;color:var(--teal)">'+r.val+'</span></div>';
+      });
+      h += '</div>';
+      return h;
+    }
+
+    // ── OPD Section ──────────────────────────────────────────
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin:10px 0 6px">&#x1F48A; OPD '+(th?'ผู้ป่วยนอก':'Outpatient')+'</div>';
+    var opdRows = buildRiderRows(['opd_general']);
+    html += renderRiderTable(opdRows);
+
+    // ── ER / Accident OPD Section ─────────────────────────────
+    html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin:10px 0 6px">&#x1F691; ER / '+(th?'อุบัติเหตุ':'Accident OPD')+'</div>';
+    var erRows = buildRiderRows(['opd_accident','accident_medical']);
+    html += renderRiderTable(erRows);
+
+    // ── Claim tip ─────────────────────────────────────────────
+    var allOpdEr = opdRows.concat(erRows);
+    var noDeduct = allOpdEr.filter(function(r){return r.fromFirst;});
+    if(noDeduct.length){
+      html += '<div style="background:rgba(105,240,174,.07);border:1px solid rgba(105,240,174,.2);border-radius:12px;padding:10px 12px;margin-top:2px">';
       html += '<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">&#x2705; '+(th?'แนะนำ — ไม่มี Deductible':'Recommended — no deductible')+'</div>';
-      noDeductOPD.forEach(function(r){
+      noDeduct.forEach(function(r){
         html += '<div style="font-size:12px;color:var(--t2)">• <b>'+r.insurer+' '+r.no+'</b> — '+r.name+'</div>';
       });
       html += '</div>';
@@ -4044,6 +4061,7 @@ function renderInsuranceAllPolicies(pols, th){
     html+='<div style="display:flex;gap:8px">';
     html+='<button class="btn btn-secondary" onclick="editPolicy(&quot;'+pol.no+'&quot;)" style="flex:1;font-size:13px;padding:9px;font-weight:600">&#x270F;&#xFE0F; '+(th?'แก้ไข':'Edit')+'</button>';
     if(!imgs.length) html+='<button class="btn btn-secondary" onclick="uploadCardImage(&quot;'+pol.no+'&quot;)" style="font-size:15px;padding:9px 14px" title="'+(th?'เพิ่มรูปบัตร':'Add photo')+'">&#x1F4F7;</button>';
+    html+='<button class="btn btn-secondary" onclick="confirmDeletePolicy(\''+pol.no+'\')" style="font-size:15px;padding:9px 12px;background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.25);color:var(--red)" title="'+(th?'ลบกรมธรรม์':'Delete policy')+'">&#x1F5D1;</button>';
     html+='</div>';
 
     html+='</div>'; // card
@@ -4325,19 +4343,21 @@ function editPolicy(policyNo){
   html += '<div class="fg" style="display:flex;align-items:center;gap:8px"><input id="ep-self" type="checkbox"'+(pol.selfPaid?' checked':'')+' style="width:18px;height:18px"><label class="lbl" style="margin:0">'+(th?'จ่ายเบี้ยเอง (ไม่ใช่นายจ้าง)':'Self-paid (not employer)')+'</label></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><textarea id="ep-notes" class="inp" rows="2">'+(pol.note||pol.notes||'')+'</textarea></div>';
   // Riders
+  // Riders — with delete per rider
   html += '<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:6px">&#x1F4CB; '+(th?'สัญญาเพิ่มเติม':'Riders')+' ('+((pol.riders||[]).length)+')</div>';
   (pol.riders||[]).forEach(function(r,i){
     var val = r.perDay?r.perDay:r.amount||'';
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;padding:6px;background:rgba(255,255,255,.04);border-radius:8px">';
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:8px">';
     html+='<span style="flex:1;color:var(--t2)">'+r.name+'</span>';
-    html+='<span style="color:var(--teal);font-weight:700">'+(val?val.toLocaleString():'-')+' ฿</span>';
+    html+='<span style="color:var(--teal);font-weight:700;margin-right:8px">'+(val?val.toLocaleString():'-')+' ฿</span>';
+    html+='<button onclick="confirmDeleteRider(\''+policyNo+'\','+i+')" style="background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.3);color:var(--red);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">&#x1F5D1;</button>';
     html+='</div>';
   });
   html += '<button class="btn btn-secondary" onclick="addRiderToPolicy(&quot;'+policyNo+'&quot;)" style="margin-top:6px;font-size:12px">+ '+(th?'เพิ่มสัญญาเพิ่มเติม':'Add Rider')+'</button>';
   html += '</div>';
 
   html += '<div style="display:flex;gap:10px;margin-top:16px">';
-  html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
+  html += '<button class="btn btn-secondary" onclick="confirmDeletePolicy(\''+policyNo+'\')" style="flex:1;background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.3);color:var(--red)">&#x1F5D1; '+(th?'ลบ':'Delete')+'</button>';
   html += '<button class="btn btn-primary" onclick="saveEditPolicyFull(&quot;'+policyNo+'&quot;)" style="flex:2">'+(th?'บันทึก':'Save Changes')+'</button>';
   html += '</div>';
 
@@ -4371,7 +4391,80 @@ function saveEditPolicyFull(policyNo){
   }
 }
 
-// ── 3.4 STANDALONE บัตรหาหมอ — in-memory store ───────────────
+// ── DELETE POLICY with confirmation ──────────────────────────
+function confirmDeletePolicy(policyNo){
+  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+  if(!pol) return;
+  var th = S.lang==='th';
+  var msg = th
+    ? 'ลบกรมธรรม์ "'+pol.name+'" ('+policyNo+') ?\n\nการลบจะลบสัญญาเพิ่มเติมทั้งหมดด้วย ไม่สามารถกู้คืนได้'
+    : 'Delete policy "'+pol.name+'" ('+policyNo+') ?\n\nAll riders will also be deleted. This cannot be undone.';
+  if(!confirm(msg)) return;
+  deletePolicy(policyNo);
+}
+
+function deletePolicy(policyNo){
+  var th = S.lang==='th';
+  var idx = POLICIES_DEMO.findIndex(function(p){return p.no===policyNo;});
+  if(idx<0) return;
+  POLICIES_DEMO.splice(idx,1);
+  // Delete from DB
+  if(!S.demo && sbAuth){
+    (async function(){
+      try {
+        var db = getDbClient();
+        // Delete riders first (FK), then policy
+        var {data:polRow} = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
+        if(polRow){
+          await db.from('policy_riders').delete().eq('policy_id',polRow.id);
+          await db.from('insurance_policies').delete().eq('id',polRow.id);
+        }
+      } catch(e){ console.warn('deletePolicy DB:', e); }
+    })();
+  }
+  closeModalForce();
+  toast(th?'ลบกรมธรรม์แล้ว':'Policy deleted');
+  renderInsurance();
+}
+
+// ── DELETE RIDER with confirmation ────────────────────────────
+function confirmDeleteRider(policyNo, riderIdx){
+  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+  if(!pol||!pol.riders||!pol.riders[riderIdx]) return;
+  var r = pol.riders[riderIdx];
+  var th = S.lang==='th';
+  var msg = th
+    ? 'ลบสัญญาเพิ่มเติม "'+r.name+'" ?\nไม่สามารถกู้คืนได้'
+    : 'Delete rider "'+r.name+'" ?\nThis cannot be undone.';
+  if(!confirm(msg)) return;
+  deleteRider(policyNo, riderIdx, r);
+}
+
+function deleteRider(policyNo, riderIdx, rider){
+  var pol = POLICIES_DEMO.find(function(p){return p.no===policyNo;});
+  if(!pol||!pol.riders) return;
+  var th = S.lang==='th';
+  pol.riders.splice(riderIdx,1);
+  // Delete from DB by matching rider_name + policy_id
+  if(!S.demo && sbAuth){
+    (async function(){
+      try {
+        var db = getDbClient();
+        var {data:polRow} = await db.from('insurance_policies').select('id').eq('policy_number',policyNo).single();
+        if(polRow){
+          await db.from('policy_riders')
+            .delete()
+            .eq('policy_id', polRow.id)
+            .eq('rider_name', rider.name);
+        }
+      } catch(e){ console.warn('deleteRider DB:', e); }
+    })();
+  }
+  toast(th?'ลบสัญญาเพิ่มเติมแล้ว':'Rider deleted');
+  editPolicy(policyNo); // refresh modal
+}
+
+
 var HOSP_CARDS = [];  // [{id, title, hospital, cardNo, notes, image, profileId}]
 
 // Load standalone hospital cards from DB on login
@@ -4940,19 +5033,6 @@ function openCoverageSummary(){
   });
 
   // บัตรหาหมอ (standalone, filtered by profile)
-  var myCards = HOSP_CARDS.filter(function(c){ return !c.profileId || c.profileId === p.dbId; });
-  if(myCards.length){
-    html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.06em;margin-bottom:5px">'+(th?'บัตรหาหมอ':'Hospital Cards')+'</div>';
-    myCards.forEach(function(c){
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">';
-      if(c.image) html += '<img src="'+c.image+'" style="width:36px;height:26px;object-fit:cover;border-radius:5px;flex-shrink:0">';
-      html += '<div><div style="font-size:12px;color:var(--t2)">&#x1F3E5; <b>'+c.title+'</b>'+(c.hospital?' — '+c.hospital:'')+'</div>';
-      if(c.cardNo) html += '<div style="font-size:13px;font-weight:700;color:var(--teal);letter-spacing:2px;font-family:monospace">'+c.cardNo+'</div>';
-      html += '</div></div>';
-    });
-    html += '</div>';
-  }
-
   openModal(th?'สรุปความคุ้มครอง':'Coverage Summary', html);
 }
 
