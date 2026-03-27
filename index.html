@@ -3780,9 +3780,7 @@ function renderInsurance(){
   }
 
  
-    // Surgery coverage
-    var surgRows=[], orRows=[], aneRows=[], medRows=[], ciRows=[];
-    activePols.forEach(function(pol){
+     activePols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
         if(r.cat==='ipd_surgery') surgRows.push({pol:pol,r:r});
         else if(r.cat==='ipd_surgery_room') orRows.push({pol:pol,r:r});
