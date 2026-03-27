@@ -1065,22 +1065,33 @@ function getDbClient(){
   }
 }
 
+// Maps DB relationship value → CSS avatar class
+var REL_AVCLS = { self:'av-r', spouse:'av-k', daughter_1:'av-d1', daughter_2:'av-d2', son_1:'av-s1', son_2:'av-s2' };
+
 async function loadProfilesFromDB() {
   if(!sbAuth) return;
   try {
     var db = getDbClient();
     if(!db) return;
-    var { data, error } = await db.from('health_profiles').select('*').order('full_name');
+    var { data, error } = await db.from('health_profiles').select('*').order('sort_order');
     if(error || !data || !data.length) return;
-    // Map DB profiles to app profiles
-    data.forEach(function(dbP){
-      var local = PROFILES.find(function(p){ return p.dbId === dbP.id; });
-      if(local){
-        local.hospital = dbP.primary_hospital || local.hospital;
-        local.blood = dbP.blood_group || local.blood;
-      }
+    PROFILES = data.map(function(p){
+      var nick = p.nickname || p.full_name.split(' ')[0];
+      return {
+        id:      p.slug || p.full_name.split(' ')[0].toLowerCase(),
+        dbId:    p.id,
+        name:    p.full_name,
+        nick:    nick,
+        gender:  p.gender,
+        blood:   p.blood_group,
+        dob:     p.date_of_birth,
+        hospital:p.primary_hospital || '-',
+        avCls:   REL_AVCLS[p.relationship] || 'av-r',
+        av:      nick[0].toUpperCase(),
+        color:   p.avatar_color || '#4fc3f7'
+      };
     });
-    console.log('Profiles loaded from DB:', data.length);
+    console.log('Profiles loaded from DB:', PROFILES.length);
   } catch(e){ console.warn('loadProfilesFromDB error:', e); }
 }
 
@@ -1169,12 +1180,29 @@ async function saveHealthRecordToDB(profileId, year, data) {
   } catch(e){ console.warn('saveHealthRecordToDB error:', e); return false; }
 }
 
+async function loadInsurersFromDB() {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('insurers').select('*').order('short_code');
+    if(error || !data || !data.length) return;
+    INSURERS_DEMO = data.map(function(r){
+      return { code: r.short_code, name: r.name_th || r.name_en, color: r.logo_color || '#666', hotline: r.hotline || '' };
+    });
+    console.log('Insurers loaded from DB:', INSURERS_DEMO.length);
+  } catch(e){ console.warn('loadInsurersFromDB error:', e); }
+}
+
 async function loadAllDataFromDB() {
   if(!sbAuth || S.demo) return;
   toast(S.lang==='th' ? 'กำลังโหลดข้อมูล...' : 'Loading from database...');
+  await loadInsurersFromDB();
   await loadProfilesFromDB();
-  await loadHealthRecordsFromDB('rutchapon');
-  await loadHealthRecordsFromDB('kanokpai');
+  // Load health records for all profiles now that PROFILES is populated from DB
+  for(var i=0; i<PROFILES.length; i++){
+    await loadHealthRecordsFromDB(PROFILES[i].id);
+  }
   await loadInsuranceFromDB();
   await loadHospitalCardsFromDB();
   await loadDoctorVisitsFromDB();
@@ -1187,9 +1215,11 @@ async function loadInsuranceFromDB(){
   try {
     var db = getDbClient();
     if(!db) return;
+    var uid = (await sbAuth.auth.getUser()).data?.user?.id;
+    if(!uid) return;
     var { data, error } = await getDbClient().from('insurance_policies')
       .select('*, policy_riders(*), premium_payments(*)')
-      .eq('owner_id','05e2165e-a9e0-4bcd-b0a7-bb1858bd86de')
+      .eq('owner_id', uid)
       .order('sort_order');
     if(error||!data||!data.length) return;
     var loaded = data.map(function(row){
