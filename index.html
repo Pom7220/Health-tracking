@@ -362,7 +362,7 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.4';
+var APP_VERSION = '2.9.5';
 var APP_DATE = '27 Mar 2026';
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
@@ -918,6 +918,14 @@ function bmiLbl(b){
   return {t:'Obese (Thai)',c:'b-alert'};
 }
 function fmtDate(d){ try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }catch(e){return d;} }
+
+// True if rider name indicates ICU/CCU — "Non-ICU" is NOT an ICU rider
+function isICURider(name){
+  if(!name) return false;
+  // Exclude "Non-ICU", "Non-ICC", "non-ICU" patterns
+  if(/Non-?ICU|Non-?ICC/i.test(name)) return false;
+  return /\bICU\b|\bICU\/|\/ICU|CCU\b|\bICC\b/i.test(name);
+}
 function fmtTHB(n){
   if(!n && n!==0) return '–';
   if(n===0) return '0 ฿';
@@ -3505,10 +3513,10 @@ function renderInsurance(){
     var sr=[];
     if(covAll.room.length){
       // Best non-ICU room from 1st baht (what you can use immediately, no deductible)
-      var nonIcuRooms = covAll.room.filter(function(r){return !/ICU|ICC/i.test(r.name||'');});
+      var nonIcuRooms = covAll.room.filter(function(r){return !isICURider(r.name||'');});
       var bR = nonIcuRooms.filter(function(r){return r.fromFirst&&!r.deductible;}).sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0]
              || nonIcuRooms.sort(function(a,b){return(b.perDay||0)-(a.perDay||0);})[0];
-      if(bR&&bR.perDay) sr.push({l:th?'ค่าห้องสูงสุด/วัน':'Best Room/day',v:bR.perDay.toLocaleString()+' ฿'});
+      if(bR&&bR.perDay) sr.push({l:th?'ค่าห้อง/วัน (สูงสุด)':'Room/night (max)',v:bR.perDay.toLocaleString()+' ฿'});
     }
     // Surgery: SUM of all surgery rider amounts
     if(covAll.surgery.length){var sA=covAll.surgery.filter(function(r){return r.amount;}).reduce(function(s,r){return s+(r.amount||0);},0);if(sA)sr.push({l:th?'ค่าผ่าตัดรวม':'Total Surgery',v:fmtTHB(sA)});}
@@ -3634,7 +3642,7 @@ function renderInsurance(){
     var roomRows=[];
     activePols.forEach(function(pol){
       (pol.riders||[]).forEach(function(r){
-        if(r.cat==='ipd_room_board' && !/ICU|ICC/i.test(r.name||'')){roomRows.push({pol:pol,r:r});}
+        if(r.cat==='ipd_room_board' && !isICURider(r.name||'')){roomRows.push({pol:pol,r:r});}
         if(r.cat==='ipd_total'){roomRows.push({pol:pol,r:r,isTotal:true});}
       });
     });
@@ -3667,7 +3675,7 @@ function renderInsurance(){
     // ICU coverage
     var icuRows=[];
     activePols.forEach(function(pol){(pol.riders||[]).forEach(function(r){
-      if(r.cat==='icu' || (r.cat==='ipd_room_board' && /ICU|ICC/i.test(r.name||'')))
+      if(r.cat==='icu' || (r.cat==='ipd_room_board' && isICURider(r.name||'')))
         icuRows.push({pol:pol,r:r});
     });});
     if(icuRows.length){
@@ -3881,9 +3889,9 @@ function renderInsuranceSituation(pols, view, th){
     (pol.riders||[]).forEach(function(r){
       if(cats.indexOf(r.cat)<0) return;
       // ICU: only riders with ICU/ICC in name
-      if(isICU && !/ICU|ICC|icu|icc/i.test(r.name) && !/ICU|ICC/i.test(r.code||'')) return;
+      if(isICU && !isICURider(r.name||'') && !isICURider(r.code||'')) return;
       // Room (non-ICU): exclude ICU-named riders
-      if(view==='room' && /ICU|ICC/i.test(r.name)) return;
+      if(view==='room' && isICURider(r.name||'')) return;
       rows.push({pol:pol, r:r, color:color});
     });
   });
@@ -4405,7 +4413,7 @@ function editPolicy(policyNo){
     html += '<button onclick="confirmDeleteRider(\''+policyNo+'\','+i+')" style="background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.3);color:var(--red);border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer">🗑</button>';
     html += '</div>';
     // Inline edit panel (hidden by default)
-    html += '<div id="rider-edit-'+policyNo+'-'+i+'" style="display:none;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px">';
+    html += '<div id="rider-edit-'+policyNo+'-'+i+'" data-rider-edit="'+policyNo+'-'+i+'" style="display:none;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px">';
     // Category reclassify dropdown
     html += '<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">'+(th?'ประเภท (กดเพื่อเปลี่ยน)':'Category (tap to reclassify)')+'</label>';
     html += '<select id="rider-cat-'+policyNo+'-'+i+'" class="inp" style="margin-top:3px;font-size:12px" onchange="previewRiderCatChange(\''+policyNo+'\','+i+',this.value)">';
@@ -4512,9 +4520,18 @@ function deletePolicy(policyNo){
 // ── DELETE RIDER with confirmation ────────────────────────────
 // ── RIDER INLINE EDIT ─────────────────────────────────────────
 function toggleRiderEdit(policyNo, idx){
-  var panel = document.getElementById('rider-edit-'+policyNo+'-'+idx);
+  // Use querySelector with CSS.escape-safe selector
+  var escapedId = 'rider-edit-'+policyNo+'-'+idx;
+  var panel = document.getElementById(escapedId);
+  if(!panel){
+    // Fallback: search by data-rider attribute in modal-body
+    var panels = document.querySelectorAll('[data-rider-edit]');
+    panels.forEach(function(el){
+      if(el.getAttribute('data-rider-edit') === policyNo+'-'+idx) panel = el;
+    });
+  }
   if(!panel) return;
-  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+  panel.style.display = (panel.style.display==='none'||panel.style.display==='') ? 'block' : 'none';
 }
 
 function previewRiderCatChange(policyNo, idx, newCat){
@@ -5158,9 +5175,9 @@ function openCoverageSummary(){
       (pol.riders||[]).forEach(function(r){
         if(cat.cats.indexOf(r.cat)<0) return;
         // ICU section: only riders with ICU/ICC in name OR dedicated icu cat
-        if(cat.icuOnly && r.cat!=='icu' && !/ICU|ICC/i.test(r.name||'')) return;
+        if(cat.icuOnly && r.cat!=='icu' && !isICURider(r.name||'')) return;
         // ค่าห้อง section: exclude ICU-named riders (they belong in ICU section)
-        if(cat.excludeICU && /ICU|ICC/i.test(r.name||'')) return;
+        if(cat.excludeICU && isICURider(r.name||'')) return;
         var val = r.perDay ? fmtTHB(r.perDay)+(th?'/วัน':'/day') : (r.amount ? fmtTHB(r.amount) : (th?'ตามจริง':'Actual'));
         rows.push({insurer:pol.insurer, rName:r.name, val:val, fromFirst:r.fromFirst, ded:r.deductible||0});
       });
