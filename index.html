@@ -1,10 +1,6 @@
 
 <!DOCTYP
-      HR['rutchapon'][2026] = {
-        date:'2026-01-24', age:55, hospital:'Praram 9',
-        psa:0.18, notes:'PSA recheck 24-Jan-2026: 0.18 ng/mL (prev 0.29 on 07-Sep-2025). DECREASED. Normal range 0-4.0. ดีมาก PSA ลดลง.'
-      };
-E html>
+      <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -849,24 +845,7 @@ function getRefs(gender, age) {
   };
 }
 
-var HR = {
-  rutchapon: {
-    2021:{ date:'2021-11-05', age:51, hospital:'Vichaiyut', weight:60,   height:160.5, bp:'N/A',    pulse:null, bmi:23.3, hb:null, hct:null, mcv:85.5, wbc:null,  neut:null, lymph:26, eos:5,   plat:247000, sugar:97,  chol:219, trig:89, hdl:58, ldl:161, uric:5.8, bun:9,    creat:0.85, egfr:101, sgot:null, sgpt:null, alp:63, afp:2.11, cea:1.2,  psa:0.21, ekg:true, notes:'LDL too high. MAY21: Appendix surgery Praram9, Hemorrhoid surgery Vejthani, Colon scope clear.' },
-    2022:{ date:'2022-10-31', age:52, hospital:'Praram 9',  weight:59.3, height:162.5, bp:'109/74', pulse:65,   bmi:22.4, hb:14.7, hct:43, mcv:89,   wbc:7230,  neut:70.4, lymph:18, eos:3.1, plat:219000, sugar:94,  chol:207, trig:83, hdl:52, ldl:138, uric:6.5, bun:12.7, creat:1.01, egfr:85,  sgot:22,   sgpt:14,   alp:68, afp:2.0,  cea:0.73, psa:0.21, ekg:true, notes:'Gastroscopy Vejthani: fungal infection found, medication prescribed.' },
-    2023:{ date:'2023-10-31', age:53, hospital:'Praram 9',  weight:60.2, height:161.9, bp:'110/73', pulse:66,   bmi:23.0, hb:14.8, hct:45, mcv:91,   wbc:5490,  neut:58.1, lymph:28.7, eos:6.4, plat:250000, sugar:92,  chol:204, trig:108, hdl:47, ldl:135, uric:6.5, bun:12.7, creat:1.01, egfr:85, sgot:16, sgpt:15, alp:70, afp:2.01, cea:1.32, psa:0.23, ekg:true, notes:'WBC elevated - allergy response. LDL high. GB polyp 0.3cm stable.' },
-    2024:{ date:'2024-09-13', age:54, hospital:'Praram 9',  weight:62.7, height:161.9, bp:'115/74', pulse:64,   bmi:23.9, hb:14.8, hct:46, mcv:90,   wbc:6040,  neut:57.6, lymph:29, eos:7.4, plat:222000, sugar:96, hba1c:5.4, chol:223, trig:86, hdl:53, ldl:162, uric:5.6, bun:14.6, creat:0.84, egfr:99, sgot:21, sgpt:26, alp:75, afp:2.15, cea:1.3,  psa:0.18, ekg:true, notes:'Mild fatty liver. GB polyp 0.3cm. LDL high - see cardiologist.' },
-    2025:{ date:'2025-09-07', age:55, hospital:'Praram 9',  weight:61.4, height:161.6, bp:'107/70', pulse:64,   bmi:23.51, hb:15.1, hct:45, mcv:90,  wbc:6990,  neut:62,   lymph:25.7, eos:5.5, plat:239000, sugar:93, hba1c:5.2, chol:223, trig:89, hdl:55, ldl:171, uric:6.5, bun:12.7, creat:1.01, egfr:85, sgot:22, sgpt:26, alp:78, afp:2.43, cea:1.04, psa:0.29, ekg:true, notes:'LDL 171 high. Eosinophil elevated - allergy. GB polyp 0.3cm stable.' }
-  },
-  kanokpai: {
-    2019:{ date:'2019-01-01', age:46, hospital:'Vichaiyut',  weight:null, height:null,  bp:null,     pulse:null, hb:12.6, hct:39.8, mcv:84.5, wbc:5800, neut:61, lymph:28, eos:3, plat:280000, sugar:91, chol:180, trig:47, hdl:53, ldl:117, uric:4.1, bun:10, creat:0.65, egfr:107, sgot:13, sgpt:11, alp:37, afp:1.74, cea:1.5 },
-    2020:{ date:'2020-10-09', age:47, hospital:'Vichaiyut',  weight:null, height:null,  bp:null,     pulse:null, hb:13.7, hct:42,   mcv:81.6, wbc:7020, neut:65, lymph:26, eos:3, plat:null, sugar:90, chol:201, trig:47, hdl:59, ldl:140, uric:4.2, bun:11, creat:0.62, egfr:108, sgot:14, sgpt:8,  alp:38, afp:2.09, cea:0.9, ekg:true, notes:'Mild pleural thickening. Spine curvature noted.' },
-    2021:{ date:'2021-11-05', age:48, hospital:'Vichaiyut',  weight:44.3, height:159,   bp:null,     pulse:null, bmi:17.5, hb:12.7, hct:39.1, mcv:82.5, wbc:5370, neut:56, lymph:33, eos:4, plat:null, sugar:90, chol:189, trig:61, hdl:53, ldl:136, uric:4.0, bun:10, creat:0.54, egfr:112, sgot:13, sgpt:9, alp:41, afp:1.88, ekg:true, notes:'Liver cyst 1cm. GB polyps 0.5cm. Kidney stones bilateral.' },
-    2022:{ date:'2022-10-31', age:49, hospital:'Praram 9',   weight:45,   height:157.6, bp:'105/70', pulse:70,   bmi:18.1, hb:12.3, hct:38,   mcv:82,   wbc:4460, neut:47.2, lymph:36.2, eos:4.8, plat:248000, sugar:91, chol:188, trig:86, hdl:56, ldl:115, uric:4.3, bun:8.5, creat:0.62, egfr:106, sgot:22, sgpt:20, alp:51, afp:1.71, cea:1.06, ekg:true, notes:'H.pylori treated. Mammogram OK. Kidney stones bilateral. Liver cyst 1cm.' },
-    2023:{ date:'2023-10-21', age:50, hospital:'Praram 9',   weight:45.9, height:157.5, bp:'100/65', pulse:79,   bmi:18.5, hb:12.4, hct:38,   mcv:83,   wbc:6750, neut:60.8, lymph:27.9, eos:3.8, plat:264000, sugar:95, hba1c:5.2, chol:179, trig:75, hdl:50, ldl:114, uric:3.3, bun:8.7, creat:0.59, egfr:107, sgot:19, sgpt:18, alp:48, afp:1.68, cea:1.22, ekg:true, notes:'HDL borderline low. EKG minor anomaly - no heart disease. Kidney stones stable.' },
-    2024:{ date:'2024-07-08', age:51, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'92/60', pulse:71, bmi:18.4, hb:12.8, hct:41, mcv:83, wbc:6360, neut:57.6, lymph:30.3, eos:5.1, plat:288000, sugar:92, hba1c:5.2, chol:202, trig:63, hdl:57, ldl:144, uric:4.3, bun:11.4, creat:0.64, egfr:104, sgot:17, sgpt:15, alp:51, afp:1.86, cea:1.34, ekg:true, notes:'Liver cyst 1.3cm. Kidney stones 3R+2L. GB polyps 4-5mm. EST treadmill excellent!' },
-    2025:{ date:'2025-07-23', age:52, hospital:'St. Louis / Rama 9', weight:46, height:158, bp:'89/59', pulse:74, bmi:18.4, hb:12.8, hct:39, mcv:82, wbc:7120, neut:61.2, lymph:28.3, eos:3.6, plat:288000, sugar:98, hba1c:5.3, chol:185, trig:62, hdl:56, ldl:130, uric:3.8, bun:11, creat:0.58, egfr:106, sgot:18, sgpt:15, alp:56, afp:1.88, cea:1.21, ekg:true, notes:'LDL improved to 130. Kidney stones stable. Shingles vaccine done. EST excellent.' }
-  }
-};
+var HR = {}; // Populated from Supabase health_records table
 
 var VISITS = [
   { id:1, pid:'rutchapon', date:'2021-05-15', type:'Surgery',   hospital:'Praram 9', proc:'Appendectomy',    notes:'Appendix removal - successful.', fu:'3 months' },
@@ -1108,8 +1087,8 @@ async function loadHealthRecordsFromDB(profileId) {
       .order('record_year');
     if(error || !data) return;
     // Map DB records to HR format
+    HR[profileId] = {};
     data.forEach(function(r){
-      HR[profileId] = HR[profileId] || {};
       HR[profileId][r.record_year] = {
         date: r.check_date, age: r.age_at_check, hospital: r.hospital,
         weight: r.weight_kg, height: r.height_cm, bmi: r.bmi,
@@ -1172,6 +1151,7 @@ async function saveHealthRecordToDB(profileId, year, data) {
       creatinine: data.creat || null, egfr: data.egfr || null,
       uric_acid: data.uric || null, bun: data.bun || null,
       sgot: data.sgot || null, sgpt: data.sgpt || null, alp: data.alp || null,
+      afp: data.afp || null, cea: data.cea || null, psa: data.psa || null,
       ekg_normal: data.ekg || null, doctor_notes: data.notes || null
     };
     var { error } = await db.from('health_records').upsert(payload, { onConflict: 'profile_id,record_year' });
