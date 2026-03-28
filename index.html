@@ -5289,26 +5289,50 @@ function openIPDWorkflow(){
   openModal(th?'ขั้นตอนการเบิก IPD':'IPD Claim Workflow', html);
 }
 
-
 function addInsuranceHTML(){
   var th = S.lang==='th';
   var html = '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+(th?'เพิ่มกรมธรรม์ใหม่':'Add a new insurance policy')+'</div>';
+  // Row 1: Policy name
   html += '<div class="fg"><label class="lbl">'+(th?'ชื่อกรมธรรม์':'Policy Name')+'</label><input id="np-name" class="inp" placeholder="e.g. AIA Health Care"></div>';
+  // Row 2: Policy no + Insurer
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   html += '<div class="fg"><label class="lbl">'+(th?'เลขกรมธรรม์':'Policy No.')+'</label><input id="np-no" class="inp"></div>';
   html += '<div class="fg"><label class="lbl">'+(th?'บริษัทประกัน':'Insurer')+'</label><select id="np-ins" class="inp" onchange="onInsurerChange(this)">';
   getAllInsurers().forEach(function(ins){ html+='<option value="'+ins.code+'">'+ins.code+' — '+ins.name+'</option>'; });
   html += '<option value="__custom__">+ '+(th?'เพิ่มบริษัทใหม่...':'Add new insurer...')+'</option>';
-  html += '</select></div>';+'</label><select id="np-holder" class="inp">';
+  html += '</select></div>';
+  // Row 3: Holder + Category
+  html += '<div class="fg"><label class="lbl">'+(th?'ผู้ถือกรมธรรม์':'Policy Holder')+'</label><select id="np-holder" class="inp">';
   PROFILES.forEach(function(p){ html+='<option value="'+p.name+'">'+p.name+' ('+p.nick+')</option>'; });
   html += '</select></div>';
-  html += '<div class="fg"><label class="lbl">'+(th?'เบี้ยประกัน/ปี (฿)':'Premium/yr')+'</label><input id="np-prem" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" placeholder="0"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'ประเภท':'Type')+'</label><select id="np-cat" class="inp">';
+  [['health',th?'สุขภาพ/Health':'Health'],['life',th?'ชีวิต/Life':'Life'],['accident',th?'อุบัติเหตุ':'Accident'],['critical_illness',th?'โรคร้ายแรง':'Critical Illness']].forEach(function(o){
+    html+='<option value="'+o[0]+'">'+o[1]+'</option>';
+  });
+  html += '</select></div>';
+  // Row 4: Start date + End date
+  html += '<div class="fg"><label class="lbl">'+(th?'วันที่เริ่ม':'Start Date')+'</label><input id="np-start" class="inp" type="date"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'วันที่ครบกำหนด':'End Date')+'</label><input id="np-end" class="inp" type="date"></div>';
+  // Row 5: Sum assured + Premium
+  html += '<div class="fg"><label class="lbl">'+(th?'ทุนประกัน (฿)':'Sum Assured (฿)')+'</label><input id="np-sum" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" placeholder="0"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'เบี้ยประกัน/ปี (฿)':'Annual Premium (฿)')+'</label><input id="np-prem" class="inp" type="text" inputmode="numeric" oninput="fmtInputComma(this)" placeholder="0"></div>';
+  // Row 6: Due month + Status
+  html += '<div class="fg"><label class="lbl">'+(th?'เดือนที่ครบกำหนดชำระ':'Due Month')+'</label><input id="np-due" class="inp" type="number" min="1" max="12" placeholder="1-12"></div>';
+  html += '<div class="fg"><label class="lbl">'+(th?'สถานะ':'Status')+'</label><select id="np-status" class="inp">';
+  [['active',th?'มีผลบังคับ':'Active'],['paid_up',th?'ชำระครบแล้ว':'Paid-up'],['matured',th?'ครบกำหนด':'Matured'],['lapsed',th?'ขาดอายุ':'Lapsed']].forEach(function(o){
+    html+='<option value="'+o[0]+'">'+o[1]+'</option>';
+  });
+  html += '</select></div>';
   html += '</div>';
   // Custom insurer name field (hidden by default)
   html += '<div id="np-custom-ins-row" class="fg" style="display:none"><label class="lbl">'+(th?'ชื่อบริษัทและรหัส (เช่น BUPA)':'Insurer code & name')+'</label>';
   html += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">';
   html += '<input id="np-custom-code" class="inp" placeholder="CODE" style="text-transform:uppercase">';
   html += '<input id="np-custom-name" class="inp" placeholder="'+(th?'ชื่อบริษัทประกัน':'Full insurer name')+'"></div></div>';
+  // Self-paid checkbox
+  html += '<div class="fg" style="display:flex;align-items:center;gap:8px"><input id="np-self" type="checkbox" checked style="width:18px;height:18px"><label class="lbl" style="margin:0">'+(th?'จ่ายเบี้ยเอง (ไม่ใช่นายจ้าง)':'Self-paid (not employer)')+'</label></div>';
+  // Notes
+  html += '<div class="fg"><label class="lbl">'+(th?'หมายเหตุ':'Notes')+'</label><textarea id="np-notes" class="inp" rows="2" placeholder="'+(th?'หมายเหตุ...':'Optional notes...')+'"></textarea></div>';
   html += '<div style="display:flex;gap:10px;margin-top:14px">';
   html += '<button class="btn btn-secondary" onclick="closeModalForce()" style="flex:1">'+(th?'ยกเลิก':'Cancel')+'</button>';
   html += '<button class="btn btn-primary" onclick="saveNewPolicy()" style="flex:2">'+(th?'บันทึกกรมธรรม์':'Save Policy')+'</button>';
@@ -5327,26 +5351,33 @@ function saveNewPolicy(){
   var name = (document.getElementById('np-name').value||'').trim();
   if(!no||!name){ toast(S.lang==='th'?'กรุณากรอกชื่อและเลขกรมธรรม์':'Please fill name and policy number'); return; }
   if(POLICIES_DEMO.find(function(p){return p.no===no;})){ toast(S.lang==='th'?'เลขกรมธรรม์นี้มีอยู่แล้ว':'Policy number already exists'); return; }
-  // 3.4: Handle custom insurer
+  // Handle custom insurer
   var insCode = document.getElementById('np-ins').value;
   if(insCode === '__custom__'){
     var customCode = (document.getElementById('np-custom-code').value||'').trim().toUpperCase();
     var customName = (document.getElementById('np-custom-name').value||'').trim();
     if(!customCode){ toast(S.lang==='th'?'กรุณากรอกรหัสบริษัท':'Please enter insurer code'); return; }
     insCode = customCode;
-    // Add to custom list if not already there
     if(!getAllInsurers().find(function(i){return i.code===customCode;})){
       CUSTOM_INSURERS.push({code:customCode, name:customName||customCode, color:'#888', hotline:''});
     }
   }
+  var cat = document.getElementById('np-cat').value || 'health';
+  if(insCode === 'HOSPITAL') cat = 'card';
   var pol = {
-    no:no, name:name, insurer:insCode,
-    holder:document.getElementById('np-holder').value, cat:'health',
-    status:'active', premium:parseFmtInput('np-prem')||0,
-    selfPaid:true, riders:[], hospital_cards:[]
+    no: no, name: name, insurer: insCode,
+    holder: document.getElementById('np-holder').value,
+    cat: cat,
+    status: document.getElementById('np-status').value || 'active',
+    startDate: document.getElementById('np-start').value || null,
+    endDate: document.getElementById('np-end').value || null,
+    sumAssured: parseFmtInput('np-sum') || null,
+    premium: parseFmtInput('np-prem') || 0,
+    dueMonth: parseInt(document.getElementById('np-due').value) || null,
+    selfPaid: document.getElementById('np-self').checked,
+    note: (document.getElementById('np-notes').value||'').trim() || null,
+    riders: [], hospital_cards: []
   };
-  // 3.4: บัตรหาหมอ type gets card policy
-  if(insCode === 'HOSPITAL') pol.cat = 'card';
   POLICIES_DEMO.push(pol);
   closeModalForce();
   if(!S.demo&&sbAuth) saveInsurancePolicyToDB(pol).then(function(ok){ toast(ok?'บันทึกลง DB ✓':'บันทึกในเครื่อง'); });
