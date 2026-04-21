@@ -357,8 +357,12 @@ function initSupabase() {
 }
 
 // ── STATE ────────────────────────────────────────────
-var APP_VERSION = '2.9.5';
-var APP_DATE = '27 Mar 2026';
+var APP_VERSION = '3.0.0';
+var APP_DATE = '21 Apr 2026';
+
+// ── QUICK VITALS CACHE (quick_vitals table, separate from health_records) ──
+// QV[profileId] = [ { id, visit_date, hospital, source, weight_kg, bmi, blood_pressure, pulse_rate, blood_sugar, hba1c, note }, ... ]
+var QV = {};
 
 var S = { tab:'dashboard', pid:'rutchapon', year:2025, demo:true, charts:{}, cmpYear:2025, cmpA:'rutchapon', cmpB:'kanokpai', insFilter:'rutchapon', insContext:'home', lang:'th', drillMetric:null, insView:'all', insSearch:'' };
 
@@ -1128,6 +1132,66 @@ async function loadDoctorVisitsFromDB() {
   } catch(e){ console.warn('loadDoctorVisitsFromDB error:', e); }
 }
 
+async function loadQuickVitalsFromDB() {
+  if(!sbAuth) return;
+  try {
+    var db = getDbClient();
+    if(!db) return;
+    var { data, error } = await db.from('quick_vitals')
+      .select('*').order('visit_date', {ascending: false});
+    if(error || !data) return;
+    QV = {};
+    data.forEach(function(v){
+      var profile = PROFILES.find(function(p){ return p.dbId === v.profile_id; });
+      if(!profile) return;
+      var pid = profile.id;
+      if(!QV[pid]) QV[pid] = [];
+      // parse BP string "120/80" → sbp/dbp
+      var sbp = null, dbp = null;
+      if(v.blood_pressure && v.blood_pressure.indexOf('/') > -1){
+        var parts = v.blood_pressure.split('/');
+        sbp = parseFloat(parts[0]) || null;
+        dbp = parseFloat(parts[1]) || null;
+      }
+      QV[pid].push({
+        id: v.id, visit_date: v.visit_date, hospital: v.hospital,
+        source: v.source,
+        weight: v.weight_kg, bmi: v.bmi, height: v.height_cm,
+        bp: v.blood_pressure, sbp: sbp, dbp: dbp,
+        pulse: v.pulse_rate, sugar: v.blood_sugar, hba1c: v.hba1c,
+        note: v.note
+      });
+    });
+    console.log('Quick vitals loaded:', Object.keys(QV).map(function(k){ return k+':'+QV[k].length; }).join(', '));
+  } catch(e){ console.warn('loadQuickVitalsFromDB error:', e); }
+}
+
+async function saveQuickVitalsToDB(profileId, fields) {
+  if(!sbAuth) return false;
+  try {
+    var db = getDbClient();
+    if(!db) return false;
+    var p = PROFILES.find(function(x){ return x.id === profileId; });
+    if(!p || !p.dbId) return false;
+    var payload = {
+      profile_id: p.dbId,
+      visit_date: fields.date,
+      hospital: fields.hospital || null,
+      source: fields.source || 'opd_quick',
+      weight_kg: fields.weight || null,
+      height_cm: fields.height || null,
+      blood_pressure: fields.bp || null,
+      pulse_rate: fields.pulse || null,
+      blood_sugar: fields.sugar || null,
+      hba1c: fields.hba1c || null,
+      note: fields.note || null
+    };
+    var { error } = await db.from('quick_vitals').insert(payload);
+    if(error){ console.error('saveQuickVitalsToDB error:', error); return false; }
+    return true;
+  } catch(e){ console.warn('saveQuickVitalsToDB error:', e); return false; }
+}
+
 async function saveHealthRecordToDB(profileId, year, data) {
   if(!sbAuth) return false;
   try {
@@ -1184,6 +1248,7 @@ async function loadAllDataFromDB() {
   await loadInsuranceFromDB();
   await loadHospitalCardsFromDB();
   await loadDoctorVisitsFromDB();
+  await loadQuickVitalsFromDB();
   renderTab(S.tab);
   toast(S.lang==='th' ? 'โหลดข้อมูลสำเร็จ ✓' : 'Data loaded ✓');
 }
@@ -1958,7 +2023,7 @@ function renderTrends(){
     html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px">'+(S.lang==='th'?'\u0E44ตและเหมาะประยาจ &mdash; eGFR':'Kidney Function &mdash; eGFR')+'</div><div class="chart-wrap"><canvas id="c-egfr"></canvas></div></div>';
 
     // Blood Pressure
-    if(recs.some(function(r){return r.sbp||r.bp_sys;}))
+    if(recs.some(function(r){return r.bp && r.bp.indexOf('/')>-1 && r.bp!=='N/A';})||((QV[S.pid]||[]).some(function(v){return v.sbp;})))
       html += '<div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:10px" id="chart-bp">'+(S.lang==='th'?'\u0E04วามดันโลหิต':'Blood Pressure (mmHg)')+'</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--t2)"><span style="color:#ff5252">&#9679;</span> Systolic</span><span style="font-size:11px;color:var(--t2)"><span style="color:#4fc3f7">&#9679;</span> Diastolic</span></div><div class="chart-wrap"><canvas id="c-bp"></canvas></div></div>';
 
     // Triglycerides
@@ -1987,6 +2052,29 @@ function renderTrends(){
     // PSA (male only)
     if(p.gender==='Male' && recs.some(function(r){return r.psa;}))
       html += '<div class="card" id="chart-psa"><div style="font-size:14px;font-weight:600;margin-bottom:10px">PSA '+(S.lang==='th'?'(\u0E15่อมลูกหมาก)':'(Prostate)')+'</div><div class="chart-wrap"><canvas id="c-psa"></canvas></div></div>';
+
+    // Quick Vitals recent history card
+    var pidQV = QV[S.pid] || [];
+    if(pidQV.length){
+      html += '<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
+        '<span style="font-size:14px;font-weight:600">&#x26A1; Quick Vitals History</span>'+
+        '<span style="font-size:11px;color:var(--t3)">Last '+Math.min(pidQV.length,5)+' entries</span>'+
+        '</div>';
+      html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+      html += '<tr style="color:var(--t3);border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px 6px;font-weight:600">Date</th><th style="padding:4px 6px;font-weight:600">Wt</th><th style="padding:4px 6px;font-weight:600">BP</th><th style="padding:4px 6px;font-weight:600">Pulse</th><th style="padding:4px 6px;font-weight:600">Sugar</th><th style="text-align:left;padding:4px 6px;font-weight:600">Src</th></tr>';
+      pidQV.slice(0,5).forEach(function(v){
+        var srcIcon = v.source==='home' ? '&#x1F3E0;' : '&#x1F3E5;';
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'+
+          '<td style="padding:5px 6px;color:var(--t1)">'+v.visit_date+'</td>'+
+          '<td style="padding:5px 6px;text-align:center;color:var(--t2)">'+(v.weight ? v.weight+'kg' : '-')+'</td>'+
+          '<td style="padding:5px 6px;text-align:center;color:var(--t2)">'+(v.bp||'-')+'</td>'+
+          '<td style="padding:5px 6px;text-align:center;color:var(--t2)">'+(v.pulse ? v.pulse : '-')+'</td>'+
+          '<td style="padding:5px 6px;text-align:center;color:var(--t2)">'+(v.sugar ? v.sugar : '-')+'</td>'+
+          '<td style="padding:5px 6px;color:var(--t3)">'+srcIcon+'</td>'+
+        '</tr>';
+      });
+      html += '</table></div></div>';
+    }
 
     // AI Insight
     html += '<div class="ai-box"><div style="font-size:14px;font-weight:600;color:var(--violet);margin-bottom:10px">&#x1F916; AI Health Insight</div>'+aiInsight(S.pid, recs)+'</div>';
@@ -2267,39 +2355,56 @@ function drawCharts(pid){
   }});
 
   // WEIGHT - bar chart with value labels + ideal weight reference band
+  // Merges annual checkup (HR) + quick vitals (QV) data
   el=document.getElementById('c-weight');
   var wr=recs.filter(function(r){return r.weight&&r.height;});
   if(!wr.length) wr=recs.filter(function(r){return r.weight;});
-  if(el&&wr.length){
-    var latestH = wr[wr.length-1].height || 162;
-    var iw = idealWeightRange(p.gender, latestH, latestAge);
+  // Build QV weight points for overlay line
+  var qvForPid = (QV[pid]||[]).filter(function(v){return v.weight;}).slice().reverse(); // asc by date
+  var latestH = (wr.length ? wr[wr.length-1].height : null) || (qvForPid.length ? qvForPid[0].height : null) || 162;
+  var iw = idealWeightRange(p.gender, latestH, latestAge);
+  if(el&&(wr.length||qvForPid.length)){
+    var wDatasets = [{
+      label:'Annual',
+      data:wr.map(function(r){return r.weight;}),
+      backgroundColor:wr.map(function(r){
+        var w=r.weight; return (w>=iw.min&&w<=iw.max)?'rgba(105,240,174,.5)':'rgba(255,183,77,.5)';
+      }),
+      borderColor:wr.map(function(r){
+        var w=r.weight; return (w>=iw.min&&w<=iw.max)?'#69f0ae':'#ffb74d';
+      }),
+      borderWidth:2,borderRadius:6,
+      type:'bar'
+    }];
+    if(qvForPid.length){
+      wDatasets.push({
+        label:'Quick Vitals',
+        data:qvForPid.map(function(v){return {x: v.visit_date.substring(0,7), y: v.weight};}),
+        borderColor:'rgba(255,255,255,.6)',
+        backgroundColor:'rgba(255,255,255,.15)',
+        pointStyle:'circle',pointRadius:5,pointHoverRadius:7,
+        borderWidth:2,tension:.3,fill:false,
+        type:'line',
+        parsing:{xAxisKey:'x',yAxisKey:'y'}
+      });
+    }
     S.charts.weight=new Chart(el,{type:'bar',data:{
       labels:wr.map(function(r){return r.year.toString();}),
-      datasets:[{
-        data:wr.map(function(r){return r.weight;}),
-        backgroundColor:wr.map(function(r){
-          var w=r.weight; return (w>=iw.min&&w<=iw.max)?'rgba(105,240,174,.5)':'rgba(255,183,77,.5)';
-        }),
-        borderColor:wr.map(function(r){
-          var w=r.weight; return (w>=iw.min&&w<=iw.max)?'#69f0ae':'#ffb74d';
-        }),
-        borderWidth:2,borderRadius:6
-      }]
+      datasets:wDatasets
     },options:{
       responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{display:false},
-        tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,callbacks:{label:function(ctx){return 'Weight: '+ctx.raw+' kg';}}},
+        legend:{display:qvForPid.length>0,labels:{color:'rgba(255,255,255,.5)',font:{size:10}}},
+        tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.parsed.y+'kg';}}},
         annotation:{annotations:{
-          wMin:{type:'line',yMin:iw.min,yMax:iw.min,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai ideal min '+iw.min+'kg (BMI 18.5)',display:true,position:'start',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
-          wMax:{type:'line',yMin:iw.max,yMax:iw.max,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai normal max '+iw.max+'kg (BMI 22.9)',display:true,position:'end',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
-          wOver:{type:'line',yMin:parseFloat((0.229*latestH/100*latestH/100*100).toFixed(1))+0.1,yMax:parseFloat((0.229*latestH/100*latestH/100*100).toFixed(1))+0.1,borderColor:'rgba(255,183,77,.5)',borderWidth:1,borderDash:[3,4],label:{content:'Overweight>=23',display:false}}
+          wMin:{type:'line',yMin:iw.min,yMax:iw.min,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai ideal min '+iw.min+'kg',display:true,position:'start',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+          wMax:{type:'line',yMin:iw.max,yMax:iw.max,borderColor:'rgba(105,240,174,.6)',borderWidth:1.5,borderDash:[5,4],label:{content:'Thai normal max '+iw.max+'kg',display:true,position:'end',color:'rgba(105,240,174,.8)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
         }},
-        datalabels:{display:true,color:'rgba(255,255,255,.8)',anchor:'end',align:'top',font:{size:10,weight:'bold'},formatter:function(v){return v+'kg';}}
+        datalabels:{display:function(ctx){return ctx.dataset.type==='bar';},color:'rgba(255,255,255,.8)',anchor:'end',align:'top',font:{size:10,weight:'bold'},formatter:function(v){return v+'kg';}}
       },
       scales:{
         x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:function(){return Math.max(0,iw.min-5);}()}
+        y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:Math.max(0,iw.min-5)}
       }
     }});
   }
@@ -2340,24 +2445,41 @@ function drawCharts(pid){
     scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:0,max:150}}
   }});
 
-  // BLOOD PRESSURE
+  // BLOOD PRESSURE - parse "120/80" string from HR records + overlay QV points
   el=document.getElementById('c-bp');
-  var bpr=recs.filter(function(r){return r.sbp||r.bp_sys;});
-  if(el&&bpr.length) S.charts.bp=new Chart(el,{type:'line',data:{
-    labels:bpr.map(function(r){return r.year.toString();}),
-    datasets:[
-      {label:'Systolic',data:bpr.map(function(r){return r.sbp||r.bp_sys;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:4,fill:false},
-      {label:'Diastolic',data:bpr.map(function(r){return r.dbp||r.bp_dia;}),borderColor:'#4fc3f7',backgroundColor:'rgba(79,195,247,.1)',tension:.4,pointRadius:4,fill:false}
-    ]
-  },options:{responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
-      annotation:{annotations:{
-        bpSys:{type:'line',yMin:120,yMax:120,borderColor:'rgba(255,82,82,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <120',display:true,position:'end',color:'rgba(255,82,82,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
-        bpDia:{type:'line',yMin:80,yMax:80,borderColor:'rgba(79,195,247,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <80',display:true,position:'start',color:'rgba(79,195,247,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
-      }}
-    },
-    scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:50,max:180}}
-  }});
+  // Parse bp string for annual records
+  var bprAll = recs.filter(function(r){return r.bp && r.bp.indexOf('/')>-1 && r.bp!=='N/A';});
+  bprAll.forEach(function(r){
+    if(!r.sbp){ var p2=r.bp.split('/'); r.sbp=parseFloat(p2[0])||null; r.dbp=parseFloat(p2[1])||null; }
+  });
+  var bpr=bprAll.filter(function(r){return r.sbp;});
+  // QV bp points (ascending for chart)
+  var qvBP = (QV[pid]||[]).filter(function(v){return v.sbp;}).slice().reverse();
+  if(el&&(bpr.length||qvBP.length)){
+    var bpDatasets = [];
+    if(bpr.length){
+      bpDatasets.push({label:'Systolic (Annual)',data:bpr.map(function(r){return r.sbp;}),borderColor:'#ff5252',backgroundColor:'rgba(255,82,82,.1)',tension:.4,pointRadius:5,pointStyle:'rect',fill:false});
+      bpDatasets.push({label:'Diastolic (Annual)',data:bpr.map(function(r){return r.dbp;}),borderColor:'#4fc3f7',backgroundColor:'rgba(79,195,247,.1)',tension:.4,pointRadius:5,pointStyle:'rect',fill:false});
+    }
+    if(qvBP.length){
+      bpDatasets.push({label:'Systolic (Quick)',data:qvBP.map(function(v){return {x:v.visit_date,y:v.sbp};}),borderColor:'rgba(255,82,82,.5)',backgroundColor:'rgba(255,82,82,.2)',tension:.3,pointRadius:4,pointStyle:'circle',fill:false,borderDash:[3,3],parsing:{xAxisKey:'x',yAxisKey:'y'}});
+      bpDatasets.push({label:'Diastolic (Quick)',data:qvBP.map(function(v){return {x:v.visit_date,y:v.dbp};}),borderColor:'rgba(79,195,247,.5)',backgroundColor:'rgba(79,195,247,.2)',tension:.3,pointRadius:4,pointStyle:'circle',fill:false,borderDash:[3,3],parsing:{xAxisKey:'x',yAxisKey:'y'}});
+    }
+    S.charts.bp=new Chart(el,{type:'line',data:{
+      labels:bpr.map(function(r){return r.year.toString();}),
+      datasets:bpDatasets
+    },options:{responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true,labels:{color:'rgba(255,255,255,.45)',font:{size:9},boxWidth:12}},
+        tooltip:{backgroundColor:'rgba(15,15,25,.95)',titleColor:'#fff',bodyColor:'rgba(255,255,255,.7)',borderColor:'rgba(255,255,255,.1)',borderWidth:1},
+        annotation:{annotations:{
+          bpSys:{type:'line',yMin:120,yMax:120,borderColor:'rgba(255,82,82,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <120',display:true,position:'end',color:'rgba(255,82,82,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}},
+          bpDia:{type:'line',yMin:80,yMax:80,borderColor:'rgba(79,195,247,.4)',borderWidth:1,borderDash:[5,4],label:{content:'Normal <80',display:true,position:'start',color:'rgba(79,195,247,.7)',font:{size:9},backgroundColor:'rgba(0,0,0,.5)',padding:{x:4,y:2}}}
+        }}
+      },
+      scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'rgba(255,255,255,.4)',font:{size:10}},min:50,max:180}}
+    }});
+  }
 
   // TRIGLYCERIDES
   el=document.getElementById('c-trig');
@@ -2482,90 +2604,99 @@ function drawCharts(pid){
 function quickVitalsHTML(){
   var p = prof(S.pid);
   var r = latestRec(S.pid);
-  var yrs = years(S.pid);
   var today = new Date().toISOString().split('T')[0];
-  return '<p style="font-size:13px;color:var(--t2);margin-bottom:16px">Update vitals from a regular OPD visit or home measurement. This creates a new entry or updates current year data.</p>'+
+  // Last quick vitals for this profile (most recent) for pre-fill of height
+  var lastQV = (QV[S.pid] && QV[S.pid].length) ? QV[S.pid][0] : null;
+  var prefillH = (r && r.height) || (lastQV && lastQV.height) || '';
+  return '<p style="font-size:13px;color:var(--t2);margin-bottom:14px">Records a new entry in Quick Vitals — does <b>not</b> overwrite your annual checkup data. Lipids &amp; labs stay in the annual record.</p>'+
     '<div class="fg"><label class="lbl">Profile</label>'+
     '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px">'+
     '<div class="av '+p.avCls+'" style="width:28px;height:28px;border-radius:9px;font-size:12px">'+p.av+'</div>'+
     '<span style="font-size:14px;font-weight:600">'+p.name+'</span>'+
     '</div></div>'+
+    // Source toggle
+    '<div class="fg" style="margin-top:4px"><label class="lbl">Source</label>'+
+    '<div style="display:flex;gap:8px">'+
+    '<button id="qv-src-opd" class="btn btn-primary" style="flex:1;font-size:13px;padding:8px" onclick="document.getElementById(\'qv-src-opd\').className=\'btn btn-primary\';document.getElementById(\'qv-src-home\').className=\'btn btn-secondary\';document.getElementById(\'qv-src\').value=\'opd_quick\'">&#x1F3E5; OPD Visit</button>'+
+    '<button id="qv-src-home" class="btn btn-secondary" style="flex:1;font-size:13px;padding:8px" onclick="document.getElementById(\'qv-src-home\').className=\'btn btn-primary\';document.getElementById(\'qv-src-opd\').className=\'btn btn-secondary\';document.getElementById(\'qv-src\').value=\'home\'">&#x1F3E0; Home</button>'+
+    '</div><input type="hidden" id="qv-src" value="opd_quick"></div>'+
     '<div class="frow">'+
     '<div class="fg"><label class="lbl">Date of Visit</label><input class="inp" type="date" id="qv-date" value="'+today+'"></div>'+
     '<div class="fg"><label class="lbl">Hospital / Clinic</label><input class="inp" type="text" id="qv-hospital" placeholder="Praram 9, Clinic..." value="'+(r&&r.hospital||'')+'"></div>'+
     '</div>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x2696;&#xFE0F; Physical</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:6px">&#x2696;&#xFE0F; Physical</div>'+
     '<div class="frow">'+
-    '<div class="fg"><label class="lbl">Weight (kg)</label><input class="inp" type="number" step=".1" id="qv-weight" placeholder="61.0" value="'+(r&&r.weight||'')+'"></div>'+
-    '<div class="fg"><label class="lbl">Height (cm)</label><input class="inp" type="number" step=".1" id="qv-height" placeholder="162" value="'+(r&&r.height||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Weight (kg)</label><input class="inp" type="number" step=".1" id="qv-weight" placeholder="61.0" value=""></div>'+
+    '<div class="fg"><label class="lbl">Height (cm) <span style="color:var(--t3);font-weight:400">for BMI</span></label><input class="inp" type="number" step=".1" id="qv-height" placeholder="162" value="'+prefillH+'"></div>'+
     '</div>'+
     '<div class="frow">'+
-    '<div class="fg"><label class="lbl">Blood Pressure</label><input class="inp" type="text" id="qv-bp" placeholder="120/80" value="'+(r&&r.bp&&r.bp!=='N/A'?r.bp:'')+'"></div>'+
-    '<div class="fg"><label class="lbl">Pulse (bpm)</label><input class="inp" type="number" id="qv-pulse" placeholder="70" value="'+(r&&r.pulse||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Blood Pressure</label><input class="inp" type="text" id="qv-bp" placeholder="120/80" value=""></div>'+
+    '<div class="fg"><label class="lbl">Pulse (bpm)</label><input class="inp" type="number" id="qv-pulse" placeholder="70" value=""></div>'+
     '</div>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x1FA78; Blood Sugar</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:6px">&#x1FA78; Blood Sugar</div>'+
     '<div class="frow">'+
-    '<div class="fg"><label class="lbl">Blood Sugar (mg/dL)</label><input class="inp" type="number" id="qv-sugar" placeholder="90" value="'+(r&&r.sugar||'')+'"></div>'+
-    '<div class="fg"><label class="lbl">HbA1c (%)</label><input class="inp" type="number" step=".1" id="qv-hba1c" placeholder="5.2" value="'+(r&&r.hba1c||'')+'"></div>'+
+    '<div class="fg"><label class="lbl">Blood Sugar (mg/dL)</label><input class="inp" type="number" id="qv-sugar" placeholder="90" value=""></div>'+
+    '<div class="fg"><label class="lbl">HbA1c (%)</label><input class="inp" type="number" step=".1" id="qv-hba1c" placeholder="5.2" value=""></div>'+
     '</div>'+
-    '<div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px">&#x1F9EA; Lipids (if checked)</div>'+
-    '<div class="frow">'+
-    '<div class="fg"><label class="lbl">Cholesterol</label><input class="inp" type="number" id="qv-chol" placeholder="200" value="'+(r&&r.chol||'')+'"></div>'+
-    '<div class="fg"><label class="lbl">LDL</label><input class="inp" type="number" id="qv-ldl" placeholder="130" value="'+(r&&r.ldl||'')+'"></div>'+
-    '</div>'+
-    '<div class="frow">'+
-    '<div class="fg"><label class="lbl">HDL</label><input class="inp" type="number" id="qv-hdl" placeholder="50" value="'+(r&&r.hdl||'')+'"></div>'+
-    '<div class="fg"><label class="lbl">Triglycerides</label><input class="inp" type="number" id="qv-trig" placeholder="100" value="'+(r&&r.trig||'')+'"></div>'+
-    '</div>'+
-    '<div class="fg"><label class="lbl">Doctor Notes</label><textarea class="inp" rows="2" id="qv-notes" placeholder="OPD visit notes, doctor recommendations..."></textarea></div>'+
-    '<button class="btn btn-primary" onclick="saveQuickVitals()" style="margin-top:4px">&#x1F4BE; Save Vitals</button>'+
+    '<div class="fg"><label class="lbl">Note <span style="color:var(--t3);font-weight:400">optional</span></label><textarea class="inp" rows="2" id="qv-note" placeholder="e.g. After exercise, fasted, medication change..."></textarea></div>'+
+    '<button class="btn btn-primary" onclick="saveQuickVitals()" style="margin-top:8px;width:100%">&#x1F4BE; Save Quick Vitals</button>'+
+    '<p style="font-size:11px;color:var(--t3);text-align:center;margin-top:8px">&#x2139;&#xFE0F; Lipids (LDL/HDL/Cholesterol) are updated via Annual Checkup only</p>'+
     '<div style="height:10px"></div>';
 }
 
 function saveQuickVitals(){
   var date = document.getElementById('qv-date').value;
-  var year = date ? parseInt(date.split('-')[0]) : new Date().getFullYear();
+  if(!date){ toast('Please enter a date'); return; }
   var pid = S.pid;
 
-  // Update or create record for this year
-  if(!HR[pid]) HR[pid] = {};
-  if(!HR[pid][year]) HR[pid][year] = { age: calcAge(prof(pid).dob, year) };
+  var weight = parseFloat(document.getElementById('qv-weight').value) || null;
+  var height = parseFloat(document.getElementById('qv-height').value) || null;
+  var bp = document.getElementById('qv-bp').value.trim() || null;
+  var pulse = parseInt(document.getElementById('qv-pulse').value) || null;
+  var sugar = parseFloat(document.getElementById('qv-sugar').value) || null;
+  var hba1c = parseFloat(document.getElementById('qv-hba1c').value) || null;
+  var note = document.getElementById('qv-note').value.trim() || null;
+  var source = document.getElementById('qv-src').value || 'opd_quick';
+  var hospital = document.getElementById('qv-hospital').value.trim() || null;
 
-  var fields = {
-    date: date,
-    hospital: document.getElementById('qv-hospital').value || HR[pid][year].hospital,
-    weight: parseFloat(document.getElementById('qv-weight').value) || HR[pid][year].weight,
-    height: parseFloat(document.getElementById('qv-height').value) || HR[pid][year].height,
-    bp: document.getElementById('qv-bp').value || HR[pid][year].bp,
-    pulse: parseInt(document.getElementById('qv-pulse').value) || HR[pid][year].pulse,
-    sugar: parseFloat(document.getElementById('qv-sugar').value) || HR[pid][year].sugar,
-    hba1c: parseFloat(document.getElementById('qv-hba1c').value) || HR[pid][year].hba1c,
-    chol: parseFloat(document.getElementById('qv-chol').value) || HR[pid][year].chol,
-    ldl: parseFloat(document.getElementById('qv-ldl').value) || HR[pid][year].ldl,
-    hdl: parseFloat(document.getElementById('qv-hdl').value) || HR[pid][year].hdl,
-    trig: parseFloat(document.getElementById('qv-trig').value) || HR[pid][year].trig,
-    notes: document.getElementById('qv-notes').value || HR[pid][year].notes
-  };
-
-  // Calc BMI if we have both weight and height
-  if(fields.weight && fields.height) {
-    fields.bmi = parseFloat(bmi(fields.weight, fields.height));
+  // Require at least one measurement
+  if(!weight && !bp && !sugar && !pulse){
+    toast('Please enter at least one measurement');
+    return;
   }
 
-  // Merge into record
-  Object.assign(HR[pid][year], fields);
+  var fields = { date: date, hospital: hospital, source: source,
+    weight: weight, height: height, bp: bp, pulse: pulse,
+    sugar: sugar, hba1c: hba1c, note: note };
 
-  // Update year selection to show updated year
-  S.year = year;
+  // Calc bmi for local cache display
+  var calcBmi = (weight && height) ? parseFloat((weight / ((height/100)*(height/100))).toFixed(2)) : null;
+
+  // Parse BP → sbp/dbp for local cache
+  var sbp = null, dbp = null;
+  if(bp && bp.indexOf('/')>-1){
+    var bpp = bp.split('/');
+    sbp = parseFloat(bpp[0]) || null;
+    dbp = parseFloat(bpp[1]) || null;
+  }
+
+  // Add to local QV cache (prepend = most recent first)
+  if(!QV[pid]) QV[pid] = [];
+  QV[pid].unshift({ visit_date: date, hospital: hospital, source: source,
+    weight: weight, height: height, bmi: calcBmi,
+    bp: bp, sbp: sbp, dbp: dbp,
+    pulse: pulse, sugar: sugar, hba1c: hba1c, note: note });
 
   closeModal();
-  // Save to DB if connected
+
   if(!S.demo && sbAuth){
-    saveHealthRecordToDB(pid, year, HR[pid][year]).then(function(ok){
-      toast(ok ? (S.lang==='th'?'บันทึกข้อมูลสำเร็จ ✓':'Vitals saved to DB ✓') : (S.lang==='th'?'บันทึกแบบออฟไลน์':'Saved locally only'));
+    saveQuickVitalsToDB(pid, fields).then(function(ok){
+      toast(ok
+        ? (S.lang==='th' ? 'บันทึก Quick Vitals สำเร็จ ✓' : 'Quick Vitals saved ✓')
+        : (S.lang==='th' ? 'บันทึกแบบออฟไลน์' : 'Saved locally only'));
     });
   } else {
-    toast(S.lang==='th' ? 'บันทึกข้อมูลแล้ว (Demo)' : 'Vitals saved (demo mode)');
+    toast(S.lang==='th' ? 'บันทึก Quick Vitals แล้ว (Demo)' : 'Quick Vitals saved (demo)');
   }
   renderTab(S.tab);
 }
